@@ -5,6 +5,7 @@ use hardware::cpu::CpuInfo;
 use hardware::gpu::GpuInfo;
 use hardware::memory::MemoryInfo;
 use hardware::storage::StorageInfo;
+use std::io::{self, Write};
 
 struct HardwareInfo {
     cpu: CpuInfo,
@@ -142,4 +143,5 @@ fn print_monitor_data() {
         hardware.network.upload_mbps,
         hardware.network.ping_ms.unwrap_or(0.0),
     );
+    io::stdout().flush().ok();
 }

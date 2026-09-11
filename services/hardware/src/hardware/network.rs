@@ -14,13 +14,13 @@ pub fn read() -> NetworkInfo {
     let rx1 = read_bytes(&interface, "rx_bytes");
     let tx1 = read_bytes(&interface, "tx_bytes");
 
-    thread::sleep(Duration::from_secs(1));
+    thread::sleep(Duration::from_millis(200));
 
     let rx2 = read_bytes(&interface, "rx_bytes");
     let tx2 = read_bytes(&interface, "tx_bytes");
 
-    let download_mbps = (rx2.saturating_sub(rx1)) as f64 / 1_048_576.0;
-    let upload_mbps = (tx2.saturating_sub(tx1)) as f64 / 1_048_576.0;
+    let download_mbps = (rx2.saturating_sub(rx1)) as f64 / 209_715.2;
+    let upload_mbps = (tx2.saturating_sub(tx1)) as f64 / 209_715.2;
     let ping_ms = read_ping();
 
     NetworkInfo {
@@ -52,7 +52,7 @@ fn read_bytes(interface: &str, counter: &str) -> u64 {
 fn read_ping() -> Option<f64> {
     let output = Command::new("ping")
         .env("LC_ALL", "C")
-        .args(["-c", "1", "-W", "2", "1.1.1.1"])
+        .args(["-c", "1", "-W", "0.2", "1.1.1.1"])
         .output()
         .ok()?;
     let text = String::from_utf8_lossy(&output.stdout);
