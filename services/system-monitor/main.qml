@@ -2,8 +2,6 @@ import QtQuick
 import QtQuick.Controls
 import org.kde.plasma.plasmoid
 import org.kde.plasma.plasma5support as Plasma5Support
-import org.kde.ksysguard.sensors as Sensors
-
 PlasmoidItem {
     id: root
     Plasmoid.title: "Zethropol System Monitor"
@@ -11,15 +9,6 @@ PlasmoidItem {
     implicitHeight: 180
 
     // CPU frequency is provided by KSystemStats
-    Sensors.Sensor { id: frequencySensor; sensorId: "cpu/all/averageFrequency"; updateRateLimit: 1000 }
-
-    Plasma5Support.DataSource {
-        id: ramSource
-        engine: "executable"
-        interval: 1500
-        connectedSources: ["/home/Zevor/.local/share/zethropol/bin/zethropol-ram-usage.sh"]
-    }
-
     Plasma5Support.DataSource {
         id: hardwareSource
         engine: "executable"
