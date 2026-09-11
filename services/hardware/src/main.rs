@@ -1,4 +1,5 @@
 mod hardware;
+use hardware::network::NetworkInfo;
 
 use hardware::cpu::CpuInfo;
 use hardware::gpu::GpuInfo;
@@ -10,6 +11,7 @@ struct HardwareInfo {
     gpu: Option<GpuInfo>,
     memory: MemoryInfo,
     storage: Option<StorageInfo>,
+    network: NetworkInfo,
 }
 
 fn main() {
@@ -23,6 +25,7 @@ fn main() {
         gpu: hardware::gpu::read(),
         memory: hardware::memory::read(),
         storage: hardware::storage::read(),
+        network: hardware::network::read(),
     };
 
     println!("Zethropol Hardware Service");
@@ -111,13 +114,14 @@ fn print_monitor_data() {
         gpu: hardware::gpu::read(),
         memory: hardware::memory::read(),
         storage: hardware::storage::read(),
+        network: hardware::network::read(),
     };
 
     let gpu = hardware.gpu.as_ref();
     let storage = hardware.storage.as_ref();
 
     println!(
-        "{:.1} {:.1} {:.0} {:.1} {:.0} {:.0} {:.2} {:.2} {:.1} {:.0} {:.2} {:.2} {:.2} {:.2} {:.2} {:.1}",
+        "{:.1} {:.1} {:.0} {:.1} {:.0} {:.0} {:.2} {:.2} {:.1} {:.0} {:.2} {:.2} {:.2} {:.2} {:.2} {:.1} {:.2} {:.2} {:.1}",
         hardware.cpu.usage_percent,
         hardware.cpu.temperature_c.unwrap_or(0.0),
         hardware.cpu.frequency_ghz.unwrap_or(0.0) * 1000.0,
@@ -134,5 +138,8 @@ fn print_monitor_data() {
         storage.map(|value| value.capacity_gb).unwrap_or(0.0),
         storage.map(|value| value.available_gb).unwrap_or(0.0),
         storage.and_then(|value| value.temperature_c).unwrap_or(0.0),
+        hardware.network.download_mbps,
+        hardware.network.upload_mbps,
+        hardware.network.ping_ms.unwrap_or(0.0),
     );
 }
