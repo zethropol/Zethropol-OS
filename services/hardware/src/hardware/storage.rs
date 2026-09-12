@@ -58,10 +58,27 @@ pub fn read() -> Option<StorageInfo> {
         })
         .unwrap_or((0.0, 0.0));
 
-    let temperature_c = fs::read_to_string("/sys/class/hwmon/hwmon0/temp1_input")
-        .ok()
-        .and_then(|value| value.trim().parse::<f64>().ok())
-        .map(|millidegrees| millidegrees / 1000.0);
+    let temperature_c = {
+        let entries = fs::read_dir("/sys/class/hwmon").ok();
+        let mut temperature = None;
+
+        if let Some(entries) = entries {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let name = fs::read_to_string(path.join("name")).ok();
+
+                if name.as_deref().map(str::trim) == Some("nvme") {
+                    temperature = fs::read_to_string(path.join("temp1_input"))
+                        .ok()
+                        .and_then(|value| value.trim().parse::<f64>().ok())
+                        .map(|millidegrees| millidegrees / 1000.0);
+                    break;
+                }
+            }
+        }
+
+        temperature
+    };
 
     Some(StorageInfo {
         model,
