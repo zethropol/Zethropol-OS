@@ -35,10 +35,7 @@ pub fn read() -> CpuInfo {
         .and_then(|value| value.trim().parse::<u64>().ok())
         .map(|khz| khz as f64 / 1_000_000.0);
 
-    let temperature_c = fs::read_to_string("/sys/class/hwmon/hwmon2/temp1_input")
-        .ok()
-        .and_then(|value| value.trim().parse::<f64>().ok())
-        .map(|millidegrees| millidegrees / 1000.0);
+    let temperature_c = read_temperature();
 
     let usage_percent = read_usage_percent();
 
@@ -50,6 +47,21 @@ pub fn read() -> CpuInfo {
         temperature_c,
         usage_percent,
     }
+}
+
+fn read_temperature() -> Option<f64> {
+    let entries = fs::read_dir("/sys/class/hwmon").ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = fs::read_to_string(path.join("name")).ok()?;
+        if name.trim() == "k10temp" {
+            return fs::read_to_string(path.join("temp1_input"))
+                .ok()
+                .and_then(|value| value.trim().parse::<f64>().ok())
+                .map(|millidegrees| millidegrees / 1000.0);
+        }
+    }
+    None
 }
 
 fn read_usage_percent() -> f64 {
