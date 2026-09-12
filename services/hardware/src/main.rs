@@ -104,6 +104,13 @@ fn main() {
         None => println!("Storage: Unavailable"),
     }
 
+    println!("Network Download: {:.2} MB/s", hardware.network.download_mbps);
+    println!("Network Upload: {:.2} MB/s", hardware.network.upload_mbps);
+    match hardware.network.ping_ms {
+        Some(value) => println!("Network Ping: {value:.1} ms"),
+        None => println!("Network Ping: Unavailable"),
+    }
+
     println!("RAM Total: {:.2} GB", hardware.memory.total_gb);
     println!("RAM Used: {:.2} GB", hardware.memory.used_gb);
     println!("RAM Available: {:.2} GB", hardware.memory.available_gb);
