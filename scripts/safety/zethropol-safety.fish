@@ -30,5 +30,40 @@ if test "$command" = snapshot
     exit 1
 end
 
+if test "$command" = rollback
+    set snapshot_id $argv[2]
+
+    if test -z "$snapshot_id"
+        echo "Available snapshots:"
+        sudo snapper -c root list
+        echo ""
+        echo "Usage: zethropol-safety.fish rollback <snapshot-id>"
+        exit 1
+    end
+
+    if not sudo snapper -c root list | grep -qE "^ *$snapshot_id "
+        echo "ERROR: Snapshot #$snapshot_id was not found."
+        exit 1
+    end
+
+    set cmdline (string join " " < /proc/cmdline)
+
+    if string match -q "*rootflags=subvol=*/.snapshots/$snapshot_id/snapshot*" -- $cmdline
+        echo "Snapshot #$snapshot_id is currently booted."
+        echo "Starting Zethropol restore..."
+        sudo limine-snapper-restore
+        exit $status
+    end
+
+    echo "Rollback target: #$snapshot_id"
+    echo ""
+    echo "The target snapshot is not currently booted."
+    echo "Reboot and select snapshot #$snapshot_id from the Limine menu."
+    echo "Then run:"
+    echo "  zethropol-safety.fish rollback $snapshot_id"
+    exit 0
+end
+
 echo "Usage: zethropol-safety.fish status"
 echo "       zethropol-safety.fish snapshot"
+echo "       zethropol-safety.fish rollback <snapshot-id>"
