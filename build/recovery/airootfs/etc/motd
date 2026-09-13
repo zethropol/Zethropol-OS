@@ -1,0 +1,5 @@
+Zethropol Recovery Environment
+
+System recovery and repair environment.
+
+Available tools: Btrfs, Snapper, Limine, arch-chroot

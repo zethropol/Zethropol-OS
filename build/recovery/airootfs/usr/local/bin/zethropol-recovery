@@ -1,0 +1,18 @@
+#!/usr/bin/env fish
+
+echo "=== Zethropol Recovery ==="
+echo ""
+echo "Btrfs:"
+sudo btrfs filesystem show
+echo ""
+echo "Block devices:"
+lsblk -o NAME,SIZE,FSTYPE,TYPE,MOUNTPOINTS
+echo ""
+echo "Snapper configurations:"
+sudo snapper list-configs
+echo ""
+echo "Recovery tools:"
+echo "  btrfs"
+echo "  snapper"
+echo "  limine-snapper-restore"
+echo "  arch-chroot"
