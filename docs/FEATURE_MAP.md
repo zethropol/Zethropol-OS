@@ -130,3 +130,77 @@ Zethropol will not duplicate Btrfs Assistant, Snapper, Btrfs or arch-chroot func
 ### Decision
 
 KEEP
+
+## Feature Map #2 — Hardware Intelligence & Driver Management
+
+### User Problem
+
+> Donanımımı taktığımda sistem hangi sürücüyü, firmwarei ve yapılandırmayı kullanmalı; mevcut durum doğru mu ve bir donanım değişikliğinden sonra ne yapılmalı?
+
+### Existing Linux Solutions
+
+- CachyOS chwd — hardware detection and driver profiles
+- Ubuntu ubuntu-drivers — automatic driver selection
+- Pop!_OS — GPU selection and hardware usage profiles
+- TUXEDO OS — deeper hardware integration
+- fwupd / LVFS — Linux firmware management
+
+### Zethropol Decision
+
+Zethropol will not create a new driver framework. Existing Linux driver, firmware and hardware-management technologies will remain the foundation.
+
+Zethropol will add a Hardware Intelligence layer that evaluates hardware state, driver state, firmware state, capabilities, hardware changes and recommended configurations.
+
+### Architecture
+
+Hardware Service
+↓
+Hardware Intelligence
+↓
+Driver / Firmware / Capability / Configuration Analysis
+↓
+Zethropol Hardware Center
+
+The existing Zethropol System Monitor remains a separate completed desktop widget and will not be modified as part of this feature.
+
+### Hardware Intelligence Responsibilities
+
+1. Hardware detection
+2. Driver state and compatibility analysis
+3. Firmware status through existing Linux infrastructure
+4. Hardware capability detection
+5. Hardware change detection
+6. Performance and power capability analysis
+7. Safe configuration recommendations
+8. Hardware diagnostics
+
+### Existing Foundations
+
+- Zethropol Hardware Service
+- CachyOS chwd
+- Linux kernel driver infrastructure
+- fwupd / LVFS
+- KDE / system services where appropriate
+
+### Zethropol-Specific Value
+
+Zethropol will present hardware state as a complete system condition rather than requiring users to identify individual driver packages and configuration steps themselves.
+
+Hardware changes will be treated as system events. Zethropol may detect changes such as GPU replacement and determine whether obsolete drivers, firmware or configuration require attention.
+
+### System Monitor Boundary
+
+The existing Zethropol System Monitor is complete and remains unchanged.
+
+Hardware Intelligence will not be added to the System Monitor widget. If a graphical interface is required, it will be developed as a separate Zethropol Hardware Center application.
+
+### Important Constraints
+
+- Do not duplicate existing Linux driver frameworks.
+- Do not replace chwd, fwupd or kernel driver infrastructure without a technical reason.
+- Do not automatically perform potentially destructive driver changes.
+- Hardware recommendations must be explainable and reversible where possible.
+
+### Decision
+
+KEEP / BUILD
