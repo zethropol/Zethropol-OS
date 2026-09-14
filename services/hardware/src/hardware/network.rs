@@ -31,11 +31,18 @@ pub fn read() -> NetworkInfo {
 }
 
 fn default_interface() -> Option<String> {
-    let output = Command::new("ip").args(["route", "show", "default"]).output().ok()?;
+    let output = Command::new("ip")
+        .args(["route", "show", "default"])
+        .output()
+        .ok()?;
     let text = String::from_utf8(output.stdout).ok()?;
     text.lines().find_map(|line| {
         let fields: Vec<&str> = line.split_whitespace().collect();
-        fields.iter().position(|field| *field == "dev").and_then(|index| fields.get(index + 1)).map(|value| value.to_string())
+        fields
+            .iter()
+            .position(|field| *field == "dev")
+            .and_then(|index| fields.get(index + 1))
+            .map(|value| value.to_string())
     })
 }
 

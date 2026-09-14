@@ -7,6 +7,9 @@ pub struct CpuInfo {
     pub cores: usize,
     pub threads: usize,
     pub frequency_ghz: Option<f64>,
+    pub frequency_min_ghz: Option<f64>,
+    pub frequency_max_ghz: Option<f64>,
+    pub governor: Option<String>,
     pub temperature_c: Option<f64>,
     pub usage_percent: f64,
 }
@@ -21,7 +24,10 @@ pub fn read() -> CpuInfo {
         .map(|(_, value)| value.trim().to_string())
         .unwrap_or_else(|| "Unknown".to_string());
 
-    let threads = cpuinfo.lines().filter(|line| line.starts_with("processor")).count();
+    let threads = cpuinfo
+        .lines()
+        .filter(|line| line.starts_with("processor"))
+        .count();
 
     let cores = cpuinfo
         .lines()
@@ -35,6 +41,20 @@ pub fn read() -> CpuInfo {
         .and_then(|value| value.trim().parse::<u64>().ok())
         .map(|khz| khz as f64 / 1_000_000.0);
 
+    let frequency_min_ghz = fs::read_to_string("/sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .map(|khz| khz as f64 / 1_000_000.0);
+
+    let frequency_max_ghz = fs::read_to_string("/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .map(|khz| khz as f64 / 1_000_000.0);
+
+    let governor = fs::read_to_string("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor")
+        .ok()
+        .map(|value| value.trim().to_string());
+
     let temperature_c = read_temperature();
 
     let usage_percent = read_usage_percent();
@@ -44,6 +64,9 @@ pub fn read() -> CpuInfo {
         cores,
         threads,
         frequency_ghz,
+        frequency_min_ghz,
+        frequency_max_ghz,
+        governor,
         temperature_c,
         usage_percent,
     }
@@ -78,8 +101,7 @@ fn read_usage_percent() -> f64 {
                 return 0.0;
             }
 
-            ((total_delta - idle_delta) as f64 / total_delta as f64 * 100.0)
-                .clamp(0.0, 100.0)
+            ((total_delta - idle_delta) as f64 / total_delta as f64 * 100.0).clamp(0.0, 100.0)
         }
         _ => 0.0,
     }

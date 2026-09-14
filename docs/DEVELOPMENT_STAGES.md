@@ -63,20 +63,34 @@ Not started.
 
 ### Objective
 
-Create the foundation for hardware-aware behavior.
+Create the foundation for hardware-aware behavior and safe hardware configuration recommendations.
 
-### Work
+### Completed
 
-- Hardware discovery and identification
-- Hardware capability detection
-- CPU, GPU, memory, storage, network, and battery information
-- Hardware capability classification
-- Hardware-aware configuration
-- Interfaces for performance and power management
+- Hardware detection and identification
+- Driver state and compatibility analysis
+- Firmware status detection
+- GPU capability detection
+- Hardware fingerprint generation
+- Hardware change detection
+- Performance and power capability analysis
+- Safe configuration recommendations
+
+### Remaining
+
+- Hardware diagnostics
+
+### Design Principles
+
+- Use existing Linux infrastructure instead of creating a parallel driver framework
+- Recommendations are informational and reversible
+- No automatic destructive driver or firmware changes
+- Hardware decisions must be explainable
+- Hardware Intelligence provides data and recommendations to higher-level Zethropol components
 
 ### Status
 
-Future stage.
+In progress — all planned analysis and recommendation capabilities are complete; hardware diagnostics remains.
 
 ## Stage 4 — Core System Services
 

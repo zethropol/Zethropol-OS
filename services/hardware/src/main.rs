@@ -3,6 +3,7 @@ use hardware::network::NetworkInfo;
 
 use hardware::cpu::CpuInfo;
 use hardware::gpu::GpuInfo;
+use hardware::intelligence::{assess, assess_hardware_change, hardware_fingerprint};
 use hardware::memory::MemoryInfo;
 use hardware::storage::StorageInfo;
 use std::io::{self, Write};
@@ -16,6 +17,11 @@ struct HardwareInfo {
 }
 
 fn main() {
+    if std::env::args().any(|arg| arg == "--intelligence") {
+        print_intelligence();
+        return;
+    }
+
     if std::env::args().any(|arg| arg == "--monitor") {
         print_monitor_data();
         return;
@@ -87,7 +93,6 @@ fn main() {
         None => println!("GPU: Unavailable"),
     }
 
-
     match hardware.storage {
         Some(storage) => {
             println!("Storage: {}", storage.model);
@@ -104,11 +109,54 @@ fn main() {
         None => println!("Storage: Unavailable"),
     }
 
-    println!("Network Download: {:.2} MB/s", hardware.network.download_mbps);
+    println!(
+        "Network Download: {:.2} MB/s",
+        hardware.network.download_mbps
+    );
     println!("Network Upload: {:.2} MB/s", hardware.network.upload_mbps);
     match hardware.network.ping_ms {
         Some(value) => println!("Network Ping: {value:.1} ms"),
         None => println!("Network Ping: Unavailable"),
+    }
+    fn print_intelligence() {
+        let hardware = HardwareInfo {
+            cpu: hardware::cpu::read(),
+            gpu: hardware::gpu::read(),
+            memory: hardware::memory::read(),
+            storage: hardware::storage::read(),
+            network: hardware::network::read(),
+        };
+
+        let assessment = assess(
+            &hardware.cpu,
+            hardware.gpu.as_ref(),
+            &hardware.memory,
+            hardware.storage.as_ref(),
+        );
+
+        let fingerprint = hardware_fingerprint(
+            &hardware.cpu,
+            hardware.gpu.as_ref(),
+            &hardware.memory,
+            hardware.storage.as_ref(),
+        );
+        let hardware_change_status = assess_hardware_change(&fingerprint);
+
+        println!("Zethropol Hardware Intelligence");
+        println!("Hardware Fingerprint: {}", fingerprint);
+        println!("Hardware Change: {}", hardware_change_status);
+        println!("Overall: {}", assessment.overall_status);
+        println!("CPU: {}", assessment.cpu_status);
+        println!("GPU: {}", assessment.gpu_status);
+    println!("GPU Capability: {}", assessment.gpu_capability_status);
+        println!("Driver: {}", assessment.driver_status);
+        println!("Firmware: {}", assessment.firmware_status);
+        println!("Memory: {}", assessment.memory_status);
+        println!("Storage: {}", assessment.storage_status);
+    println!("Performance / Power: {}", assessment.performance_power_status);
+    for recommendation in &assessment.recommendations {
+        println!("Recommendation: {}", recommendation);
+    }
     }
 
     println!("RAM Total: {:.2} GB", hardware.memory.total_gb);
@@ -134,7 +182,8 @@ fn print_monitor_data() {
         hardware.cpu.temperature_c.unwrap_or(0.0),
         hardware.cpu.frequency_ghz.unwrap_or(0.0) * 1000.0,
         gpu.and_then(|value| value.usage_percent).unwrap_or(0.0),
-        gpu.and_then(|value| value.memory_usage_percent).unwrap_or(0.0),
+        gpu.and_then(|value| value.memory_usage_percent)
+            .unwrap_or(0.0),
         gpu.and_then(|value| value.core_clock_mhz).unwrap_or(0.0),
         gpu.and_then(|value| value.vram_used_gb).unwrap_or(0.0),
         gpu.and_then(|value| value.vram_total_gb).unwrap_or(0.0),
