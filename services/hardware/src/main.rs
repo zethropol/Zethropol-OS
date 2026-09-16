@@ -180,6 +180,8 @@ fn main() {
             Some(value) => println!("Storage Error Log Entries: {value}"),
             None => println!("Storage Error Log Entries: Unavailable"),
         }
+        println!("Storage Unsafe Shutdowns Status: {}", storage_diagnostics.unsafe_shutdowns_status);
+        println!("Storage Error Log Status: {}", storage_diagnostics.error_log_status);
         println!("Storage Self-Test: {}", storage_diagnostics.self_test_status);
     println!("Performance / Power: {}", assessment.performance_power_status);
     for recommendation in &assessment.recommendations {

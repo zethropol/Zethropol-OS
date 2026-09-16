@@ -6,6 +6,7 @@ use std::process::Command;
 struct SmartctlOutput {
     smart_status: Option<SmartStatus>,
     nvme_smart_health_information_log: Option<NvmeHealth>,
+    nvme_error_information_log: Option<NvmeErrorInformationLog>,
     nvme_self_test_log: Option<NvmeSelfTestLog>,
 }
 
@@ -26,6 +27,22 @@ struct NvmeHealth {
 }
 
 #[derive(Deserialize)]
+struct NvmeErrorInformationLog {
+    table: Vec<NvmeErrorEntry>,
+}
+
+#[derive(Deserialize)]
+struct NvmeErrorEntry {
+    status_field: NvmeErrorStatusField,
+}
+
+#[derive(Deserialize)]
+struct NvmeErrorStatusField {
+    status_code: u64,
+    string: String,
+}
+
+#[derive(Deserialize)]
 struct NvmeSelfTestLog {
     current_self_test_operation: SmartctlSelfTestOperation,
 }
@@ -43,6 +60,8 @@ pub struct StorageDiagnostics {
     pub media_data_integrity_errors: Option<u64>,
     pub unsafe_shutdowns: Option<u64>,
     pub error_log_entries: Option<u64>,
+    pub unsafe_shutdowns_status: String,
+    pub error_log_status: String,
     pub self_test_status: String,
 }
 
@@ -79,6 +98,20 @@ pub fn assess_storage(storage: Option<&StorageInfo>) -> StorageDiagnostics {
     let unsafe_shutdowns = health.as_ref().map(|value| value.unsafe_shutdowns);
     let error_log_entries = health.as_ref().map(|value| value.num_err_log_entries);
 
+    let unsafe_shutdowns_status = match unsafe_shutdowns {
+        Some(value) if value == 0 => "ok: no unsafe shutdowns".to_string(),
+        Some(value) => format!("info: {value} unsafe shutdowns recorded"),
+        None => "unknown: unsafe shutdown count unavailable".to_string(),
+    };
+
+    let error_log_status = match (error_log_entries, data.nvme_error_information_log.as_ref()) {
+        (Some(0), _) => "ok: no error log entries".to_string(),
+        (Some(value), Some(log)) if log.table.iter().all(|entry| entry.status_field.status_code == 2) => format!("info: {value} NVMe error log entries recorded; entries report Invalid Field in Command"),
+        (Some(value), Some(log)) => format!("info: {value} NVMe error log entries recorded; latest status: {}", log.table.first().map(|entry| entry.status_field.string.as_str()).unwrap_or("unavailable")),
+        (Some(value), None) => format!("info: {value} NVMe error log entries recorded"),
+        (None, _) => "unknown: error log count unavailable".to_string(),
+    };
+
     let self_test_status = data.nvme_self_test_log
         .map(|value| value.current_self_test_operation.string)
         .unwrap_or_else(|| "unknown: self-test status unavailable".to_string());
@@ -91,6 +124,8 @@ pub fn assess_storage(storage: Option<&StorageInfo>) -> StorageDiagnostics {
         media_data_integrity_errors,
         unsafe_shutdowns,
         error_log_entries,
+        unsafe_shutdowns_status,
+        error_log_status,
         self_test_status,
     }
 }
@@ -104,6 +139,8 @@ fn unavailable_storage_diagnostics(reason: &str) -> StorageDiagnostics {
         media_data_integrity_errors: None,
         unsafe_shutdowns: None,
         error_log_entries: None,
+        unsafe_shutdowns_status: "unknown".to_string(),
+        error_log_status: "unknown".to_string(),
         self_test_status: "unknown".to_string(),
     }
 }
