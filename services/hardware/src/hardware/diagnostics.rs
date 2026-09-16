@@ -46,8 +46,15 @@ pub struct StorageDiagnostics {
     pub self_test_status: String,
 }
 
-pub fn assess_storage(_storage: Option<&StorageInfo>) -> StorageDiagnostics {
-    let output = match Command::new("pkexec").args(["/usr/libexec/zethropol/zethropol-diagnostics-helper"]).output() {
+pub fn assess_storage(storage: Option<&StorageInfo>) -> StorageDiagnostics {
+    let device_path = match storage {
+        Some(storage) => &storage.device_path,
+        None => return unavailable_storage_diagnostics("storage device unavailable"),
+    };
+
+    let output = match Command::new("pkexec")
+        .args(["/usr/libexec/zethropol/zethropol-diagnostics-helper", device_path])
+        .output() {
         Ok(output) => output,
         Err(_) => return unavailable_storage_diagnostics("smartctl unavailable"),
     };

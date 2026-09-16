@@ -1,6 +1,7 @@
 use std::fs;
 
 pub struct StorageInfo {
+    pub device_path: String,
     pub model: String,
     pub firmware: String,
     pub capacity_gb: f64,
@@ -81,6 +82,7 @@ pub fn read() -> Option<StorageInfo> {
     };
 
     Some(StorageInfo {
+        device_path: "/dev/nvme0n1".to_string(),
         model,
         firmware,
         capacity_gb,

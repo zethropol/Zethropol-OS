@@ -1,8 +1,10 @@
 use std::process::{Command, ExitCode};
 
 fn main() -> ExitCode {
+    let device = std::env::args().nth(1).unwrap_or_else(|| "/dev/nvme0n1".to_string());
+
     let output = match Command::new("/usr/bin/smartctl")
-        .args(["-a", "--json", "/dev/nvme0n1"])
+        .args(["-a", "--json", &device])
         .output()
     {
         Ok(output) => output,
