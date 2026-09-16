@@ -1,4 +1,5 @@
 pub mod cpu;
+pub mod diagnostics;
 pub mod gpu;
 pub mod intelligence;
 pub mod memory;

@@ -4,6 +4,7 @@ use hardware::network::NetworkInfo;
 use hardware::cpu::CpuInfo;
 use hardware::gpu::GpuInfo;
 use hardware::intelligence::{assess, assess_hardware_change, hardware_fingerprint};
+use hardware::diagnostics::assess_storage;
 use hardware::memory::MemoryInfo;
 use hardware::storage::StorageInfo;
 use std::io::{self, Write};
@@ -141,6 +142,7 @@ fn main() {
             hardware.storage.as_ref(),
         );
         let hardware_change_status = assess_hardware_change(&fingerprint);
+        let storage_diagnostics = assess_storage(hardware.storage.as_ref());
 
         println!("Zethropol Hardware Intelligence");
         println!("Hardware Fingerprint: {}", fingerprint);
@@ -153,6 +155,32 @@ fn main() {
         println!("Firmware: {}", assessment.firmware_status);
         println!("Memory: {}", assessment.memory_status);
         println!("Storage: {}", assessment.storage_status);
+        println!("Storage Health: {}", storage_diagnostics.health_status);
+        match storage_diagnostics.temperature_c {
+            Some(value) => println!("Storage Diagnostic Temperature: {value:.1} °C"),
+            None => println!("Storage Diagnostic Temperature: Unavailable"),
+        }
+        match storage_diagnostics.percentage_used {
+            Some(value) => println!("Storage Wear: {value:.0}%"),
+            None => println!("Storage Wear: Unavailable"),
+        }
+        match storage_diagnostics.available_spare_percent {
+            Some(value) => println!("Storage Spare: {value:.0}%"),
+            None => println!("Storage Spare: Unavailable"),
+        }
+        match storage_diagnostics.media_data_integrity_errors {
+            Some(value) => println!("Storage Media Errors: {value}"),
+            None => println!("Storage Media Errors: Unavailable"),
+        }
+        match storage_diagnostics.unsafe_shutdowns {
+            Some(value) => println!("Storage Unsafe Shutdowns: {value}"),
+            None => println!("Storage Unsafe Shutdowns: Unavailable"),
+        }
+        match storage_diagnostics.error_log_entries {
+            Some(value) => println!("Storage Error Log Entries: {value}"),
+            None => println!("Storage Error Log Entries: Unavailable"),
+        }
+        println!("Storage Self-Test: {}", storage_diagnostics.self_test_status);
     println!("Performance / Power: {}", assessment.performance_power_status);
     for recommendation in &assessment.recommendations {
         println!("Recommendation: {}", recommendation);

@@ -1,3 +1,5 @@
 
 backups/
 services/hardware/target/
+
+services/hardware/diagnostics-helper/target/
