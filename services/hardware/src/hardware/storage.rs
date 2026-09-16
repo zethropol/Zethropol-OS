@@ -11,23 +11,42 @@ pub struct StorageInfo {
 }
 
 pub fn read() -> Option<StorageInfo> {
-    let model = fs::read_to_string("/sys/class/nvme/nvme0/model")
+    let root_source = std::process::Command::new("findmnt")
+        .args(["-no", "SOURCE", "/"])
+        .output()
+        .ok()
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .map(|value| value.trim().to_string())?;
+
+    let root_partition = root_source.split("[").next().unwrap_or(&root_source).to_string();
+
+    let device_name = std::process::Command::new("lsblk")
+        .args(["-no", "PKNAME", &root_partition])
+        .output()
+        .ok()
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .map(|value| value.trim().to_string())?;
+
+    let device_path = format!("/dev/{device_name}");
+    let block_path = format!("/sys/class/block/{device_name}");
+    let device_sysfs_path = format!("{block_path}/device");
+    let model = fs::read_to_string(format!("{device_sysfs_path}/model"))
         .ok()?
         .trim()
         .to_string();
 
-    let firmware = fs::read_to_string("/sys/class/nvme/nvme0/firmware_rev")
+    let firmware = fs::read_to_string(format!("{device_sysfs_path}/firmware_rev"))
         .ok()?
         .trim()
         .to_string();
 
-    let sectors = fs::read_to_string("/sys/class/block/nvme0n1/size")
+    let sectors = fs::read_to_string(format!("{block_path}/size"))
         .ok()?
         .trim()
         .parse::<u64>()
         .ok()?;
 
-    let block_size = fs::read_to_string("/sys/class/block/nvme0n1/queue/logical_block_size")
+    let block_size = fs::read_to_string(format!("{block_path}/queue/logical_block_size"))
         .ok()?
         .trim()
         .parse::<u64>()
@@ -82,7 +101,7 @@ pub fn read() -> Option<StorageInfo> {
     };
 
     Some(StorageInfo {
-        device_path: "/dev/nvme0n1".to_string(),
+        device_path,
         model,
         firmware,
         capacity_gb,
