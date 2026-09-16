@@ -79,6 +79,14 @@ Create the foundation for hardware-aware behavior and safe hardware configuratio
 ### Remaining
 
 - Hardware diagnostics
+  - CPU operational state and temperature assessment
+  - GPU capability and operational checks
+  - Storage SMART/NVMe health diagnostics
+  - NVMe error log interpretation
+  - Storage self-test state detection
+  - Memory availability and usage state
+  - Network connectivity and latency state
+  - Diagnostic results exposed as informational health states
 
 ### Design Principles
 
@@ -90,7 +98,7 @@ Create the foundation for hardware-aware behavior and safe hardware configuratio
 
 ### Status
 
-In progress — all planned analysis and recommendation capabilities are complete; hardware diagnostics remains.
+In progress — analysis and recommendation capabilities are complete; normal hardware diagnostics are implemented and being finalized.
 
 ## Stage 4 — Core System Services
 
