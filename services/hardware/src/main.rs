@@ -150,7 +150,7 @@ fn main() {
             &assessment,
             hardware.gpu.as_ref(),
             hardware.storage.as_ref(),
-            format!("network: ping {:?} ms", hardware.network.ping_ms),
+            &hardware.network,
             hardware_change_status.clone(),
         );
 
@@ -162,7 +162,7 @@ fn main() {
         println!("Normalized Storage: detected={}, device={:?}, model={:?}, firmware={:?}, capacity={:?} GB, used={:?} GB, available={:?} GB, temperature={:?} °C", normalized_state.normalized_storage.detected, normalized_state.normalized_storage.device_path, normalized_state.normalized_storage.model, normalized_state.normalized_storage.firmware, normalized_state.normalized_storage.capacity_gb, normalized_state.normalized_storage.used_gb, normalized_state.normalized_storage.available_gb, normalized_state.normalized_storage.temperature_c);
         println!("Normalized Memory: total={:.2} GB, used={:.2} GB, available={:.2} GB", normalized_state.memory.total_gb, normalized_state.memory.used_gb, normalized_state.memory.available_gb);
         println!("Normalized Storage: {}", normalized_state.storage);
-        println!("Normalized Network: {}", normalized_state.network);
+        println!("Normalized Network: download={:.2} Mbps, upload={:.2} Mbps, ping={:?} ms", normalized_state.network.download_mbps, normalized_state.network.upload_mbps, normalized_state.network.ping_ms);
         println!("Normalized Firmware: {}", normalized_state.firmware);
         println!("Normalized Capabilities: {}", normalized_state.capabilities);
         println!("Normalized Health: {}", normalized_state.health);

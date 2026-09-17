@@ -2,6 +2,7 @@ use crate::hardware::cpu::CpuInfo;
 use crate::hardware::memory::MemoryInfo;
 use crate::hardware::gpu::GpuInfo;
 use crate::hardware::storage::StorageInfo;
+use crate::hardware::network::NetworkInfo;
 use crate::hardware::intelligence::HardwareAssessment;
 
 pub struct NormalizedCpuState {
@@ -31,6 +32,12 @@ pub struct NormalizedGpuState {
     pub capability_status: String,
 }
 
+pub struct NormalizedNetworkState {
+    pub download_mbps: f64,
+    pub upload_mbps: f64,
+    pub ping_ms: Option<f64>,
+}
+
 pub struct NormalizedStorageState {
     pub detected: bool,
     pub device_path: Option<String>,
@@ -48,7 +55,7 @@ pub struct NormalizedHardwareState {
     pub normalized_storage: NormalizedStorageState,
     pub memory: NormalizedMemoryState,
     pub storage: String,
-    pub network: String,
+    pub network: NormalizedNetworkState,
     pub firmware: String,
     pub capabilities: String,
     pub health: String,
@@ -62,7 +69,7 @@ impl NormalizedHardwareState {
         assessment: &HardwareAssessment,
         gpu: Option<&GpuInfo>,
         storage: Option<&StorageInfo>,
-        network: String,
+        network: &NetworkInfo,
         changes: String,
     ) -> Self {
         let normalized_cpu = NormalizedCpuState {
@@ -83,6 +90,7 @@ impl NormalizedHardwareState {
             available_gb: memory.available_gb,
         };
 
+        let normalized_network = NormalizedNetworkState { download_mbps: network.download_mbps, upload_mbps: network.upload_mbps, ping_ms: network.ping_ms };
         let normalized_gpu = NormalizedGpuState {
             detected: gpu.is_some(),
             card: gpu.map(|value| value.card.clone()),
@@ -109,7 +117,7 @@ impl NormalizedHardwareState {
             memory: normalized_memory,
             normalized_storage,
             storage: assessment.storage_status.clone(),
-            network,
+            network: normalized_network,
             firmware: assessment.firmware_status.clone(),
             capabilities: assessment.performance_power_status.clone(),
             health: assessment.overall_status.clone(),
