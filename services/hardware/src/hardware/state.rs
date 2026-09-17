@@ -41,6 +41,17 @@ pub struct NormalizedHealthState {
     pub storage_status: String,
 }
 
+pub struct NormalizedCapabilitiesState {
+    pub cpu_frequency_ghz: Option<f64>,
+    pub cpu_frequency_min_ghz: Option<f64>,
+    pub cpu_frequency_max_ghz: Option<f64>,
+    pub cpu_governor: Option<String>,
+    pub thread_capacity: String,
+    pub gpu_acceleration: bool,
+    pub gpu_vram_gb: Option<f64>,
+    pub storage_power_management: bool,
+}
+
 pub struct NormalizedFirmwareState {
     pub status: String,
     pub update_available: bool,
@@ -72,7 +83,7 @@ pub struct NormalizedHardwareState {
     pub storage: String,
     pub network: NormalizedNetworkState,
     pub firmware: NormalizedFirmwareState,
-    pub capabilities: String,
+    pub capabilities: NormalizedCapabilitiesState,
     pub health: NormalizedHealthState,
     pub changes: String,
 }
@@ -128,6 +139,17 @@ impl NormalizedHardwareState {
             temperature_c: storage.and_then(|value| value.temperature_c),
         };
 
+        let normalized_capabilities = NormalizedCapabilitiesState {
+            cpu_frequency_ghz: cpu.frequency_ghz,
+            cpu_frequency_min_ghz: cpu.frequency_min_ghz,
+            cpu_frequency_max_ghz: cpu.frequency_max_ghz,
+            cpu_governor: cpu.governor.clone(),
+            thread_capacity: if cpu.threads >= 12 { "high".to_string() } else if cpu.threads >= 8 { "multi".to_string() } else { "standard".to_string() },
+            gpu_acceleration: gpu.is_some(),
+            gpu_vram_gb: gpu.and_then(|value| value.vram_total_gb),
+            storage_power_management: storage.is_some(),
+        };
+
         Self {
             cpu: normalized_cpu,
             gpu: normalized_gpu,
@@ -136,7 +158,7 @@ impl NormalizedHardwareState {
             storage: assessment.storage_status.clone(),
             network: normalized_network,
             firmware: normalized_firmware,
-            capabilities: assessment.performance_power_status.clone(),
+            capabilities: normalized_capabilities,
             health: normalized_health,
             changes,
         }

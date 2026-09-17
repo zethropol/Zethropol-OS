@@ -164,7 +164,7 @@ fn main() {
         println!("Normalized Storage: {}", normalized_state.storage);
         println!("Normalized Network: download={:.2} Mbps, upload={:.2} Mbps, ping={:?} ms", normalized_state.network.download_mbps, normalized_state.network.upload_mbps, normalized_state.network.ping_ms);
         println!("Normalized Firmware: status={}, update_available={}, capsule_updates_available={}", normalized_state.firmware.status, normalized_state.firmware.update_available, normalized_state.firmware.capsule_updates_available);
-        println!("Normalized Capabilities: {}", normalized_state.capabilities);
+        println!("Normalized Capabilities: cpu_frequency={:?} GHz, cpu_range={:?}-{:?} GHz, governor={:?}, thread_capacity={}, gpu_acceleration={}, gpu_vram={:?} GiB, storage_power_management={}", normalized_state.capabilities.cpu_frequency_ghz, normalized_state.capabilities.cpu_frequency_min_ghz, normalized_state.capabilities.cpu_frequency_max_ghz, normalized_state.capabilities.cpu_governor, normalized_state.capabilities.thread_capacity, normalized_state.capabilities.gpu_acceleration, normalized_state.capabilities.gpu_vram_gb, normalized_state.capabilities.storage_power_management);
         println!("Normalized Health: overall={}, cpu={}, gpu={}, driver={}, memory={}, storage={}", normalized_state.health.overall_status, normalized_state.health.cpu_status, normalized_state.health.gpu_status, normalized_state.health.driver_status, normalized_state.health.memory_status, normalized_state.health.storage_status);
         println!("Normalized Changes: {}", normalized_state.changes);
         println!("Overall: {}", assessment.overall_status);
