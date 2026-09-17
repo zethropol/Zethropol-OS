@@ -32,6 +32,21 @@ pub struct NormalizedGpuState {
     pub capability_status: String,
 }
 
+pub struct NormalizedHealthState {
+    pub overall_status: String,
+    pub cpu_status: String,
+    pub gpu_status: String,
+    pub driver_status: String,
+    pub memory_status: String,
+    pub storage_status: String,
+}
+
+pub struct NormalizedFirmwareState {
+    pub status: String,
+    pub update_available: bool,
+    pub capsule_updates_available: bool,
+}
+
 pub struct NormalizedNetworkState {
     pub download_mbps: f64,
     pub upload_mbps: f64,
@@ -56,9 +71,9 @@ pub struct NormalizedHardwareState {
     pub memory: NormalizedMemoryState,
     pub storage: String,
     pub network: NormalizedNetworkState,
-    pub firmware: String,
+    pub firmware: NormalizedFirmwareState,
     pub capabilities: String,
-    pub health: String,
+    pub health: NormalizedHealthState,
     pub changes: String,
 }
 
@@ -90,6 +105,8 @@ impl NormalizedHardwareState {
             available_gb: memory.available_gb,
         };
 
+        let normalized_health = NormalizedHealthState { overall_status: assessment.overall_status.clone(), cpu_status: assessment.cpu_status.clone(), gpu_status: assessment.gpu_status.clone(), driver_status: assessment.driver_status.clone(), memory_status: assessment.memory_status.clone(), storage_status: assessment.storage_status.clone() };
+        let normalized_firmware = NormalizedFirmwareState { status: assessment.firmware_status.clone(), update_available: assessment.firmware_status.contains("firmware update available"), capsule_updates_available: !assessment.firmware_status.contains("UEFI capsule updates unavailable or disabled") };
         let normalized_network = NormalizedNetworkState { download_mbps: network.download_mbps, upload_mbps: network.upload_mbps, ping_ms: network.ping_ms };
         let normalized_gpu = NormalizedGpuState {
             detected: gpu.is_some(),
@@ -118,9 +135,9 @@ impl NormalizedHardwareState {
             normalized_storage,
             storage: assessment.storage_status.clone(),
             network: normalized_network,
-            firmware: assessment.firmware_status.clone(),
+            firmware: normalized_firmware,
             capabilities: assessment.performance_power_status.clone(),
-            health: assessment.overall_status.clone(),
+            health: normalized_health,
             changes,
         }
     }

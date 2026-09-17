@@ -163,9 +163,9 @@ fn main() {
         println!("Normalized Memory: total={:.2} GB, used={:.2} GB, available={:.2} GB", normalized_state.memory.total_gb, normalized_state.memory.used_gb, normalized_state.memory.available_gb);
         println!("Normalized Storage: {}", normalized_state.storage);
         println!("Normalized Network: download={:.2} Mbps, upload={:.2} Mbps, ping={:?} ms", normalized_state.network.download_mbps, normalized_state.network.upload_mbps, normalized_state.network.ping_ms);
-        println!("Normalized Firmware: {}", normalized_state.firmware);
+        println!("Normalized Firmware: status={}, update_available={}, capsule_updates_available={}", normalized_state.firmware.status, normalized_state.firmware.update_available, normalized_state.firmware.capsule_updates_available);
         println!("Normalized Capabilities: {}", normalized_state.capabilities);
-        println!("Normalized Health: {}", normalized_state.health);
+        println!("Normalized Health: overall={}, cpu={}, gpu={}, driver={}, memory={}, storage={}", normalized_state.health.overall_status, normalized_state.health.cpu_status, normalized_state.health.gpu_status, normalized_state.health.driver_status, normalized_state.health.memory_status, normalized_state.health.storage_status);
         println!("Normalized Changes: {}", normalized_state.changes);
         println!("Overall: {}", assessment.overall_status);
         println!("CPU: {}", assessment.cpu_status);
