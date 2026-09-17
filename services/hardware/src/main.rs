@@ -7,6 +7,7 @@ use hardware::intelligence::{assess, assess_hardware_change, hardware_fingerprin
 use hardware::diagnostics::assess_storage;
 use hardware::memory::MemoryInfo;
 use hardware::storage::StorageInfo;
+use hardware::state::NormalizedHardwareState;
 use std::io::{self, Write};
 
 struct HardwareInfo {
@@ -143,10 +144,29 @@ fn main() {
         );
         let hardware_change_status = assess_hardware_change(&fingerprint);
         let storage_diagnostics = assess_storage(hardware.storage.as_ref());
+        let normalized_state = NormalizedHardwareState::from_assessment(
+            &hardware.cpu,
+            &hardware.memory,
+            &assessment,
+            hardware.gpu.as_ref(),
+            hardware.storage.as_ref(),
+            format!("network: ping {:?} ms", hardware.network.ping_ms),
+            hardware_change_status.clone(),
+        );
 
         println!("Zethropol Hardware Intelligence");
         println!("Hardware Fingerprint: {}", fingerprint);
         println!("Hardware Change: {}", hardware_change_status);
+        println!("Normalized CPU: model={}, cores={}, threads={}, frequency={:?} GHz, range={:?}-{:?} GHz, governor={:?}, temperature={:?} °C, usage={:.1}%", normalized_state.cpu.model, normalized_state.cpu.cores, normalized_state.cpu.threads, normalized_state.cpu.frequency_ghz, normalized_state.cpu.frequency_min_ghz, normalized_state.cpu.frequency_max_ghz, normalized_state.cpu.governor, normalized_state.cpu.temperature_c, normalized_state.cpu.usage_percent);
+        println!("Normalized GPU: detected={}, card={:?}, vendor={:?}, device={:?}, driver={:?}, capability={}", normalized_state.gpu.detected, normalized_state.gpu.card, normalized_state.gpu.vendor, normalized_state.gpu.device, normalized_state.gpu.driver, normalized_state.gpu.capability_status);
+        println!("Normalized Storage: detected={}, device={:?}, model={:?}, firmware={:?}, capacity={:?} GB, used={:?} GB, available={:?} GB, temperature={:?} °C", normalized_state.normalized_storage.detected, normalized_state.normalized_storage.device_path, normalized_state.normalized_storage.model, normalized_state.normalized_storage.firmware, normalized_state.normalized_storage.capacity_gb, normalized_state.normalized_storage.used_gb, normalized_state.normalized_storage.available_gb, normalized_state.normalized_storage.temperature_c);
+        println!("Normalized Memory: total={:.2} GB, used={:.2} GB, available={:.2} GB", normalized_state.memory.total_gb, normalized_state.memory.used_gb, normalized_state.memory.available_gb);
+        println!("Normalized Storage: {}", normalized_state.storage);
+        println!("Normalized Network: {}", normalized_state.network);
+        println!("Normalized Firmware: {}", normalized_state.firmware);
+        println!("Normalized Capabilities: {}", normalized_state.capabilities);
+        println!("Normalized Health: {}", normalized_state.health);
+        println!("Normalized Changes: {}", normalized_state.changes);
         println!("Overall: {}", assessment.overall_status);
         println!("CPU: {}", assessment.cpu_status);
         println!("GPU: {}", assessment.gpu_status);
