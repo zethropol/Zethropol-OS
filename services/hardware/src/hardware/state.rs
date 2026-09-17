@@ -75,6 +75,12 @@ pub struct NormalizedStorageState {
     pub temperature_c: Option<f64>,
 }
 
+pub struct NormalizedChangesState {
+    pub status: String,
+    pub changed: bool,
+    pub message: String,
+}
+
 pub struct NormalizedHardwareState {
     pub cpu: NormalizedCpuState,
     pub gpu: NormalizedGpuState,
@@ -85,7 +91,7 @@ pub struct NormalizedHardwareState {
     pub firmware: NormalizedFirmwareState,
     pub capabilities: NormalizedCapabilitiesState,
     pub health: NormalizedHealthState,
-    pub changes: String,
+    pub changes: NormalizedChangesState,
 }
 
 impl NormalizedHardwareState {
@@ -150,6 +156,12 @@ impl NormalizedHardwareState {
             storage_power_management: storage.is_some(),
         };
 
+        let normalized_changes = NormalizedChangesState {
+            status: if changes.starts_with("ok:") { "ok".to_string() } else if changes.starts_with("attention:") { "attention".to_string() } else if changes.starts_with("unknown:") { "unknown".to_string() } else { "unknown".to_string() },
+            changed: changes.starts_with("attention:"),
+            message: changes.clone(),
+        };
+
         Self {
             cpu: normalized_cpu,
             gpu: normalized_gpu,
@@ -160,7 +172,7 @@ impl NormalizedHardwareState {
             firmware: normalized_firmware,
             capabilities: normalized_capabilities,
             health: normalized_health,
-            changes,
+            changes: normalized_changes,
         }
     }
 }
