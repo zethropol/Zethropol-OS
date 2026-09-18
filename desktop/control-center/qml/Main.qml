@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Controls.Material
 
 ApplicationWindow {
     visible: true
@@ -33,6 +34,7 @@ ApplicationWindow {
                     delegate: Button {
                         text: modelData
                         Layout.fillWidth: true
+                        onClicked: contentStack.currentIndex = index
                     }
                 }
 
@@ -49,17 +51,31 @@ ApplicationWindow {
                 anchors.margins: 32
                 spacing: 16
 
-                Label {
-                    text: "Overview"
-                    font.pixelSize: 32
-                }
+                StackLayout {
+                    id: contentStack
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
 
-                Label {
-                    text: "Zethropol system overview"
-                    opacity: 0.7
-                }
+                    Item {
+                        ColumnLayout {
+                            anchors.fill: parent
+                            Label { text: "Overview"; font.pixelSize: 32 }
+                            Label { text: "Zethropol system overview"; opacity: 0.7 }
+                        }
+                    }
 
-                Item { Layout.fillHeight: true }
+                    Repeater {
+                        model: 8
+                        delegate: Item {
+                            Label {
+                                anchors.centerIn: parent
+                                text: ["Hardware", "System", "Performance", "Power", "Updates", "Recovery", "Security", "Applications"][index]
+                                font.pixelSize: 28
+                                opacity: 0.7
+                            }
+                        }
+                    }
+                }
             }
         }
     }
