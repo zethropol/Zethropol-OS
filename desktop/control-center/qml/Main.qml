@@ -98,7 +98,7 @@ ApplicationWindow {
                                     model: ["CPU", "GPU", "Memory", "Storage", "Network", "Overall Health"]
                                     delegate: Rectangle {
                                         Layout.fillWidth: true
-                                        Layout.preferredHeight: 80
+                                        Layout.preferredHeight: 110
                                         radius: 6
                                         border.width: 1
 
@@ -116,6 +116,13 @@ ApplicationWindow {
                                             Label {
                                                 text: index === 0 ? SystemState.cpuStatus : index === 1 ? SystemState.gpuStatus : index === 2 ? SystemState.memoryStatus : index === 3 ? SystemState.storageStatus : index === 4 ? SystemState.networkStatus : SystemState.overallHealth
                                                 opacity: 0.6
+                                            }
+
+                                            Label {
+                                                text: index === 0 ? SystemState.cpuMessage : index === 1 ? SystemState.gpuMessage : index === 2 ? SystemState.memoryMessage : index === 3 ? SystemState.storageMessage : index === 4 ? SystemState.networkMessage : "System health state"
+                                                opacity: 0.45
+                                                wrapMode: Text.WordWrap
+                                                Layout.preferredWidth: 180
                                             }
                                         }
                                     }
