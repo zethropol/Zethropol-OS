@@ -1,6 +1,0 @@
-module Zethropol.ControlCenter
-typeinfo zethropol-control-center.qmltypes
-prefer :/qt/qml/Zethropol/ControlCenter/
-Main 1.0 qml/Main.qml
-depends QtQuick
-
