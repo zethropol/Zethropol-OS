@@ -61,6 +61,25 @@ ApplicationWindow {
                             anchors.fill: parent
                             Label { text: "Overview"; font.pixelSize: 32 }
                             Label { text: "Zethropol system overview"; opacity: 0.7 }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 16
+                                Repeater {
+                                    model: ["System Status", "Hardware", "Performance"]
+                                    delegate: Rectangle {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 140
+                                        radius: 8
+                                        border.width: 1
+                                        ColumnLayout {
+                                            anchors.centerIn: parent
+                                            Label { text: modelData; font.pixelSize: 18 }
+                                            Label { text: "Not connected"; opacity: 0.6 }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
 
