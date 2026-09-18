@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/qt/qml/Zethropol/ControlCenter/">
+    <file alias="qml/Main.qml">/home/Zevor/Zethropol-OS/desktop/control-center/qml/Main.qml</file>
+  </qresource>
+</RCC>
+
