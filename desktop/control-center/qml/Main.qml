@@ -80,6 +80,46 @@ ApplicationWindow {
                                     }
                                 }
                             }
+
+                            Label {
+                                text: "Hardware Health"
+                                font.pixelSize: 22
+                                Layout.topMargin: 16
+                            }
+
+                            GridLayout {
+                                columns: 3
+                                Layout.fillWidth: true
+                                rowSpacing: 12
+                                columnSpacing: 12
+
+                                Repeater {
+                                    model: ["CPU", "GPU", "Memory", "Storage", "Network", "Overall Health"]
+                                    delegate: Rectangle {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 80
+                                        radius: 6
+                                        border.width: 1
+
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.margins: 12
+
+                                            Label {
+                                                text: modelData
+                                                font.pixelSize: 16
+                                            }
+
+                                            Item { Layout.fillWidth: true }
+
+                                            Label {
+                                                text: "Unknown"
+                                                opacity: 0.6
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
 
