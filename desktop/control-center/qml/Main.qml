@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Controls.Material
+import Zethropol.ControlCenter
 
 ApplicationWindow {
     visible: true
@@ -113,7 +114,7 @@ ApplicationWindow {
                                             Item { Layout.fillWidth: true }
 
                                             Label {
-                                                text: "Unknown"
+                                                text: index === 0 ? SystemState.cpuStatus : index === 1 ? SystemState.gpuStatus : index === 2 ? SystemState.memoryStatus : index === 3 ? SystemState.storageStatus : index === 4 ? SystemState.networkStatus : SystemState.overallHealth
                                                 opacity: 0.6
                                             }
                                         }

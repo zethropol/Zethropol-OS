@@ -14,10 +14,12 @@ qt_add_executable(zethropol-control-center
     src/main.cpp
 )
 
+set_source_files_properties(qml/SystemState.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 qt_add_qml_module(zethropol-control-center
     URI Zethropol.ControlCenter
     VERSION 1.0
     QML_FILES
+        qml/SystemState.qml
         qml/Main.qml
 )
 
