@@ -76,7 +76,7 @@ ApplicationWindow {
                                         ColumnLayout {
                                             anchors.centerIn: parent
                                             Label { text: modelData; font.pixelSize: 18 }
-                                            Label { text: "Not connected"; opacity: 0.6 }
+                                            Label { text: index === 0 ? SystemState.systemStatus : index === 1 ? SystemState.hardwareSummary : SystemState.performanceStatus; opacity: 0.6; Layout.fillWidth: true; elide: Text.ElideRight }
                                         }
                                     }
                                 }
