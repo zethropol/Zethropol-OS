@@ -4,7 +4,9 @@ use crate::hardware::gpu::GpuInfo;
 use crate::hardware::storage::StorageInfo;
 use crate::hardware::network::NetworkInfo;
 use crate::hardware::intelligence::HardwareAssessment;
+use serde::Serialize;
 
+#[derive(Serialize)]
 pub struct NormalizedCpuState {
     pub model: String,
     pub cores: usize,
@@ -17,12 +19,14 @@ pub struct NormalizedCpuState {
     pub usage_percent: f64,
 }
 
+#[derive(Serialize)]
 pub struct NormalizedMemoryState {
     pub total_gb: f64,
     pub used_gb: f64,
     pub available_gb: f64,
 }
 
+#[derive(Serialize)]
 pub struct NormalizedGpuState {
     pub detected: bool,
     pub card: Option<String>,
@@ -32,6 +36,7 @@ pub struct NormalizedGpuState {
     pub capability_status: String,
 }
 
+#[derive(Serialize)]
 pub struct NormalizedHealthState {
     pub overall_status: String,
     pub cpu_status: String,
@@ -41,6 +46,7 @@ pub struct NormalizedHealthState {
     pub storage_status: String,
 }
 
+#[derive(Serialize)]
 pub struct NormalizedCapabilitiesState {
     pub cpu_frequency_ghz: Option<f64>,
     pub cpu_frequency_min_ghz: Option<f64>,
@@ -52,18 +58,21 @@ pub struct NormalizedCapabilitiesState {
     pub storage_power_management: bool,
 }
 
+#[derive(Serialize)]
 pub struct NormalizedFirmwareState {
     pub status: String,
     pub update_available: bool,
     pub capsule_updates_available: bool,
 }
 
+#[derive(Serialize)]
 pub struct NormalizedNetworkState {
     pub download_mbps: f64,
     pub upload_mbps: f64,
     pub ping_ms: Option<f64>,
 }
 
+#[derive(Serialize)]
 pub struct NormalizedStorageState {
     pub detected: bool,
     pub device_path: Option<String>,
@@ -75,12 +84,14 @@ pub struct NormalizedStorageState {
     pub temperature_c: Option<f64>,
 }
 
+#[derive(Serialize)]
 pub struct NormalizedChangesState {
     pub status: String,
     pub changed: bool,
     pub message: String,
 }
 
+#[derive(Serialize)]
 pub struct NormalizedHardwareState {
     pub cpu: NormalizedCpuState,
     pub gpu: NormalizedGpuState,

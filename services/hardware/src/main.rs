@@ -24,6 +24,11 @@ fn main() {
         return;
     }
 
+    if std::env::args().any(|arg| arg == "--json") {
+        print_json();
+        return;
+    }
+
     if std::env::args().any(|arg| arg == "--monitor") {
         print_monitor_data();
         return;
@@ -212,6 +217,43 @@ fn main() {
     println!("RAM Total: {:.2} GB", hardware.memory.total_gb);
     println!("RAM Used: {:.2} GB", hardware.memory.used_gb);
     println!("RAM Available: {:.2} GB", hardware.memory.available_gb);
+}
+
+fn print_json() {
+    let hardware = HardwareInfo {
+        cpu: hardware::cpu::read(),
+        gpu: hardware::gpu::read(),
+        memory: hardware::memory::read(),
+        storage: hardware::storage::read(),
+        network: hardware::network::read(),
+    };
+
+    let assessment = assess(
+        &hardware.cpu,
+        hardware.gpu.as_ref(),
+        &hardware.memory,
+        hardware.storage.as_ref(),
+    );
+
+    let fingerprint = hardware_fingerprint(
+        &hardware.cpu,
+        hardware.gpu.as_ref(),
+        &hardware.memory,
+        hardware.storage.as_ref(),
+    );
+
+    let hardware_change_status = assess_hardware_change(&fingerprint);
+    let normalized_state = NormalizedHardwareState::from_assessment(
+        &hardware.cpu,
+        &hardware.memory,
+        &assessment,
+        hardware.gpu.as_ref(),
+        hardware.storage.as_ref(),
+        &hardware.network,
+        hardware_change_status,
+    );
+
+    println!("{}", serde_json::to_string_pretty(&normalized_state).unwrap());
 }
 
 fn print_monitor_data() {

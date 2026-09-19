@@ -102,27 +102,30 @@ ApplicationWindow {
                                         radius: 6
                                         border.width: 1
 
-                                        RowLayout {
+                                        ColumnLayout {
                                             anchors.fill: parent
                                             anchors.margins: 12
+                                            spacing: 4
 
                                             Label {
                                                 text: modelData
                                                 font.pixelSize: 16
                                             }
 
-                                            Item { Layout.fillWidth: true }
-
                                             Label {
                                                 text: index === 0 ? SystemState.cpuStatus : index === 1 ? SystemState.gpuStatus : index === 2 ? SystemState.memoryStatus : index === 3 ? SystemState.storageStatus : index === 4 ? SystemState.networkStatus : SystemState.overallHealth
                                                 opacity: 0.6
+                                                Layout.fillWidth: true
+                                                elide: Text.ElideRight
                                             }
 
                                             Label {
                                                 text: index === 0 ? SystemState.cpuMessage : index === 1 ? SystemState.gpuMessage : index === 2 ? SystemState.memoryMessage : index === 3 ? SystemState.storageMessage : index === 4 ? SystemState.networkMessage : "System health state"
                                                 opacity: 0.45
+                                                Layout.fillWidth: true
                                                 wrapMode: Text.WordWrap
-                                                Layout.preferredWidth: 180
+                                                maximumLineCount: 2
+                                                elide: Text.ElideRight
                                             }
                                         }
                                     }
