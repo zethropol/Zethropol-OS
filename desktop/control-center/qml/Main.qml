@@ -39,7 +39,9 @@ ApplicationWindow {
                     }
                 }
 
-                Item { Layout.fillHeight: true }
+                Item {
+                    Layout.fillHeight: true
+                }
             }
         }
 
@@ -60,31 +62,53 @@ ApplicationWindow {
                     Item {
                         ColumnLayout {
                             anchors.fill: parent
-                            Label { text: "Overview"; font.pixelSize: 32 }
-                            Label { text: "Zethropol system overview"; opacity: 0.7 }
+                            spacing: 14
+
+                            Label {
+                                text: "Overview"
+                                font.pixelSize: 32
+                            }
+
+                            Label {
+                                text: "Zethropol system overview"
+                                opacity: 0.7
+                            }
 
                             RowLayout {
                                 Layout.fillWidth: true
                                 spacing: 16
+
                                 Repeater {
                                     model: ["System Status", "Hardware", "Performance"]
+
                                     delegate: Rectangle {
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: 140
                                         radius: 8
                                         border.width: 1
+
                                         ColumnLayout {
                                             anchors.centerIn: parent
-                                            Label { text: modelData; font.pixelSize: 18 }
+                                            width: parent.width - 24
+                                            spacing: 8
+
                                             Label {
-    text: index === 0 ? SystemState.systemStatus : index === 1 ? SystemState.hardwareSummary : SystemState.performanceStatus
-    opacity: 0.6
-    Layout.fillWidth: true
-    wrapMode: Text.WordWrap
-    horizontalAlignment: Text.AlignHCenter
-    maximumLineCount: 2
-    elide: Text.ElideRight
-}
+                                                text: modelData
+                                                font.pixelSize: 18
+                                                Layout.alignment: Qt.AlignHCenter
+                                            }
+
+                                            Label {
+                                                text: index === 0 ? SystemState.systemStatus :
+                                                      index === 1 ? SystemState.hardwareSummary :
+                                                                    SystemState.performanceStatus
+                                                opacity: 0.6
+                                                Layout.fillWidth: true
+                                                wrapMode: Text.WordWrap
+                                                horizontalAlignment: Text.AlignHCenter
+                                                maximumLineCount: 2
+                                                elide: Text.ElideRight
+                                            }
                                         }
                                     }
                                 }
@@ -104,6 +128,7 @@ ApplicationWindow {
 
                                 Repeater {
                                     model: ["CPU", "GPU", "Memory", "Storage", "Network", "Overall Health"]
+
                                     delegate: Rectangle {
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: 110
@@ -121,14 +146,24 @@ ApplicationWindow {
                                             }
 
                                             Label {
-                                                text: index === 0 ? SystemState.cpuStatus : index === 1 ? SystemState.gpuModel : index === 2 ? SystemState.memoryStatus : index === 3 ? SystemState.storageStatus : index === 4 ? SystemState.networkStatus : SystemState.overallHealth
+                                                text: index === 0 ? SystemState.cpuStatus :
+                                                      index === 1 ? SystemState.gpuModel :
+                                                      index === 2 ? SystemState.memoryStatus :
+                                                      index === 3 ? SystemState.storageStatus :
+                                                      index === 4 ? SystemState.networkStatus :
+                                                                    SystemState.overallHealth
                                                 opacity: 0.6
                                                 Layout.fillWidth: true
                                                 elide: Text.ElideRight
                                             }
 
                                             Label {
-                                                text: index === 0 ? SystemState.cpuMessage : index === 1 ? SystemState.gpuDetails : index === 2 ? SystemState.memoryMessage : index === 3 ? SystemState.storageMessage : index === 4 ? SystemState.networkMessage : "System health state"
+                                                text: index === 0 ? SystemState.cpuMessage :
+                                                      index === 1 ? SystemState.gpuDetails :
+                                                      index === 2 ? SystemState.memoryMessage :
+                                                      index === 3 ? SystemState.storageMessage :
+                                                      index === 4 ? SystemState.networkMessage :
+                                                                    "System health state"
                                                 opacity: 0.45
                                                 Layout.fillWidth: true
                                                 wrapMode: Text.WordWrap
@@ -169,12 +204,27 @@ ApplicationWindow {
                                     Layout.preferredHeight: 130
                                     radius: 8
                                     border.width: 1
+
                                     ColumnLayout {
                                         anchors.fill: parent
                                         anchors.margins: 14
-                                        Label { text: "CPU"; font.pixelSize: 18 }
-                                        Label { text: SystemState.cpuMessage; Layout.fillWidth: true; wrapMode: Text.WordWrap }
-                                        Label { text: SystemState.cpuDetails; opacity: 0.65; Layout.fillWidth: true }
+
+                                        Label {
+                                            text: "CPU"
+                                            font.pixelSize: 18
+                                        }
+
+                                        Label {
+                                            text: SystemState.cpuMessage
+                                            Layout.fillWidth: true
+                                            wrapMode: Text.WordWrap
+                                        }
+
+                                        Label {
+                                            text: SystemState.cpuDetails
+                                            opacity: 0.65
+                                            Layout.fillWidth: true
+                                        }
                                     }
                                 }
 
@@ -183,13 +233,35 @@ ApplicationWindow {
                                     Layout.preferredHeight: 130
                                     radius: 8
                                     border.width: 1
+
                                     ColumnLayout {
                                         anchors.fill: parent
                                         anchors.margins: 14
-                                        Label { text: "GPU"; font.pixelSize: 18 }
-                                        Label { text: "Model: " + SystemState.gpuModel; Layout.fillWidth: true; wrapMode: Text.WordWrap }
-                                      Label { text: "Family: " + SystemState.gpuFamily; Layout.fillWidth: true; wrapMode: Text.WordWrap; maximumLineCount: 2; elide: Text.ElideRight; opacity: 0.65 }
-                                        Label { text: "Status: " + SystemState.gpuStatus; opacity: 0.65 }
+
+                                        Label {
+                                            text: "GPU"
+                                            font.pixelSize: 18
+                                        }
+
+                                        Label {
+                                            text: "Model: " + SystemState.gpuModel
+                                            Layout.fillWidth: true
+                                            wrapMode: Text.WordWrap
+                                        }
+
+                                        Label {
+                                            text: "Family: " + SystemState.gpuFamily
+                                            Layout.fillWidth: true
+                                            wrapMode: Text.WordWrap
+                                            maximumLineCount: 2
+                                            elide: Text.ElideRight
+                                            opacity: 0.65
+                                        }
+
+                                        Label {
+                                            text: "Status: " + SystemState.gpuStatus
+                                            opacity: 0.65
+                                        }
                                     }
                                 }
 
@@ -198,11 +270,20 @@ ApplicationWindow {
                                     Layout.preferredHeight: 110
                                     radius: 8
                                     border.width: 1
+
                                     ColumnLayout {
                                         anchors.fill: parent
                                         anchors.margins: 14
-                                        Label { text: "Memory"; font.pixelSize: 18 }
-                                        Label { text: SystemState.memoryDetails; opacity: 0.65 }
+
+                                        Label {
+                                            text: "Memory"
+                                            font.pixelSize: 18
+                                        }
+
+                                        Label {
+                                            text: SystemState.memoryDetails
+                                            opacity: 0.65
+                                        }
                                     }
                                 }
 
@@ -211,11 +292,22 @@ ApplicationWindow {
                                     Layout.preferredHeight: 110
                                     radius: 8
                                     border.width: 1
+
                                     ColumnLayout {
                                         anchors.fill: parent
                                         anchors.margins: 14
-                                        Label { text: "Storage"; font.pixelSize: 18 }
-                                        Label { text: SystemState.storageDetails; opacity: 0.65; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+
+                                        Label {
+                                            text: "Storage"
+                                            font.pixelSize: 18
+                                        }
+
+                                        Label {
+                                            text: SystemState.storageDetails
+                                            opacity: 0.65
+                                            Layout.fillWidth: true
+                                            wrapMode: Text.WordWrap
+                                        }
                                     }
                                 }
 
@@ -224,11 +316,22 @@ ApplicationWindow {
                                     Layout.preferredHeight: 110
                                     radius: 8
                                     border.width: 1
+
                                     ColumnLayout {
                                         anchors.fill: parent
                                         anchors.margins: 14
-                                        Label { text: "Network"; font.pixelSize: 18 }
-                                        Label { text: SystemState.networkDetails; opacity: 0.65; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+
+                                        Label {
+                                            text: "Network"
+                                            font.pixelSize: 18
+                                        }
+
+                                        Label {
+                                            text: SystemState.networkDetails
+                                            opacity: 0.65
+                                            Layout.fillWidth: true
+                                            wrapMode: Text.WordWrap
+                                        }
                                     }
                                 }
 
@@ -237,11 +340,22 @@ ApplicationWindow {
                                     Layout.preferredHeight: 110
                                     radius: 8
                                     border.width: 1
+
                                     ColumnLayout {
                                         anchors.fill: parent
                                         anchors.margins: 14
-                                        Label { text: "Firmware"; font.pixelSize: 18 }
-                                        Label { text: SystemState.firmwareDetails; opacity: 0.65; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+
+                                        Label {
+                                            text: "Firmware"
+                                            font.pixelSize: 18
+                                        }
+
+                                        Label {
+                                            text: SystemState.firmwareDetails
+                                            opacity: 0.65
+                                            Layout.fillWidth: true
+                                            wrapMode: Text.WordWrap
+                                        }
                                     }
                                 }
 
@@ -250,11 +364,22 @@ ApplicationWindow {
                                     Layout.preferredHeight: 110
                                     radius: 8
                                     border.width: 1
+
                                     ColumnLayout {
                                         anchors.fill: parent
                                         anchors.margins: 14
-                                        Label { text: "Capabilities"; font.pixelSize: 18 }
-                                        Label { text: SystemState.capabilitiesDetails; opacity: 0.65; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+
+                                        Label {
+                                            text: "Capabilities"
+                                            font.pixelSize: 18
+                                        }
+
+                                        Label {
+                                            text: SystemState.capabilitiesDetails
+                                            opacity: 0.65
+                                            Layout.fillWidth: true
+                                            wrapMode: Text.WordWrap
+                                        }
                                     }
                                 }
 
@@ -263,30 +388,234 @@ ApplicationWindow {
                                     Layout.preferredHeight: 110
                                     radius: 8
                                     border.width: 1
+
                                     ColumnLayout {
                                         anchors.fill: parent
                                         anchors.margins: 14
-                                        Label { text: "Hardware Changes"; font.pixelSize: 18 }
-                                        Label { text: SystemState.changesDetails; opacity: 0.65; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+
+                                        Label {
+                                            text: "Hardware Changes"
+                                            font.pixelSize: 18
+                                        }
+
+                                        Label {
+                                            text: SystemState.changesDetails
+                                            opacity: 0.65
+                                            Layout.fillWidth: true
+                                            wrapMode: Text.WordWrap
+                                        }
                                     }
                                 }
                             }
                         }
                     }
 
-                    Repeater {
-                        model: 7
-                        delegate: Item {
+                    Item {
+                        ColumnLayout {
+                            anchors.fill: parent
+                            spacing: 14
+
                             Label {
-                                anchors.centerIn: parent
-                                text: ["System", "Performance", "Power", "Updates", "Recovery", "Security", "Applications"][index]
-                                font.pixelSize: 28
+                                text: "System"
+                                font.pixelSize: 32
+                            }
+
+                            Label {
+                                text: "Operating system and runtime information"
                                 opacity: 0.7
                             }
+
+                            GridLayout {
+                                columns: 2
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                rowSpacing: 12
+                                columnSpacing: 12
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 145
+                                    radius: 8
+                                    border.width: 1
+
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 16
+                                        spacing: 6
+
+                                        Label {
+                                            text: "Zethropol OS"
+                                            font.pixelSize: 19
+                                        }
+
+                                        Label {
+                                            text: SystemState.osName
+                                            font.pixelSize: 16
+                                        }
+
+                                        Label {
+                                            text: "Version: " + SystemState.osVersion
+                                            opacity: 0.65
+                                        }
+
+                                        Label {
+                                            text: "Base: " + SystemState.baseSystem
+                                            opacity: 0.65
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 145
+                                    radius: 8
+                                    border.width: 1
+
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 16
+                                        spacing: 6
+
+                                        Label {
+                                            text: "Architecture"
+                                            font.pixelSize: 19
+                                        }
+
+                                        Label {
+                                            text: SystemState.architecture
+                                            font.pixelSize: 16
+                                        }
+
+                                        Label {
+                                            text: "Kernel: " + SystemState.kernelVersion
+                                            opacity: 0.65
+                                            Layout.fillWidth: true
+                                            wrapMode: Text.WordWrap
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 145
+                                    radius: 8
+                                    border.width: 1
+
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 16
+                                        spacing: 6
+
+                                        Label {
+                                            text: "Desktop"
+                                            font.pixelSize: 19
+                                        }
+
+                                        Label {
+                                            text: SystemState.desktopName
+                                            font.pixelSize: 16
+                                        }
+
+                                        Label {
+                                            text: "Version: " + SystemState.desktopVersion
+                                            opacity: 0.65
+                                        }
+
+                                        Label {
+                                            text: "Session: " + SystemState.sessionType
+                                            opacity: 0.65
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 145
+                                    radius: 8
+                                    border.width: 1
+
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 16
+                                        spacing: 6
+
+                                        Label {
+                                            text: "Runtime"
+                                            font.pixelSize: 19
+                                        }
+
+                                        Label {
+                                            text: "Hostname: " + SystemState.hostname
+                                            font.pixelSize: 16
+                                            Layout.fillWidth: true
+                                            wrapMode: Text.WordWrap
+                                        }
+
+                                        Label {
+                                            text: "Uptime: " + SystemState.uptimeDetails
+                                            opacity: 0.65
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Item {
+                        Label {
+                            anchors.centerIn: parent
+                            text: "Performance"
+                            font.pixelSize: 28
+                            opacity: 0.7
+                        }
+                    }
+
+                    Item {
+                        Label {
+                            anchors.centerIn: parent
+                            text: "Power"
+                            font.pixelSize: 28
+                            opacity: 0.7
+                        }
+                    }
+
+                    Item {
+                        Label {
+                            anchors.centerIn: parent
+                            text: "Updates"
+                            font.pixelSize: 28
+                            opacity: 0.7
+                        }
+                    }
+
+                    Item {
+                        Label {
+                            anchors.centerIn: parent
+                            text: "Recovery"
+                            font.pixelSize: 28
+                            opacity: 0.7
+                        }
+                    }
+
+                    Item {
+                        Label {
+                            anchors.centerIn: parent
+                            text: "Security"
+                            font.pixelSize: 28
+                            opacity: 0.7
+                        }
+                    }
+
+                    Item {
+                        Label {
+                            anchors.centerIn: parent
+                            text: "Applications"
+                            font.pixelSize: 28
+                            opacity: 0.7
                         }
                     }
                 }
             }
         }
     }
-} 
+}

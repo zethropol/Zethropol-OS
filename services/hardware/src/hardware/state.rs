@@ -89,6 +89,20 @@ pub struct NormalizedStorageState {
 }
 
 #[derive(Serialize)]
+pub struct NormalizedSystemState {
+    pub os_name: String,
+    pub os_version: String,
+    pub base_system: String,
+    pub architecture: String,
+    pub kernel_version: String,
+    pub desktop_name: String,
+    pub desktop_version: String,
+    pub session_type: String,
+    pub hostname: String,
+    pub uptime_seconds: Option<f64>,
+}
+
+#[derive(Serialize)]
 pub struct NormalizedChangesState {
     pub status: String,
     pub changed: bool,
@@ -107,6 +121,7 @@ pub struct NormalizedHardwareState {
     pub capabilities: NormalizedCapabilitiesState,
     pub health: NormalizedHealthState,
     pub changes: NormalizedChangesState,
+    pub system: NormalizedSystemState,
 }
 
 impl NormalizedHardwareState {
@@ -118,6 +133,7 @@ impl NormalizedHardwareState {
         storage: Option<&StorageInfo>,
         network: &NetworkInfo,
         changes: String,
+        system: &crate::hardware::system::SystemInfo,
     ) -> Self {
         let normalized_cpu = NormalizedCpuState {
             model: cpu.model.clone(),
@@ -203,6 +219,19 @@ impl NormalizedHardwareState {
             storage_power_management: storage.is_some(),
         };
 
+        let normalized_system = NormalizedSystemState {
+            os_name: system.os_name.clone(),
+            os_version: system.os_version.clone(),
+            base_system: system.base_system.clone(),
+            architecture: system.architecture.clone(),
+            kernel_version: system.kernel_version.clone(),
+            desktop_name: system.desktop_name.clone(),
+            desktop_version: system.desktop_version.clone(),
+            session_type: system.session_type.clone(),
+            hostname: system.hostname.clone(),
+            uptime_seconds: system.uptime_seconds,
+        };
+
         let normalized_changes = NormalizedChangesState {
             status: if changes.starts_with("ok:") {
                 "ok".to_string()
@@ -228,6 +257,7 @@ impl NormalizedHardwareState {
             capabilities: normalized_capabilities,
             health: normalized_health,
             changes: normalized_changes,
+            system: normalized_system,
         }
     }
 }

@@ -149,6 +149,7 @@ fn main() {
         );
         let hardware_change_status = assess_hardware_change(&fingerprint);
         let storage_diagnostics = assess_storage(hardware.storage.as_ref());
+        let system = hardware::system::read();
         let normalized_state = NormalizedHardwareState::from_assessment(
             &hardware.cpu,
             &hardware.memory,
@@ -157,6 +158,7 @@ fn main() {
             hardware.storage.as_ref(),
             &hardware.network,
             hardware_change_status.clone(),
+            &system,
         );
 
         println!("Zethropol Hardware Intelligence");
@@ -243,6 +245,7 @@ fn print_json() {
     );
 
     let hardware_change_status = assess_hardware_change(&fingerprint);
+    let system = hardware::system::read();
     let normalized_state = NormalizedHardwareState::from_assessment(
         &hardware.cpu,
         &hardware.memory,
@@ -251,6 +254,7 @@ fn print_json() {
         hardware.storage.as_ref(),
         &hardware.network,
         hardware_change_status,
+        &system,
     );
 
     println!("{}", serde_json::to_string_pretty(&normalized_state).unwrap());

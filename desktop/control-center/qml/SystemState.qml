@@ -4,6 +4,19 @@ import QtQml
 QtObject {
     property var hardware: HardwareBridge.state
 
+    property var system: hardware.system
+
+    property string osName: system ? system.os_name : "Unknown"
+    property string osVersion: system && system.os_version !== "Unknown" ? system.os_version : "Not defined"
+    property string baseSystem: system ? system.base_system : "Unknown"
+    property string architecture: system ? system.architecture : "Unknown"
+    property string kernelVersion: system ? system.kernel_version : "Unknown"
+    property string desktopName: system ? system.desktop_name : "Unknown"
+    property string desktopVersion: system ? system.desktop_version : "Unknown"
+    property string sessionType: system ? system.session_type : "Unknown"
+    property string hostname: system ? system.hostname : "Unknown"
+    property string uptimeDetails: system && system.uptime_seconds !== null ? Math.floor(system.uptime_seconds / 86400) + "d " + Math.floor((system.uptime_seconds % 86400) / 3600) + "h " + Math.floor((system.uptime_seconds % 3600) / 60) + "m" : "Unknown"
+
     property string overallHealth: hardware.health ? hardware.health.overall_status : "Unknown"
 
     property string cpuStatus: hardware.health ? hardware.health.cpu_status : "Unknown"
