@@ -12,6 +12,7 @@ qt_standard_project_setup()
 
 qt_add_executable(zethropol-control-center
     src/main.cpp
+    src/HardwareServiceClient.cpp
 )
 
 set_source_files_properties(qml/SystemState.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
