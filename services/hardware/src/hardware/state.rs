@@ -32,6 +32,10 @@ pub struct NormalizedGpuState {
     pub card: Option<String>,
     pub vendor: Option<String>,
     pub device: Option<String>,
+    pub subsystem_vendor: Option<String>,
+    pub subsystem_device: Option<String>,
+    pub model: Option<String>,
+    pub family: Option<String>,
     pub driver: Option<String>,
     pub capability_status: String,
 }
@@ -133,14 +137,40 @@ impl NormalizedHardwareState {
             available_gb: memory.available_gb,
         };
 
-        let normalized_health = NormalizedHealthState { overall_status: assessment.overall_status.clone(), cpu_status: assessment.cpu_status.clone(), gpu_status: assessment.gpu_status.clone(), driver_status: assessment.driver_status.clone(), memory_status: assessment.memory_status.clone(), storage_status: assessment.storage_status.clone() };
-        let normalized_firmware = NormalizedFirmwareState { status: assessment.firmware_status.clone(), update_available: assessment.firmware_status.contains("firmware update available"), capsule_updates_available: !assessment.firmware_status.contains("UEFI capsule updates unavailable or disabled") };
-        let normalized_network = NormalizedNetworkState { download_mbps: network.download_mbps, upload_mbps: network.upload_mbps, ping_ms: network.ping_ms };
+        let normalized_health = NormalizedHealthState {
+            overall_status: assessment.overall_status.clone(),
+            cpu_status: assessment.cpu_status.clone(),
+            gpu_status: assessment.gpu_status.clone(),
+            driver_status: assessment.driver_status.clone(),
+            memory_status: assessment.memory_status.clone(),
+            storage_status: assessment.storage_status.clone(),
+        };
+
+        let normalized_firmware = NormalizedFirmwareState {
+            status: assessment.firmware_status.clone(),
+            update_available: assessment
+                .firmware_status
+                .contains("firmware update available"),
+            capsule_updates_available: !assessment
+                .firmware_status
+                .contains("UEFI capsule updates unavailable or disabled"),
+        };
+
+        let normalized_network = NormalizedNetworkState {
+            download_mbps: network.download_mbps,
+            upload_mbps: network.upload_mbps,
+            ping_ms: network.ping_ms,
+        };
+
         let normalized_gpu = NormalizedGpuState {
             detected: gpu.is_some(),
             card: gpu.map(|value| value.card.clone()),
             vendor: gpu.map(|value| value.vendor.clone()),
             device: gpu.map(|value| value.device.clone()),
+            subsystem_vendor: gpu.map(|value| value.subsystem_vendor.clone()),
+            subsystem_device: gpu.map(|value| value.subsystem_device.clone()),
+            model: gpu.map(|value| value.model.clone()),
+            family: gpu.map(|value| value.family.clone()),
             driver: gpu.map(|value| value.driver.clone()),
             capability_status: assessment.gpu_capability_status.clone(),
         };
@@ -161,14 +191,28 @@ impl NormalizedHardwareState {
             cpu_frequency_min_ghz: cpu.frequency_min_ghz,
             cpu_frequency_max_ghz: cpu.frequency_max_ghz,
             cpu_governor: cpu.governor.clone(),
-            thread_capacity: if cpu.threads >= 12 { "high".to_string() } else if cpu.threads >= 8 { "multi".to_string() } else { "standard".to_string() },
+            thread_capacity: if cpu.threads >= 12 {
+                "high".to_string()
+            } else if cpu.threads >= 8 {
+                "multi".to_string()
+            } else {
+                "standard".to_string()
+            },
             gpu_acceleration: gpu.is_some(),
             gpu_vram_gb: gpu.and_then(|value| value.vram_total_gb),
             storage_power_management: storage.is_some(),
         };
 
         let normalized_changes = NormalizedChangesState {
-            status: if changes.starts_with("ok:") { "ok".to_string() } else if changes.starts_with("attention:") { "attention".to_string() } else if changes.starts_with("unknown:") { "unknown".to_string() } else { "unknown".to_string() },
+            status: if changes.starts_with("ok:") {
+                "ok".to_string()
+            } else if changes.starts_with("attention:") {
+                "attention".to_string()
+            } else if changes.starts_with("unknown:") {
+                "unknown".to_string()
+            } else {
+                "unknown".to_string()
+            },
             changed: changes.starts_with("attention:"),
             message: changes.clone(),
         };

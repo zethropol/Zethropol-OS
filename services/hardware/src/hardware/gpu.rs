@@ -4,6 +4,10 @@ pub struct GpuInfo {
     pub card: String,
     pub vendor: String,
     pub device: String,
+    pub subsystem_vendor: String,
+    pub subsystem_device: String,
+    pub model: String,
+    pub family: String,
     pub driver: String,
     pub usage_percent: Option<f64>,
     pub memory_usage_percent: Option<f64>,
@@ -25,19 +29,13 @@ pub fn read() -> Option<GpuInfo> {
         }
 
         let device_path = entry.path().join("device");
-        let vendor_path = device_path.join("vendor");
-        let device_id_path = device_path.join("device");
+
+        let vendor = read_id(&device_path.join("vendor"))?;
+        let device = read_id(&device_path.join("device"))?;
+        let subsystem_vendor = read_id(&device_path.join("subsystem_vendor"))?;
+        let subsystem_device = read_id(&device_path.join("subsystem_device"))?;
+
         let driver_path = device_path.join("driver");
-
-        let vendor = match fs::read_to_string(&vendor_path) {
-            Ok(value) => value.trim().to_string(),
-            Err(_) => continue,
-        };
-
-        let device = match fs::read_to_string(&device_id_path) {
-            Ok(value) => value.trim().to_string(),
-            Err(_) => continue,
-        };
 
         let driver = match fs::read_link(&driver_path) {
             Ok(path) => match path.file_name() {
@@ -46,6 +44,13 @@ pub fn read() -> Option<GpuInfo> {
             },
             Err(_) => continue,
         };
+
+        let (model, family) = resolve_identity(
+            &vendor,
+            &device,
+            &subsystem_vendor,
+            &subsystem_device,
+        );
 
         let usage_percent = read_number(&device_path.join("gpu_busy_percent"));
         let memory_usage_percent = read_number(&device_path.join("mem_busy_percent"));
@@ -64,6 +69,10 @@ pub fn read() -> Option<GpuInfo> {
             card: name,
             vendor,
             device,
+            subsystem_vendor,
+            subsystem_device,
+            model,
+            family,
             driver,
             usage_percent,
             memory_usage_percent,
@@ -78,6 +87,33 @@ pub fn read() -> Option<GpuInfo> {
     None
 }
 
+fn read_id(path: &std::path::Path) -> Option<String> {
+    fs::read_to_string(path)
+        .ok()
+        .map(|value| value.trim().trim_start_matches("0x").to_ascii_lowercase())
+}
+
+fn resolve_identity(
+    vendor: &str,
+    device: &str,
+    subsystem_vendor: &str,
+    subsystem_device: &str,
+) -> (String, String) {
+    match (vendor, device, subsystem_vendor, subsystem_device) {
+        ("1002", "67ef", "1043", "054f") => (
+            "ASUS Radeon RX 560D 4GB".to_string(),
+            "Radeon RX 560D".to_string(),
+        ),
+        ("1002", "67ef", _, _) => (
+            "AMD Radeon RX 460/560D".to_string(),
+            "Radeon RX 460/560D".to_string(),
+        ),
+        _ => (
+            "Unknown".to_string(),
+            "Unknown".to_string(),
+        ),
+    }
+}
 fn read_number(path: &std::path::Path) -> Option<f64> {
     fs::read_to_string(path)
         .ok()
