@@ -4,6 +4,8 @@
 #include <QProcess>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QDir>
+#include <QCoreApplication>
 
 class HardwareBridge : public QObject
 {
@@ -14,7 +16,7 @@ public:
     explicit HardwareBridge(QObject *parent = nullptr) : QObject(parent)
     {
         connect(&process, &QProcess::finished, this, &HardwareBridge::readOutput);
-        process.setProgram(QStringLiteral("/home/Zevor/Zethropol-OS/services/hardware/target/debug/hardware"));
+        process.setProgram(QDir::homePath() + QStringLiteral("/Zethropol-OS/services/hardware/target/debug/hardware"));
         process.setArguments({QStringLiteral("--json")});
         process.start();
     }
