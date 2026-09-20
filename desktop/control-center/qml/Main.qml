@@ -1426,11 +1426,182 @@ ApplicationWindow {
                     }
 
                     Item {
-                        Label {
-                            anchors.centerIn: parent
-                            text: "Security"
-                            font.pixelSize: 28
-                            opacity: 0.7
+                        ColumnLayout {
+                            anchors.fill: parent
+                            spacing: 16
+
+                            Label {
+                                text: "Security"
+                                font.pixelSize: 32
+                            }
+
+                            Label {
+                                text: "System security status"
+                                opacity: 0.7
+                            }
+
+                            GridLayout {
+                                columns: 3
+                                Layout.fillWidth: true
+                                rowSpacing: 12
+                                columnSpacing: 12
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 120
+                                    radius: 10
+                                    border.width: 1
+
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 16
+                                        spacing: 6
+
+                                        Label {
+                                            text: "Firewall"
+                                            font.pixelSize: 18
+                                            font.bold: true
+                                        }
+
+                                        Label {
+                                            text: SecurityBridge.firewall
+                                            font.pixelSize: 16
+                                            opacity: 0.7
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 120
+                                    radius: 10
+                                    border.width: 1
+
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 16
+                                        spacing: 6
+
+                                        Label {
+                                            text: "Secure Boot"
+                                            font.pixelSize: 18
+                                            font.bold: true
+                                        }
+
+                                        Label {
+                                            text: SecurityBridge.secureBoot
+                                            font.pixelSize: 16
+                                            opacity: 0.7
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 120
+                                    radius: 10
+                                    border.width: 1
+
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 16
+                                        spacing: 6
+
+                                        Label {
+                                            text: "Kernel Lockdown"
+                                            font.pixelSize: 18
+                                            font.bold: true
+                                        }
+
+                                        Label {
+                                            text: SecurityBridge.kernelLockdown
+                                            font.pixelSize: 16
+                                            opacity: 0.7
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 120
+                                    radius: 10
+                                    border.width: 1
+
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 16
+                                        spacing: 6
+
+                                        Label {
+                                            text: "AppArmor"
+                                            font.pixelSize: 18
+                                            font.bold: true
+                                        }
+
+                                        Label {
+                                            text: SecurityBridge.appArmor
+                                            font.pixelSize: 16
+                                            opacity: 0.7
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 120
+                                    radius: 10
+                                    border.width: 1
+
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 16
+                                        spacing: 6
+
+                                        Label {
+                                            text: "Failed Services"
+                                            font.pixelSize: 18
+                                            font.bold: true
+                                        }
+
+                                        Label {
+                                            text: SecurityBridge.failedServices
+                                            font.pixelSize: 16
+                                            opacity: 0.7
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 120
+                                    radius: 10
+                                    border.width: 1
+
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 16
+                                        spacing: 6
+
+                                        Label {
+                                            text: "LSM"
+                                            font.pixelSize: 18
+                                            font.bold: true
+                                        }
+
+                                        Label {
+                                            text: SecurityBridge.lsm.join(", ")
+                                            font.pixelSize: 14
+                                            opacity: 0.7
+                                            wrapMode: Text.WordWrap
+                                            Layout.fillWidth: true
+                                        }
+                                    }
+                                }
+                            }
+
+                            Item {
+                                Layout.fillHeight: true
+                            }
                         }
                     }
 

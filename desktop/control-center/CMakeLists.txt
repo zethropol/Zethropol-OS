@@ -15,6 +15,8 @@ qt_add_executable(zethropol-control-center
     src/HardwareServiceClient.cpp
     src/UpdateService.cpp
     src/RecoveryService.cpp
+    src/SecurityService.cpp
+    src/SecurityService.h
 )
 
 set_source_files_properties(qml/SystemState.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
