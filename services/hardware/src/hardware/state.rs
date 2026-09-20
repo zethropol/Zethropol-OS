@@ -3,6 +3,7 @@ use crate::hardware::memory::MemoryInfo;
 use crate::hardware::gpu::GpuInfo;
 use crate::hardware::storage::StorageInfo;
 use crate::hardware::network::NetworkInfo;
+use crate::hardware::power::PowerInfo;
 use crate::hardware::intelligence::HardwareAssessment;
 use crate::hardware::diagnostics::StorageDiagnostics;
 use serde::Serialize;
@@ -104,6 +105,21 @@ pub struct NormalizedDiagnosticsState {
 }
 
 #[derive(Serialize)]
+pub struct NormalizedPowerState {
+    pub available: bool,
+    pub battery_present: bool,
+    pub battery_percent: Option<f64>,
+    pub battery_status: Option<String>,
+    pub charging: Option<bool>,
+    pub ac_online: Option<bool>,
+    pub power_w: Option<f64>,
+    pub energy_now_wh: Option<f64>,
+    pub energy_full_wh: Option<f64>,
+    pub profile: Option<String>,
+    pub governor: Option<String>,
+}
+
+#[derive(Serialize)]
 pub struct NormalizedSystemState {
     pub os_name: String,
     pub os_version: String,
@@ -137,6 +153,7 @@ pub struct NormalizedHardwareState {
     pub health: NormalizedHealthState,
     pub diagnostics: NormalizedDiagnosticsState,
     pub changes: NormalizedChangesState,
+    pub power: NormalizedPowerState,
     pub system: NormalizedSystemState,
 }
 
@@ -149,6 +166,7 @@ impl NormalizedHardwareState {
         storage: Option<&StorageInfo>,
         network: &NetworkInfo,
         diagnostics: &StorageDiagnostics,
+        power: &PowerInfo,
         changes: String,
         system: &crate::hardware::system::SystemInfo,
     ) -> Self {
@@ -249,6 +267,20 @@ impl NormalizedHardwareState {
             self_test_status: diagnostics.self_test_status.clone(),
         };
 
+        let normalized_power = NormalizedPowerState {
+            available: power.available,
+            battery_present: power.battery_present,
+            battery_percent: power.battery_percent,
+            battery_status: power.battery_status.clone(),
+            charging: power.charging,
+            ac_online: power.ac_online,
+            power_w: power.power_w,
+            energy_now_wh: power.energy_now_wh,
+            energy_full_wh: power.energy_full_wh,
+            profile: power.profile.clone(),
+            governor: power.governor.clone(),
+        };
+
         let normalized_system = NormalizedSystemState {
             os_name: system.os_name.clone(),
             os_version: system.os_version.clone(),
@@ -288,6 +320,7 @@ impl NormalizedHardwareState {
             health: normalized_health,
             diagnostics: normalized_diagnostics,
             changes: normalized_changes,
+            power: normalized_power,
             system: normalized_system,
         }
     }

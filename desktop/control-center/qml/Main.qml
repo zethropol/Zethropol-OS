@@ -902,11 +902,134 @@ ApplicationWindow {
                     }
 
                     Item {
-                        Label {
-                            anchors.centerIn: parent
-                            text: "Power"
-                            font.pixelSize: 28
-                            opacity: 0.7
+                        ColumnLayout {
+                            anchors.fill: parent
+                            spacing: 16
+
+                            Label {
+                                text: "Power"
+                                font.pixelSize: 28
+                                Layout.bottomMargin: 8
+                            }
+
+                            GridLayout {
+                                Layout.fillWidth: true
+                                columns: 2
+                                columnSpacing: 16
+                                rowSpacing: 16
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 120
+                                    radius: 12
+
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 18
+                                        spacing: 6
+
+                                        Label {
+                                            text: "Power Status"
+                                            font.bold: true
+                                        }
+
+                                        Label {
+                                            text: SystemState.powerAvailability
+                                            font.pixelSize: 20
+                                        }
+
+                                        Label {
+                                            text: SystemState.powerSource
+                                            opacity: 0.7
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 120
+                                    radius: 12
+
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 18
+                                        spacing: 6
+
+                                        Label {
+                                            text: "Battery"
+                                            font.bold: true
+                                        }
+
+                                        Label {
+                                            text: SystemState.batteryLevel
+                                            font.pixelSize: 20
+                                        }
+
+                                        Label {
+                                            text: SystemState.batteryStatus + " · " + SystemState.chargingStatus
+                                            opacity: 0.7
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 120
+                                    radius: 12
+
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 18
+                                        spacing: 6
+
+                                        Label {
+                                            text: "Power Usage"
+                                            font.bold: true
+                                        }
+
+                                        Label {
+                                            text: SystemState.powerUsage
+                                            font.pixelSize: 20
+                                        }
+
+                                        Label {
+                                            text: "Current system power"
+                                            opacity: 0.7
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 120
+                                    radius: 12
+
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 18
+                                        spacing: 6
+
+                                        Label {
+                                            text: "Power Management"
+                                            font.bold: true
+                                        }
+
+                                        Label {
+                                            text: SystemState.powerGovernor
+                                            font.pixelSize: 20
+                                        }
+
+                                        Label {
+                                            text: "Profile: " + SystemState.powerProfile
+                                            opacity: 0.7
+                                        }
+                                    }
+                                }
+                            }
+
+                            Item {
+                                Layout.fillHeight: true
+                            }
                         }
                     }
 

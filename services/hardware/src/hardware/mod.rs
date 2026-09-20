@@ -4,6 +4,7 @@ pub mod gpu;
 pub mod intelligence;
 pub mod memory;
 pub mod network;
+pub mod power;
 pub mod state;
 pub mod storage;
 pub mod system;

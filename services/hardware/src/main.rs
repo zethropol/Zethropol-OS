@@ -1,5 +1,6 @@
 mod hardware;
 use hardware::network::NetworkInfo;
+use hardware::power::PowerInfo;
 
 use hardware::cpu::CpuInfo;
 use hardware::gpu::GpuInfo;
@@ -153,6 +154,8 @@ fn main() {
             hardware.storage.as_ref(),
         );
         let hardware_change_status = assess_hardware_change(&fingerprint);
+        let power = PowerInfo::read();
+
         let storage_diagnostics = assess_storage(hardware.storage.as_ref());
         let system = hardware::system::read();
         let normalized_state = NormalizedHardwareState::from_assessment(
@@ -163,6 +166,7 @@ fn main() {
             hardware.storage.as_ref(),
             &hardware.network,
             &storage_diagnostics,
+            &power,
             hardware_change_status.clone(),
             &system,
         );
@@ -251,7 +255,9 @@ fn print_json() {
     );
 
     let hardware_change_status = assess_hardware_change(&fingerprint);
-    let storage_diagnostics = assess_storage(hardware.storage.as_ref());
+    let power = PowerInfo::read();
+
+        let storage_diagnostics = assess_storage(hardware.storage.as_ref());
     let system = hardware::system::read();
     let normalized_state = NormalizedHardwareState::from_assessment(
         &hardware.cpu,
@@ -261,6 +267,7 @@ fn print_json() {
         hardware.storage.as_ref(),
         &hardware.network,
         &storage_diagnostics,
+            &power,
         hardware_change_status,
         &system,
     );
