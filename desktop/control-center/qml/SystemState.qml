@@ -46,6 +46,18 @@ QtObject {
     property string performanceStatus: hardware.cpu ? hardware.cpu.usage_percent.toFixed(1) + "% CPU" : "Unknown"
     property string performanceMessage: hardware.memory ? "RAM " + ((hardware.memory.used_gb / hardware.memory.total_gb) * 100).toFixed(1) + "% · " + hardware.cpu.frequency_ghz.toFixed(2) + " GHz" : "System data unavailable"
 
+    property string diagnosticsHealthStatus: hardware.diagnostics ? hardware.diagnostics.health_status : "Unknown"
+    property string diagnosticsTemperature: hardware.diagnostics && hardware.diagnostics.temperature_c !== null ? hardware.diagnostics.temperature_c.toFixed(1) + " °C" : "Unknown"
+    property string diagnosticsPercentageUsed: hardware.diagnostics && hardware.diagnostics.percentage_used !== null ? hardware.diagnostics.percentage_used.toFixed(1) + "%" : "Unknown"
+    property string diagnosticsAvailableSpare: hardware.diagnostics && hardware.diagnostics.available_spare_percent !== null ? hardware.diagnostics.available_spare_percent.toFixed(1) + "%" : "Unknown"
+    property string diagnosticsMediaErrors: hardware.diagnostics && hardware.diagnostics.media_data_integrity_errors !== null ? String(hardware.diagnostics.media_data_integrity_errors) : "Unknown"
+    property string diagnosticsUnsafeShutdowns: hardware.diagnostics && hardware.diagnostics.unsafe_shutdowns !== null ? String(hardware.diagnostics.unsafe_shutdowns) : "Unknown"
+    property string diagnosticsErrorLogEntries: hardware.diagnostics && hardware.diagnostics.error_log_entries !== null ? String(hardware.diagnostics.error_log_entries) : "Unknown"
+    property string diagnosticsUnsafeShutdownsStatus: hardware.diagnostics ? hardware.diagnostics.unsafe_shutdowns_status : "Unknown"
+    property string diagnosticsErrorLogStatus: hardware.diagnostics ? hardware.diagnostics.error_log_status : "Unknown"
+    property string diagnosticsSelfTestStatus: hardware.diagnostics ? hardware.diagnostics.self_test_status : "Unknown"
+    property string diagnosticsDetails: hardware.diagnostics ? hardware.diagnostics.health_status : "System data unavailable"
+
     property string firmwareStatus: hardware.firmware ? hardware.firmware.status : "Unknown"
     property string changesStatus: hardware.changes ? hardware.changes.status : "Unknown"
 

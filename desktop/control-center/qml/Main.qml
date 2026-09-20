@@ -30,7 +30,7 @@ ApplicationWindow {
                 }
 
                 Repeater {
-                    model: ["Overview", "Hardware", "System", "Performance", "Power", "Updates", "Recovery", "Security", "Applications"]
+                    model: ["Overview", "Hardware", "Diagnostics", "System", "Performance", "Power", "Updates", "Recovery", "Security", "Applications"]
 
                     delegate: Button {
                         text: modelData
@@ -400,6 +400,178 @@ ApplicationWindow {
 
                                         Label {
                                             text: SystemState.changesDetails
+                                            opacity: 0.65
+                                            Layout.fillWidth: true
+                                            wrapMode: Text.WordWrap
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Item {
+                        ColumnLayout {
+                            anchors.fill: parent
+                            spacing: 14
+
+                            Label {
+                                text: "Diagnostics"
+                                font.pixelSize: 32
+                            }
+
+                            Label {
+                                text: "Storage health and NVMe diagnostic information"
+                                opacity: 0.7
+                            }
+
+                            GridLayout {
+                                columns: 2
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                rowSpacing: 12
+                                columnSpacing: 12
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 125
+                                    radius: 8
+                                    border.width: 1
+
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 14
+                                        spacing: 6
+
+                                        Label {
+                                            text: "SMART Health"
+                                            font.pixelSize: 18
+                                        }
+
+                                        Label {
+                                            text: SystemState.diagnosticsHealthStatus
+                                            Layout.fillWidth: true
+                                            wrapMode: Text.WordWrap
+                                        }
+
+                                        Label {
+                                            text: "Temperature: " + SystemState.diagnosticsTemperature
+                                            opacity: 0.65
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 125
+                                    radius: 8
+                                    border.width: 1
+
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 14
+                                        spacing: 6
+
+                                        Label {
+                                            text: "Drive Usage"
+                                            font.pixelSize: 18
+                                        }
+
+                                        Label {
+                                            text: "Used: " + SystemState.diagnosticsPercentageUsed
+                                            Layout.fillWidth: true
+                                        }
+
+                                        Label {
+                                            text: "Available spare: " + SystemState.diagnosticsAvailableSpare
+                                            opacity: 0.65
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 125
+                                    radius: 8
+                                    border.width: 1
+
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 14
+                                        spacing: 6
+
+                                        Label {
+                                            text: "Data Integrity"
+                                            font.pixelSize: 18
+                                        }
+
+                                        Label {
+                                            text: "Media errors: " + SystemState.diagnosticsMediaErrors
+                                            Layout.fillWidth: true
+                                        }
+
+                                        Label {
+                                            text: "Self-test: " + SystemState.diagnosticsSelfTestStatus
+                                            opacity: 0.65
+                                            Layout.fillWidth: true
+                                            wrapMode: Text.WordWrap
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 125
+                                    radius: 8
+                                    border.width: 1
+
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 14
+                                        spacing: 6
+
+                                        Label {
+                                            text: "Shutdown History"
+                                            font.pixelSize: 18
+                                        }
+
+                                        Label {
+                                            text: SystemState.diagnosticsUnsafeShutdowns + " unsafe shutdowns"
+                                            Layout.fillWidth: true
+                                        }
+
+                                        Label {
+                                            text: SystemState.diagnosticsUnsafeShutdownsStatus
+                                            opacity: 0.65
+                                            Layout.fillWidth: true
+                                            wrapMode: Text.WordWrap
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 125
+                                    radius: 8
+                                    border.width: 1
+
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 14
+                                        spacing: 6
+
+                                        Label {
+                                            text: "NVMe Error Log"
+                                            font.pixelSize: 18
+                                        }
+
+                                        Label {
+                                            text: SystemState.diagnosticsErrorLogEntries + " entries"
+                                            Layout.fillWidth: true
+                                        }
+
+                                        Label {
+                                            text: SystemState.diagnosticsErrorLogStatus
                                             opacity: 0.65
                                             Layout.fillWidth: true
                                             wrapMode: Text.WordWrap

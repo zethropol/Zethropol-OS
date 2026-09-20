@@ -4,6 +4,7 @@ use crate::hardware::gpu::GpuInfo;
 use crate::hardware::storage::StorageInfo;
 use crate::hardware::network::NetworkInfo;
 use crate::hardware::intelligence::HardwareAssessment;
+use crate::hardware::diagnostics::StorageDiagnostics;
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -89,6 +90,20 @@ pub struct NormalizedStorageState {
 }
 
 #[derive(Serialize)]
+pub struct NormalizedDiagnosticsState {
+    pub health_status: String,
+    pub temperature_c: Option<f64>,
+    pub percentage_used: Option<f64>,
+    pub available_spare_percent: Option<f64>,
+    pub media_data_integrity_errors: Option<u64>,
+    pub unsafe_shutdowns: Option<u64>,
+    pub error_log_entries: Option<u64>,
+    pub unsafe_shutdowns_status: String,
+    pub error_log_status: String,
+    pub self_test_status: String,
+}
+
+#[derive(Serialize)]
 pub struct NormalizedSystemState {
     pub os_name: String,
     pub os_version: String,
@@ -120,6 +135,7 @@ pub struct NormalizedHardwareState {
     pub firmware: NormalizedFirmwareState,
     pub capabilities: NormalizedCapabilitiesState,
     pub health: NormalizedHealthState,
+    pub diagnostics: NormalizedDiagnosticsState,
     pub changes: NormalizedChangesState,
     pub system: NormalizedSystemState,
 }
@@ -132,6 +148,7 @@ impl NormalizedHardwareState {
         gpu: Option<&GpuInfo>,
         storage: Option<&StorageInfo>,
         network: &NetworkInfo,
+        diagnostics: &StorageDiagnostics,
         changes: String,
         system: &crate::hardware::system::SystemInfo,
     ) -> Self {
@@ -219,6 +236,19 @@ impl NormalizedHardwareState {
             storage_power_management: storage.is_some(),
         };
 
+        let normalized_diagnostics = NormalizedDiagnosticsState {
+            health_status: diagnostics.health_status.clone(),
+            temperature_c: diagnostics.temperature_c,
+            percentage_used: diagnostics.percentage_used,
+            available_spare_percent: diagnostics.available_spare_percent,
+            media_data_integrity_errors: diagnostics.media_data_integrity_errors,
+            unsafe_shutdowns: diagnostics.unsafe_shutdowns,
+            error_log_entries: diagnostics.error_log_entries,
+            unsafe_shutdowns_status: diagnostics.unsafe_shutdowns_status.clone(),
+            error_log_status: diagnostics.error_log_status.clone(),
+            self_test_status: diagnostics.self_test_status.clone(),
+        };
+
         let normalized_system = NormalizedSystemState {
             os_name: system.os_name.clone(),
             os_version: system.os_version.clone(),
@@ -256,6 +286,7 @@ impl NormalizedHardwareState {
             firmware: normalized_firmware,
             capabilities: normalized_capabilities,
             health: normalized_health,
+            diagnostics: normalized_diagnostics,
             changes: normalized_changes,
             system: normalized_system,
         }

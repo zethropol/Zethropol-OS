@@ -157,6 +157,7 @@ fn main() {
             hardware.gpu.as_ref(),
             hardware.storage.as_ref(),
             &hardware.network,
+            &storage_diagnostics,
             hardware_change_status.clone(),
             &system,
         );
@@ -245,6 +246,7 @@ fn print_json() {
     );
 
     let hardware_change_status = assess_hardware_change(&fingerprint);
+    let storage_diagnostics = assess_storage(hardware.storage.as_ref());
     let system = hardware::system::read();
     let normalized_state = NormalizedHardwareState::from_assessment(
         &hardware.cpu,
@@ -253,6 +255,7 @@ fn print_json() {
         hardware.gpu.as_ref(),
         hardware.storage.as_ref(),
         &hardware.network,
+        &storage_diagnostics,
         hardware_change_status,
         &system,
     );
