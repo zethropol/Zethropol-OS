@@ -30,7 +30,7 @@ ApplicationWindow {
                 }
 
                 Repeater {
-                    model: ["Overview", "Hardware", "Diagnostics", "System", "Performance", "Power", "Updates", "Recovery", "Security", "Applications"]
+                    model: ["Overview", "Hardware", "Diagnostics", "System", "Performance", "Power", "Updates", "Recovery", "Security", "Services", "Applications"]
 
                     delegate: Button {
                         text: modelData
@@ -1601,6 +1601,151 @@ ApplicationWindow {
 
                             Item {
                                 Layout.fillHeight: true
+                            }
+                        }
+                    }
+
+                    Item {
+                        ColumnLayout {
+                            anchors.fill: parent
+                            spacing: 14
+
+                            Label {
+                                text: "Services"
+                                font.pixelSize: 32
+                            }
+
+                            Label {
+                                text: "System services and runtime state"
+                                opacity: 0.7
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 12
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 90
+                                    radius: 8
+                                    border.width: 1
+
+                                    ColumnLayout {
+                                        anchors.centerIn: parent
+                                        spacing: 4
+
+                                        Label {
+                                            text: "Total Services"
+                                            font.pixelSize: 16
+                                        }
+
+                                        Label {
+                                            text: ServiceBridge.total
+                                            font.pixelSize: 24
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 90
+                                    radius: 8
+                                    border.width: 1
+
+                                    ColumnLayout {
+                                        anchors.centerIn: parent
+                                        spacing: 4
+
+                                        Label {
+                                            text: "Active"
+                                            font.pixelSize: 16
+                                        }
+
+                                        Label {
+                                            text: ServiceBridge.active
+                                            font.pixelSize: 24
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 90
+                                    radius: 8
+                                    border.width: 1
+
+                                    ColumnLayout {
+                                        anchors.centerIn: parent
+                                        spacing: 4
+
+                                        Label {
+                                            text: "Failed"
+                                            font.pixelSize: 16
+                                        }
+
+                                        Label {
+                                            text: ServiceBridge.failed
+                                            font.pixelSize: 24
+                                        }
+                                    }
+                                }
+                            }
+
+                            ListView {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                clip: true
+                                spacing: 8
+                                model: ServiceBridge.services
+
+                                delegate: Rectangle {
+                                    width: ListView.view.width
+                                    height: 72
+                                    radius: 8
+                                    border.width: 1
+
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 12
+                                        spacing: 16
+
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 2
+
+                                            Label {
+                                                text: modelData.name
+                                                font.pixelSize: 16
+                                                font.bold: true
+                                                Layout.fillWidth: true
+                                                elide: Text.ElideRight
+                                            }
+
+                                            Label {
+                                                text: modelData.description
+                                                opacity: 0.6
+                                                Layout.fillWidth: true
+                                                elide: Text.ElideRight
+                                            }
+                                        }
+
+                                        ColumnLayout {
+                                            Layout.preferredWidth: 120
+                                            spacing: 2
+
+                                            Label {
+                                                text: modelData.active + " / " + modelData.sub
+                                                Layout.alignment: Qt.AlignRight
+                                            }
+
+                                            Label {
+                                                text: modelData.enabled
+                                                opacity: 0.6
+                                                Layout.alignment: Qt.AlignRight
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

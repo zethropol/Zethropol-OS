@@ -7,6 +7,7 @@
 #include "UpdateService.h"
 #include "RecoveryService.h"
 #include "SecurityService.h"
+#include "ServiceService.h"
 
 int main(int argc, char *argv[])
 {
@@ -16,11 +17,13 @@ int main(int argc, char *argv[])
     UpdateService updateService;
     RecoveryService recoveryService;
     SecurityService securityService;
+    ServiceService serviceService;
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("HardwareBridge"), &hardwareServiceClient);
     engine.rootContext()->setContextProperty(QStringLiteral("UpdateBridge"), &updateService);
     engine.rootContext()->setContextProperty(QStringLiteral("RecoveryBridge"), &recoveryService);
     engine.rootContext()->setContextProperty(QStringLiteral("SecurityBridge"), &securityService);
+    engine.rootContext()->setContextProperty(QStringLiteral("ServiceBridge"), &serviceService);
 
     const QUrl url(QStringLiteral("qrc:/qt/qml/Zethropol/ControlCenter/qml/Main.qml"));
 
