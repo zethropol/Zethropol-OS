@@ -16,6 +16,7 @@ class RecoveryService : public QObject
     Q_PROPERTY(int currentSnapshotId READ currentSnapshotId NOTIFY stateChanged)
     Q_PROPERTY(QVariantList snapshots READ snapshots NOTIFY stateChanged)
     Q_PROPERTY(QVariantList recoveryEvents READ recoveryEvents NOTIFY stateChanged)
+    Q_PROPERTY(QVariantList recoveryPoints READ recoveryPoints NOTIFY stateChanged)
 
 public:
     explicit RecoveryService(QObject *parent = nullptr);
@@ -29,6 +30,7 @@ public:
     int currentSnapshotId() const;
     QVariantList snapshots() const;
     QVariantList recoveryEvents() const;
+    QVariantList recoveryPoints() const;
 
 public slots:
     void check();
@@ -54,4 +56,5 @@ private:
     int m_currentSnapshotId = 0;
     QVariantList m_snapshots;
     QVariantList m_recoveryEvents;
+    QVariantList m_recoveryPoints;
 };

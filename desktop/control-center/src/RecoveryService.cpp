@@ -60,6 +60,11 @@ QVariantList RecoveryService::recoveryEvents() const
     return m_recoveryEvents;
 }
 
+QVariantList RecoveryService::recoveryPoints() const
+{
+    return m_recoveryPoints;
+}
+
 void RecoveryService::check()
 {
     if (process.state() != QProcess::NotRunning)
@@ -236,8 +241,23 @@ void RecoveryService::readOutput()
     m_snapshotTool = QStringLiteral("Snapper");
     m_snapshotCount = snapshots.size();
     m_currentSnapshotId = currentId;
+    QVariantList recoveryPoints;
+
+    for (const QVariant &snapshotValue : snapshots) {
+        const QVariantMap snapshot = snapshotValue.toMap();
+
+        if (snapshot.value(QStringLiteral("isCurrent")).toBool())
+            continue;
+
+        if (snapshot.value(QStringLiteral("pairedSnapshotId")).toInt() >= 0)
+            continue;
+
+        recoveryPoints.append(snapshot);
+    }
+
     m_snapshots = snapshots;
     m_recoveryEvents = recoveryEvents;
+    m_recoveryPoints = recoveryPoints;
 
     emit stateChanged();
 }

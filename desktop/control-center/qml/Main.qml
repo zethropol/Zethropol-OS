@@ -1240,80 +1240,161 @@ ApplicationWindow {
                                 }
                             }
 
-                            Label {
-                                text: "Recovery Events"
-                                font.pixelSize: 18
-                                font.bold: true
-                            }
-
-                            ListView {
+                            ScrollView {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
                                 clip: true
-                                spacing: 8
-                                model: RecoveryBridge.recoveryEvents
 
-                                delegate: Rectangle {
-                                    width: ListView.view.width
-                                    height: 104
-                                    radius: 10
+                                ColumnLayout {
+                                    width: parent.width
+                                    spacing: 12
 
-                                    RowLayout {
-                                        anchors.fill: parent
-                                        anchors.margins: 16
-                                        spacing: 14
+                                    Label {
+                                        text: "Recovery Events"
+                                        font.pixelSize: 18
+                                        font.bold: true
+                                    }
 
-                                        ColumnLayout {
-                                            Layout.fillWidth: true
-                                            spacing: 4
+                                    ListView {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: Math.min(contentHeight, 240)
+                                        clip: true
+                                        spacing: 8
+                                        model: RecoveryBridge.recoveryEvents
+
+                                        delegate: Rectangle {
+                                            width: ListView.view.width
+                                            height: 104
+                                            radius: 10
 
                                             RowLayout {
-                                                spacing: 8
+                                                anchors.fill: parent
+                                                anchors.margins: 16
+                                                spacing: 14
 
-                                                Label {
-                                                    text: "#" + modelData.preId + " → #" + modelData.postId
-                                                    font.bold: true
-                                                }
+                                                ColumnLayout {
+                                                    Layout.fillWidth: true
+                                                    spacing: 4
 
-                                                Label {
-                                                    visible: modelData.important
-                                                    text: "Important"
-                                                    opacity: 0.8
-                                                }
+                                                    RowLayout {
+                                                        spacing: 8
 
-                                                Label {
-                                                    visible: modelData.zethropolTag !== ""
-                                                    text: "Zethropol"
-                                                    opacity: 0.8
+                                                        Label {
+                                                            text: "#" + modelData.preId + " → #" + modelData.postId
+                                                            font.bold: true
+                                                        }
+
+                                                        Label {
+                                                            visible: modelData.important
+                                                            text: "Important"
+                                                            opacity: 0.8
+                                                        }
+
+                                                        Label {
+                                                            visible: modelData.zethropolTag !== ""
+                                                            text: "Zethropol"
+                                                            opacity: 0.8
+                                                        }
+                                                    }
+
+                                                    Label {
+                                                        text: modelData.description !== "" ? modelData.description : "Recovery event"
+                                                        elide: Text.ElideRight
+                                                        Layout.fillWidth: true
+                                                    }
+
+                                                    Label {
+                                                        text: modelData.date !== "" ? modelData.date : "Date unavailable"
+                                                        opacity: 0.7
+                                                    }
                                                 }
                                             }
+                                        }
 
-                                            Label {
-                                                text: modelData.description !== ""
-                                                      ? modelData.description
-                                                      : "Recovery event"
-                                                elide: Text.ElideRight
-                                                Layout.fillWidth: true
-                                            }
+                                        Label {
+                                            anchors.centerIn: parent
+                                            visible: RecoveryBridge.available && RecoveryBridge.recoveryEvents.length === 0
+                                            text: "No recovery events found"
+                                            opacity: 0.6
+                                        }
+                                    }
 
-                                            Label {
-                                                text: modelData.date !== ""
-                                                      ? modelData.date
-                                                      : "Date unavailable"
-                                                opacity: 0.7
+                                    Label {
+                                        text: "Recovery Points"
+                                        font.pixelSize: 18
+                                        font.bold: true
+                                    }
+
+                                    ListView {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: Math.min(contentHeight, 220)
+                                        clip: true
+                                        spacing: 8
+                                        model: RecoveryBridge.recoveryPoints
+
+                                        delegate: Rectangle {
+                                            width: ListView.view.width
+                                            height: 88
+                                            radius: 10
+
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.margins: 16
+                                                spacing: 14
+
+                                                ColumnLayout {
+                                                    Layout.fillWidth: true
+                                                    spacing: 4
+
+                                                    RowLayout {
+                                                        spacing: 8
+
+                                                        Label {
+                                                            text: "#" + modelData.id
+                                                            font.bold: true
+                                                        }
+
+                                                        Label {
+                                                            text: modelData.type
+                                                            opacity: 0.7
+                                                        }
+
+                                                        Label {
+                                                            visible: modelData.important
+                                                            text: "Important"
+                                                            opacity: 0.8
+                                                        }
+
+                                                        Label {
+                                                            visible: modelData.zethropolTag !== ""
+                                                            text: "Zethropol"
+                                                            opacity: 0.8
+                                                        }
+                                                    }
+
+                                                    Label {
+                                                        text: modelData.description !== "" ? modelData.description : "Recovery point"
+                                                        elide: Text.ElideRight
+                                                        Layout.fillWidth: true
+                                                    }
+
+                                                    Label {
+                                                        text: modelData.date !== "" ? modelData.date : "Date unavailable"
+                                                        opacity: 0.7
+                                                    }
+                                                }
                                             }
+                                        }
+
+                                        Label {
+                                            anchors.centerIn: parent
+                                            visible: RecoveryBridge.available && RecoveryBridge.recoveryPoints.length === 0
+                                            text: "No standalone recovery points found"
+                                            opacity: 0.6
                                         }
                                     }
                                 }
-
-                                Label {
-                                    anchors.centerIn: parent
-                                    visible: RecoveryBridge.available && RecoveryBridge.recoveryEvents.length === 0
-                                    text: "No recovery events found"
-                                    opacity: 0.6
-                                }
                             }
-
 
                             Item {
                                 Layout.fillHeight: true
