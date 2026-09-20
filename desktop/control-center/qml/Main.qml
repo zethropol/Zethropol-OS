@@ -1034,11 +1034,94 @@ ApplicationWindow {
                     }
 
                     Item {
-                        Label {
-                            anchors.centerIn: parent
-                            text: "Updates"
-                            font.pixelSize: 28
-                            opacity: 0.7
+                        ColumnLayout {
+                            anchors.fill: parent
+                            spacing: 16
+
+                            RowLayout {
+                                Layout.fillWidth: true
+
+                                Label {
+                                    text: "Updates"
+                                    font.pixelSize: 28
+                                }
+
+                                Item {
+                                    Layout.fillWidth: true
+                                }
+
+                                Button {
+                                    text: UpdateBridge.checking ? "Checking..." : "Check for Updates"
+                                    enabled: !UpdateBridge.checking
+                                    onClicked: UpdateBridge.check()
+                                }
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 110
+                                radius: 12
+
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 18
+                                    spacing: 6
+
+                                    Label {
+                                        text: UpdateBridge.checking
+                                              ? "Checking for updates..."
+                                              : (UpdateBridge.available
+                                                 ? UpdateBridge.count + " update(s) available"
+                                                 : "System is up to date")
+                                        font.pixelSize: 20
+                                        font.bold: true
+                                    }
+
+                                    Label {
+                                        text: "Package updates detected through the system package manager"
+                                        opacity: 0.7
+                                    }
+                                }
+                            }
+
+                            ListView {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                clip: true
+                                spacing: 8
+                                model: UpdateBridge.updates
+
+                                delegate: Rectangle {
+                                    width: ListView.view.width
+                                    height: 72
+                                    radius: 10
+
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 16
+                                        spacing: 12
+
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 3
+
+                                            Label {
+                                                text: modelData.name
+                                                font.bold: true
+                                            }
+
+                                            Label {
+                                                text: modelData.currentVersion + " → " + modelData.newVersion
+                                                opacity: 0.7
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Item {
+                                Layout.fillHeight: true
+                            }
                         }
                     }
 

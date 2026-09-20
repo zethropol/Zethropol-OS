@@ -5,6 +5,10 @@ QtObject {
     property var hardware: HardwareBridge.state
 
     property var system: hardware.system
+    property bool updatesChecking: UpdateBridge.checking
+    property bool updatesAvailable: UpdateBridge.available
+    property int updatesCount: UpdateBridge.count
+    property var updates: UpdateBridge.updates
     property var power: hardware.power
     property string powerAvailability: power ? (power.available ? "Available" : "Unavailable") : "Unknown"
     property string powerSource: power && power.battery_present ? "Battery" : (power && power.ac_online === true ? "AC Power" : "No battery detected")

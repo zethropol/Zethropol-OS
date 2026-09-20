@@ -4,14 +4,17 @@
 #include <QCoreApplication>
 
 #include "HardwareServiceClient.h"
+#include "UpdateService.h"
 
 int main(int argc, char *argv[])
 {
     QGuiApplication app(argc, argv);
 
     HardwareServiceClient hardwareServiceClient;
+    UpdateService updateService;
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("HardwareBridge"), &hardwareServiceClient);
+    engine.rootContext()->setContextProperty(QStringLiteral("UpdateBridge"), &updateService);
 
     const QUrl url(QStringLiteral("qrc:/qt/qml/Zethropol/ControlCenter/qml/Main.qml"));
 
