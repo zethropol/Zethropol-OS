@@ -1052,14 +1052,20 @@ ApplicationWindow {
 
                                 Button {
                                     text: UpdateBridge.checking ? "Checking..." : "Check for Updates"
-                                    enabled: !UpdateBridge.checking
+                                    enabled: !UpdateBridge.checking && !UpdateBridge.installing
                                     onClicked: UpdateBridge.check()
+                                }
+
+                                Button {
+                                    text: UpdateBridge.installing ? "Installing..." : "Install Updates"
+                                    enabled: UpdateBridge.available && !UpdateBridge.checking && !UpdateBridge.installing
+                                    onClicked: UpdateBridge.install()
                                 }
                             }
 
                             Rectangle {
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 110
+                                Layout.preferredHeight: 125
                                 radius: 12
 
                                 ColumnLayout {
@@ -1070,16 +1076,24 @@ ApplicationWindow {
                                     Label {
                                         text: UpdateBridge.checking
                                               ? "Checking for updates..."
-                                              : (UpdateBridge.available
-                                                 ? UpdateBridge.count + " update(s) available"
-                                                 : "System is up to date")
+                                              : UpdateBridge.installing
+                                                ? "Installing system updates..."
+                                                : UpdateBridge.failed
+                                                  ? "System update failed"
+                                                  : UpdateBridge.status
                                         font.pixelSize: 20
                                         font.bold: true
                                     }
 
                                     Label {
-                                        text: "Package updates detected through the system package manager"
+                                        text: UpdateBridge.installing
+                                              ? "The system package manager is applying the available updates."
+                                              : UpdateBridge.failed
+                                                ? "The update process could not be completed."
+                                                : "Package updates detected through the system package manager"
                                         opacity: 0.7
+                                        wrapMode: Text.WordWrap
+                                        Layout.fillWidth: true
                                     }
                                 }
                             }
@@ -1116,6 +1130,15 @@ ApplicationWindow {
                                             }
                                         }
                                     }
+                                }
+
+                                Label {
+                                    anchors.centerIn: parent
+                                    visible: !UpdateBridge.checking
+                                             && !UpdateBridge.installing
+                                             && UpdateBridge.updates.length === 0
+                                    text: "No package updates available"
+                                    opacity: 0.6
                                 }
                             }
 
