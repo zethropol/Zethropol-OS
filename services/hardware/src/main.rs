@@ -29,6 +29,11 @@ fn main() {
         return;
     }
 
+    if std::env::args().any(|arg| arg == "--monitor-json") {
+        print_monitor_json();
+        return;
+    }
+
     if std::env::args().any(|arg| arg == "--monitor") {
         print_monitor_data();
         return;
@@ -261,6 +266,44 @@ fn print_json() {
     );
 
     println!("{}", serde_json::to_string_pretty(&normalized_state).unwrap());
+}
+
+fn print_monitor_json() {
+    let hardware = HardwareInfo {
+        cpu: hardware::cpu::read(),
+        gpu: hardware::gpu::read(),
+        memory: hardware::memory::read(),
+        storage: hardware::storage::read(),
+        network: hardware::network::read(),
+    };
+
+    let gpu = hardware.gpu.as_ref();
+    let storage = hardware.storage.as_ref();
+
+    let state = serde_json::json!({
+        "cpu_usage_percent": hardware.cpu.usage_percent,
+        "cpu_temperature_c": hardware.cpu.temperature_c,
+        "cpu_frequency_ghz": hardware.cpu.frequency_ghz,
+        "gpu_usage_percent": gpu.and_then(|value| value.usage_percent),
+        "gpu_memory_usage_percent": gpu.and_then(|value| value.memory_usage_percent),
+        "gpu_core_clock_mhz": gpu.and_then(|value| value.core_clock_mhz),
+        "gpu_vram_used_gb": gpu.and_then(|value| value.vram_used_gb),
+        "gpu_vram_total_gb": gpu.and_then(|value| value.vram_total_gb),
+        "gpu_temperature_c": gpu.and_then(|value| value.temperature_c),
+        "gpu_memory_clock_mhz": gpu.and_then(|value| value.memory_clock_mhz),
+        "memory_used_gb": hardware.memory.used_gb,
+        "memory_total_gb": hardware.memory.total_gb,
+        "storage_used_gb": storage.map(|value| value.used_gb),
+        "storage_capacity_gb": storage.map(|value| value.capacity_gb),
+        "storage_available_gb": storage.map(|value| value.available_gb),
+        "storage_temperature_c": storage.and_then(|value| value.temperature_c),
+        "network_download_mbps": hardware.network.download_mbps,
+        "network_upload_mbps": hardware.network.upload_mbps,
+        "network_ping_ms": hardware.network.ping_ms
+    });
+
+    println!("{}", serde_json::to_string(&state).unwrap());
+    io::stdout().flush().ok();
 }
 
 fn print_monitor_data() {

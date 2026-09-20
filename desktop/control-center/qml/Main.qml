@@ -734,11 +734,170 @@ ApplicationWindow {
                     }
 
                     Item {
-                        Label {
-                            anchors.centerIn: parent
-                            text: "Performance"
-                            font.pixelSize: 28
-                            opacity: 0.7
+                        ColumnLayout {
+                            anchors.fill: parent
+                            spacing: 16
+
+                            Label {
+                                text: "Performance"
+                                font.pixelSize: 32
+                            }
+
+                            Label {
+                                text: "Live hardware performance"
+                                opacity: 0.7
+                            }
+
+                            GridLayout {
+                                columns: 2
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                rowSpacing: 12
+                                columnSpacing: 12
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    radius: 8
+                                    border.width: 1
+
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 16
+                                        spacing: 8
+
+                                        Label { text: "CPU"; font.pixelSize: 20 }
+                                        Label {
+                                            text: HardwareBridge.performance.cpu_usage_percent !== undefined
+                                                  ? "Usage: " + Number(HardwareBridge.performance.cpu_usage_percent).toFixed(1) + "%"
+                                                  : "Usage: Unknown"
+                                            font.pixelSize: 16
+                                        }
+                                        Label {
+                                            text: HardwareBridge.performance.cpu_temperature_c !== null && HardwareBridge.performance.cpu_temperature_c !== undefined
+                                                  ? "Temperature: " + Number(HardwareBridge.performance.cpu_temperature_c).toFixed(1) + " °C"
+                                                  : "Temperature: Unknown"
+                                            opacity: 0.65
+                                        }
+                                        Label {
+                                            text: HardwareBridge.performance.cpu_frequency_ghz !== null && HardwareBridge.performance.cpu_frequency_ghz !== undefined
+                                                  ? "Frequency: " + Number(HardwareBridge.performance.cpu_frequency_ghz).toFixed(2) + " GHz"
+                                                  : "Frequency: Unknown"
+                                            opacity: 0.65
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    radius: 8
+                                    border.width: 1
+
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 16
+                                        spacing: 8
+
+                                        Label { text: "GPU"; font.pixelSize: 20 }
+                                        Label {
+                                            text: HardwareBridge.performance.gpu_usage_percent !== null && HardwareBridge.performance.gpu_usage_percent !== undefined
+                                                  ? "Usage: " + Number(HardwareBridge.performance.gpu_usage_percent).toFixed(1) + "%"
+                                                  : "Usage: Unknown"
+                                            font.pixelSize: 16
+                                        }
+                                        Label {
+                                            text: HardwareBridge.performance.gpu_temperature_c !== null && HardwareBridge.performance.gpu_temperature_c !== undefined
+                                                  ? "Temperature: " + Number(HardwareBridge.performance.gpu_temperature_c).toFixed(1) + " °C"
+                                                  : "Temperature: Unknown"
+                                            opacity: 0.65
+                                        }
+                                        Label {
+                                            text: HardwareBridge.performance.gpu_vram_used_gb !== null && HardwareBridge.performance.gpu_vram_total_gb !== null
+                                                  ? "VRAM: " + Number(HardwareBridge.performance.gpu_vram_used_gb).toFixed(2) + " / " + Number(HardwareBridge.performance.gpu_vram_total_gb).toFixed(2) + " GB"
+                                                  : "VRAM: Unknown"
+                                            opacity: 0.65
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    radius: 8
+                                    border.width: 1
+
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 16
+                                        spacing: 8
+
+                                        Label { text: "Memory"; font.pixelSize: 20 }
+                                        Label {
+                                            text: HardwareBridge.performance.memory_used_gb !== undefined && HardwareBridge.performance.memory_total_gb !== undefined
+                                                  ? "Usage: " + Number(HardwareBridge.performance.memory_used_gb).toFixed(2) + " / " + Number(HardwareBridge.performance.memory_total_gb).toFixed(2) + " GB"
+                                                  : "Usage: Unknown"
+                                            font.pixelSize: 16
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    radius: 8
+                                    border.width: 1
+
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 16
+                                        spacing: 8
+
+                                        Label { text: "Storage"; font.pixelSize: 20 }
+                                        Label {
+                                            text: HardwareBridge.performance.storage_used_gb !== null && HardwareBridge.performance.storage_capacity_gb !== null
+                                                  ? "Usage: " + Number(HardwareBridge.performance.storage_used_gb).toFixed(1) + " / " + Number(HardwareBridge.performance.storage_capacity_gb).toFixed(1) + " GB"
+                                                  : "Usage: Unknown"
+                                            font.pixelSize: 16
+                                        }
+                                        Label {
+                                            text: HardwareBridge.performance.storage_temperature_c !== null && HardwareBridge.performance.storage_temperature_c !== undefined
+                                                  ? "Temperature: " + Number(HardwareBridge.performance.storage_temperature_c).toFixed(1) + " °C"
+                                                  : "Temperature: Unknown"
+                                            opacity: 0.65
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    radius: 8
+                                    border.width: 1
+
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 16
+                                        spacing: 8
+
+                                        Label { text: "Network"; font.pixelSize: 20 }
+                                        Label {
+                                            text: "Download: " + Number(HardwareBridge.performance.network_download_mbps || 0).toFixed(2) + " Mbps"
+                                            font.pixelSize: 16
+                                        }
+                                        Label {
+                                            text: "Upload: " + Number(HardwareBridge.performance.network_upload_mbps || 0).toFixed(2) + " Mbps"
+                                            opacity: 0.65
+                                        }
+                                        Label {
+                                            text: HardwareBridge.performance.network_ping_ms !== null && HardwareBridge.performance.network_ping_ms !== undefined
+                                                  ? "Ping: " + Number(HardwareBridge.performance.network_ping_ms).toFixed(1) + " ms"
+                                                  : "Ping: Unknown"
+                                            opacity: 0.65
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
 
