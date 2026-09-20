@@ -5,6 +5,7 @@
 
 #include "HardwareServiceClient.h"
 #include "UpdateService.h"
+#include "RecoveryService.h"
 
 int main(int argc, char *argv[])
 {
@@ -12,9 +13,11 @@ int main(int argc, char *argv[])
 
     HardwareServiceClient hardwareServiceClient;
     UpdateService updateService;
+    RecoveryService recoveryService;
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("HardwareBridge"), &hardwareServiceClient);
     engine.rootContext()->setContextProperty(QStringLiteral("UpdateBridge"), &updateService);
+    engine.rootContext()->setContextProperty(QStringLiteral("RecoveryBridge"), &recoveryService);
 
     const QUrl url(QStringLiteral("qrc:/qt/qml/Zethropol/ControlCenter/qml/Main.qml"));
 

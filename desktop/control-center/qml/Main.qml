@@ -1126,11 +1126,189 @@ ApplicationWindow {
                     }
 
                     Item {
-                        Label {
-                            anchors.centerIn: parent
-                            text: "Recovery"
-                            font.pixelSize: 28
-                            opacity: 0.7
+                        ColumnLayout {
+                            anchors.fill: parent
+                            spacing: 16
+
+                            RowLayout {
+                                Layout.fillWidth: true
+
+                                Label {
+                                    text: "Recovery"
+                                    font.pixelSize: 28
+                                }
+
+                                Item {
+                                    Layout.fillWidth: true
+                                }
+
+                                Button {
+                                    text: RecoveryBridge.checking ? "Checking..." : "Refresh"
+                                    enabled: !RecoveryBridge.checking
+                                    onClicked: RecoveryBridge.refresh()
+                                }
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 125
+                                radius: 12
+
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 18
+                                    spacing: 6
+
+                                    Label {
+                                        text: RecoveryBridge.checking
+                                              ? "Checking recovery information..."
+                                              : (RecoveryBridge.permissionRequired
+                                                 ? "Authorization required"
+                                                 : (RecoveryBridge.available
+                                                    ? "Recovery is available"
+                                                    : "Recovery information unavailable"))
+                                        font.pixelSize: 20
+                                        font.bold: true
+                                    }
+
+                                    Label {
+                                        text: RecoveryBridge.permissionRequired
+                                              ? "Administrator permission is required to read Snapper snapshots"
+                                              : RecoveryBridge.available
+                                                ? RecoveryBridge.filesystem + " · "
+                                                  + RecoveryBridge.snapshotTool + " · "
+                                                  + RecoveryBridge.snapshotCount + " snapshots"
+                                                : "No recovery snapshot information is currently available"
+                                        opacity: 0.7
+                                        wrapMode: Text.Wrap
+                                    }
+                                }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 12
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 82
+                                    radius: 10
+
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 14
+                                        spacing: 3
+
+                                        Label {
+                                            text: "Snapshots"
+                                            opacity: 0.7
+                                        }
+
+                                        Label {
+                                            text: RecoveryBridge.available
+                                                  ? RecoveryBridge.snapshotCount
+                                                  : "N/A"
+                                            font.pixelSize: 22
+                                            font.bold: true
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 82
+                                    radius: 10
+
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 14
+                                        spacing: 3
+
+                                        Label {
+                                            text: "Current"
+                                            opacity: 0.7
+                                        }
+
+                                        Label {
+                                            text: RecoveryBridge.available
+                                                  ? "#" + RecoveryBridge.currentSnapshotId
+                                                  : "N/A"
+                                            font.pixelSize: 22
+                                            font.bold: true
+                                        }
+                                    }
+                                }
+                            }
+
+                            ListView {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                clip: true
+                                spacing: 8
+                                model: RecoveryBridge.snapshots
+
+                                delegate: Rectangle {
+                                    width: ListView.view.width
+                                    height: 88
+                                    radius: 10
+
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 16
+                                        spacing: 12
+
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 3
+
+                                            RowLayout {
+                                                spacing: 8
+
+                                                Label {
+                                                    text: "#" + modelData.id
+                                                    font.bold: true
+                                                }
+
+                                                Label {
+                                                    text: modelData.type
+                                                    opacity: 0.7
+                                                }
+
+                                                Label {
+                                                    visible: modelData.important
+                                                    text: "Important"
+                                                    opacity: 0.8
+                                                }
+
+                                                Label {
+                                                    visible: modelData.zethropolTag !== ""
+                                                    text: "Zethropol"
+                                                    opacity: 0.8
+                                                }
+                                            }
+
+                                            Label {
+                                                text: modelData.description !== ""
+                                                      ? modelData.description
+                                                      : "No description"
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+
+                                            Label {
+                                                text: modelData.date !== ""
+                                                      ? modelData.date
+                                                      : "Current system state"
+                                                opacity: 0.7
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Item {
+                                Layout.fillHeight: true
+                            }
                         }
                     }
 
