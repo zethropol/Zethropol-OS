@@ -1240,38 +1240,39 @@ ApplicationWindow {
                                 }
                             }
 
+                            Label {
+                                text: "Recovery Events"
+                                font.pixelSize: 18
+                                font.bold: true
+                            }
+
                             ListView {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
                                 clip: true
                                 spacing: 8
-                                model: RecoveryBridge.snapshots
+                                model: RecoveryBridge.recoveryEvents
 
                                 delegate: Rectangle {
                                     width: ListView.view.width
-                                    height: 88
+                                    height: 104
                                     radius: 10
 
                                     RowLayout {
                                         anchors.fill: parent
                                         anchors.margins: 16
-                                        spacing: 12
+                                        spacing: 14
 
                                         ColumnLayout {
                                             Layout.fillWidth: true
-                                            spacing: 3
+                                            spacing: 4
 
                                             RowLayout {
                                                 spacing: 8
 
                                                 Label {
-                                                    text: "#" + modelData.id
+                                                    text: "#" + modelData.preId + " → #" + modelData.postId
                                                     font.bold: true
-                                                }
-
-                                                Label {
-                                                    text: modelData.type
-                                                    opacity: 0.7
                                                 }
 
                                                 Label {
@@ -1290,7 +1291,7 @@ ApplicationWindow {
                                             Label {
                                                 text: modelData.description !== ""
                                                       ? modelData.description
-                                                      : "No description"
+                                                      : "Recovery event"
                                                 elide: Text.ElideRight
                                                 Layout.fillWidth: true
                                             }
@@ -1298,13 +1299,21 @@ ApplicationWindow {
                                             Label {
                                                 text: modelData.date !== ""
                                                       ? modelData.date
-                                                      : "Current system state"
+                                                      : "Date unavailable"
                                                 opacity: 0.7
                                             }
                                         }
                                     }
                                 }
+
+                                Label {
+                                    anchors.centerIn: parent
+                                    visible: RecoveryBridge.available && RecoveryBridge.recoveryEvents.length === 0
+                                    text: "No recovery events found"
+                                    opacity: 0.6
+                                }
                             }
+
 
                             Item {
                                 Layout.fillHeight: true
