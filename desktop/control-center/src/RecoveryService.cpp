@@ -55,6 +55,11 @@ QVariantList RecoveryService::snapshots() const
     return m_snapshots;
 }
 
+QVariantList RecoveryService::recoveryEvents() const
+{
+    return m_recoveryEvents;
+}
+
 void RecoveryService::check()
 {
     if (process.state() != QProcess::NotRunning)
@@ -105,6 +110,7 @@ void RecoveryService::readOutput()
         m_snapshotCount = 0;
         m_currentSnapshotId = 0;
         m_snapshots.clear();
+        m_recoveryEvents.clear();
         Q_UNUSED(errorOutput);
         emit stateChanged();
         return;
@@ -119,6 +125,7 @@ void RecoveryService::readOutput()
         m_snapshotCount = 0;
         m_currentSnapshotId = 0;
         m_snapshots.clear();
+        m_recoveryEvents.clear();
         emit stateChanged();
         return;
     }
@@ -135,8 +142,18 @@ void RecoveryService::readOutput()
         QVariantMap item;
         const int number = snapshot.value(QStringLiteral("number")).toInt();
 
+        const QString type = snapshot.value(QStringLiteral("type")).toString();
+        const QString description = snapshot.value(QStringLiteral("description")).toString();
+        const bool isCurrent = description == QStringLiteral("current");
+        const bool isPost = !snapshot.value(QStringLiteral("pre-number")).isNull();
+        const bool isPre = type == QStringLiteral("pre") && !isPost;
+
         item.insert(QStringLiteral("id"), number);
-        item.insert(QStringLiteral("type"), snapshot.value(QStringLiteral("type")).toString());
+        item.insert(QStringLiteral("type"), type);
+        item.insert(QStringLiteral("isCurrent"), isCurrent);
+        item.insert(QStringLiteral("isPre"), isPre);
+        item.insert(QStringLiteral("isPost"), isPost);
+        item.insert(QStringLiteral("pairedSnapshotId"), -1);
         item.insert(QStringLiteral("preNumber"),
                     snapshot.value(QStringLiteral("pre-number")).isNull()
                         ? -1
@@ -144,8 +161,7 @@ void RecoveryService::readOutput()
         item.insert(QStringLiteral("date"), snapshot.value(QStringLiteral("date")).toString());
         item.insert(QStringLiteral("user"), snapshot.value(QStringLiteral("user")).toString());
         item.insert(QStringLiteral("cleanup"), snapshot.value(QStringLiteral("cleanup")).toString());
-        item.insert(QStringLiteral("description"),
-                    snapshot.value(QStringLiteral("description")).toString());
+        item.insert(QStringLiteral("description"), description);
 
         bool important = false;
         QString zethropolTag;
@@ -160,10 +176,58 @@ void RecoveryService::readOutput()
         item.insert(QStringLiteral("important"), important);
         item.insert(QStringLiteral("zethropolTag"), zethropolTag);
 
-        if (number == 0 && snapshot.value(QStringLiteral("description")).toString() == QStringLiteral("current"))
-            currentId = 0;
+        if (isCurrent)
+            currentId = number;
 
         snapshots.append(item);
+    }
+
+    QVariantList recoveryEvents;
+
+    for (QVariant &snapshotValue : snapshots) {
+        QVariantMap snapshot = snapshotValue.toMap();
+        const int postId = snapshot.value(QStringLiteral("id")).toInt();
+        const int preId = snapshot.value(QStringLiteral("preNumber")).toInt();
+
+        if (!snapshot.value(QStringLiteral("isPost")).toBool() || preId < 0)
+            continue;
+
+        for (QVariant &preValue : snapshots) {
+            QVariantMap preSnapshot = preValue.toMap();
+            if (preSnapshot.value(QStringLiteral("id")).toInt() != preId)
+                continue;
+
+            snapshot.insert(QStringLiteral("pairedSnapshotId"), preId);
+            preSnapshot.insert(QStringLiteral("pairedSnapshotId"), postId);
+            recoveryEvents.append(QVariantMap{
+                {QStringLiteral("preId"), preId},
+                {QStringLiteral("postId"), postId},
+                {QStringLiteral("date"), snapshot.value(QStringLiteral("date"))},
+                {QStringLiteral("description"), snapshot.value(QStringLiteral("description"))},
+                {QStringLiteral("preDescription"), preSnapshot.value(QStringLiteral("description"))},
+                {QStringLiteral("type"), snapshot.value(QStringLiteral("type"))},
+                {QStringLiteral("important"), snapshot.value(QStringLiteral("important"))},
+                {QStringLiteral("zethropolTag"), snapshot.value(QStringLiteral("zethropolTag"))}
+            });
+            break;
+        }
+    }
+
+    for (int i = 0; i < snapshots.size(); ++i) {
+        QVariantMap snapshot = snapshots.at(i).toMap();
+        const int snapshotId = snapshot.value(QStringLiteral("id")).toInt();
+        for (const QVariant &eventValue : recoveryEvents) {
+            const QVariantMap event = eventValue.toMap();
+            if (event.value(QStringLiteral("preId")).toInt() == snapshotId) {
+                snapshot.insert(QStringLiteral("pairedSnapshotId"), event.value(QStringLiteral("postId")).toInt());
+                break;
+            }
+            if (event.value(QStringLiteral("postId")).toInt() == snapshotId) {
+                snapshot.insert(QStringLiteral("pairedSnapshotId"), event.value(QStringLiteral("preId")).toInt());
+                break;
+            }
+        }
+        snapshots[i] = snapshot;
     }
 
     m_available = true;
@@ -173,6 +237,7 @@ void RecoveryService::readOutput()
     m_snapshotCount = snapshots.size();
     m_currentSnapshotId = currentId;
     m_snapshots = snapshots;
+    m_recoveryEvents = recoveryEvents;
 
     emit stateChanged();
 }
