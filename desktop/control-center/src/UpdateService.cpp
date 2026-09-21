@@ -7,6 +7,7 @@ UpdateService::UpdateService(QObject *parent)
     : QObject(parent)
 {
     connect(&process, &QProcess::finished, this, &UpdateService::readOutput);
+    connect(&cleanupProcess, &QProcess::finished, this, &UpdateService::finishCleanup);
     check();
 }
 
@@ -96,15 +97,24 @@ void UpdateService::readOutput()
     if (m_installing) {
         m_output = output;
         m_checking = false;
-        m_installing = false;
 
         if (process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0) {
             m_failed = false;
             m_available = false;
             m_count = 0;
             m_updates.clear();
-            m_status = QStringLiteral("System updates installed successfully.");
+            m_status = QStringLiteral("Cleaning package cache...");
+
+            cleanupProcess.setProgram(QStringLiteral("/usr/bin/pkexec"));
+            m_cleaningUninstalled = false;
+            cleanupProcess.setArguments({
+                QStringLiteral("/usr/bin/paccache"),
+                QStringLiteral("-rk3")
+            });
+            cleanupProcess.setProcessChannelMode(QProcess::MergedChannels);
+            cleanupProcess.start();
         } else {
+            m_installing = false;
             m_failed = true;
             m_status = QStringLiteral("System update failed.");
         }
@@ -143,5 +153,47 @@ void UpdateService::readOutput()
         ? QStringLiteral("Updates are available.")
         : QStringLiteral("System is up to date.");
 
+    emit stateChanged();
+}
+
+
+void UpdateService::finishCleanup()
+{
+    const bool success =
+        cleanupProcess.exitStatus() == QProcess::NormalExit &&
+        cleanupProcess.exitCode() == 0;
+
+    if (!m_cleaningUninstalled) {
+        if (success) {
+            m_cleaningUninstalled = true;
+            m_status = QStringLiteral("Removing uninstalled packages from cache...");
+
+            cleanupProcess.setProgram(QStringLiteral("/usr/bin/pkexec"));
+            cleanupProcess.setArguments({
+                QStringLiteral("/usr/bin/paccache"),
+                QStringLiteral("-ruk0")
+            });
+            cleanupProcess.setProcessChannelMode(QProcess::MergedChannels);
+            cleanupProcess.start();
+        } else {
+            m_installing = false;
+            m_status =
+                QStringLiteral("System updates installed, but package cache cleanup failed.");
+            emit stateChanged();
+        }
+
+        return;
+    }
+
+    if (success) {
+        m_status =
+            QStringLiteral("System updates installed and package cache cleaned.");
+    } else {
+        m_status =
+            QStringLiteral("System updates installed, but package cache cleanup failed.");
+    }
+
+    m_cleaningUninstalled = false;
+    m_installing = false;
     emit stateChanged();
 }

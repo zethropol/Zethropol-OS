@@ -6,8 +6,8 @@ import Zethropol.ControlCenter
 
 ApplicationWindow {
     visible: true
-    width: 1100
-    height: 700
+    width: 1280
+    height: 800
     title: "Zethropol Control Center"
 
     RowLayout {
@@ -1098,6 +1098,14 @@ ApplicationWindow {
                                 }
                             }
 
+                            Label {
+                                visible: ApplicationBridge.removeStatus !== ""
+                                text: ApplicationBridge.removeStatus
+                                opacity: 0.8
+                                wrapMode: Text.WordWrap
+                                Layout.fillWidth: true
+                            }
+
                             ListView {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
@@ -1751,11 +1759,134 @@ ApplicationWindow {
                     }
 
                     Item {
-                        Label {
-                            anchors.centerIn: parent
-                            text: "Applications"
-                            font.pixelSize: 28
-                            opacity: 0.7
+                        ColumnLayout {
+                            anchors.fill: parent
+                            spacing: 14
+
+                            Label {
+                                text: "Applications"
+                                font.pixelSize: 32
+                            }
+
+                            Label {
+                                text: "Installed desktop applications"
+                                opacity: 0.7
+                            }
+
+                            Label {
+                                text: ApplicationBridge.total + " applications detected"
+                                opacity: 0.6
+                            }
+
+
+                            Label {
+                                visible: ApplicationBridge.removeStatus !== ""
+                                text: ApplicationBridge.removeStatus
+                                opacity: 0.8
+                                wrapMode: Text.WordWrap
+                                Layout.fillWidth: true
+                            }
+
+                            ListView {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                clip: true
+                                spacing: 8
+                                model: ApplicationBridge.applications
+
+                                delegate: Rectangle {
+                                    width: ListView.view.width
+                                    height: 78
+                                    radius: 8
+                                    border.width: 1
+
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 12
+                                        spacing: 16
+
+                                        Button {
+                                            Layout.preferredWidth: 48
+                                            Layout.preferredHeight: 48
+                                            flat: true
+                                            focusPolicy: Qt.NoFocus
+                                            icon.name: modelData.icon
+                                            icon.width: 32
+                                            icon.height: 32
+                                            icon.color: "transparent"
+                                            onClicked: {}
+                                        }
+
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 2
+
+                                            Label {
+                                                text: modelData.name
+                                                font.pixelSize: 16
+                                                font.bold: true
+                                                Layout.fillWidth: true
+                                                elide: Text.ElideRight
+                                            }
+
+                                            Label {
+                                                text: modelData.genericName !== undefined && modelData.genericName !== "" ? modelData.genericName : modelData.description
+                                                opacity: 0.6
+                                                Layout.fillWidth: true
+                                                elide: Text.ElideRight
+                                            }
+                                        }
+
+                                        Label {
+                                            text: modelData.launchable ? "Launchable" : "Unavailable"
+                                            opacity: 0.6
+                                        }
+
+                                        Button {
+                                            visible: modelData.removable
+                                            text: "Remove"
+                                            enabled: !ApplicationBridge.removing
+                                            onClicked: removeDialog.open()
+
+                                            Dialog {
+                                                id: removeDialog
+                                                title: "Remove Application"
+                                                modal: true
+                                                standardButtons: Dialog.Cancel | Dialog.Ok
+                                                width: 400
+                                                anchors.centerIn: Overlay.overlay
+
+                                                contentItem: ColumnLayout {
+                                                    spacing: 12
+
+                                                    Label {
+                                                        text: "Remove <b>" + modelData.name + "</b>?"
+                                                        textFormat: Text.RichText
+                                                        wrapMode: Text.WordWrap
+                                                        Layout.fillWidth: true
+                                                    }
+
+                                                    Label {
+                                                        text: "Package: " + modelData.package
+                                                        opacity: 0.6
+                                                        Layout.fillWidth: true
+                                                        wrapMode: Text.WordWrap
+                                                    }
+
+                                                    Label {
+                                                        text: "This will uninstall the package from the system."
+                                                        opacity: 0.6
+                                                        Layout.fillWidth: true
+                                                        wrapMode: Text.WordWrap
+                                                    }
+                                                }
+
+                                                onAccepted: ApplicationBridge.removeApplication(modelData.package)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

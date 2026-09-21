@@ -37,11 +37,14 @@ signals:
 
 private slots:
     void readOutput();
+    void finishCleanup();
 
 private:
     QProcess process;
+    QProcess cleanupProcess;
     bool m_checking = false;
     bool m_installing = false;
+    bool m_cleaningUninstalled = false;
     bool m_available = false;
     bool m_failed = false;
     int m_count = 0;
