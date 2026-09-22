@@ -1699,6 +1699,14 @@ ApplicationWindow {
                                 }
                             }
 
+                            Label {
+                                visible: ServiceBridge.actionStatus !== ""
+                                text: ServiceBridge.actionStatus
+                                opacity: 0.8
+                                wrapMode: Text.WordWrap
+                                Layout.fillWidth: true
+                            }
+
                             ListView {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
@@ -1708,7 +1716,7 @@ ApplicationWindow {
 
                                 delegate: Rectangle {
                                     width: ListView.view.width
-                                    height: 72
+                                    height: 108
                                     radius: 8
                                     border.width: 1
 
@@ -1735,21 +1743,47 @@ ApplicationWindow {
                                                 Layout.fillWidth: true
                                                 elide: Text.ElideRight
                                             }
+
+                                            Label {
+                                                text: modelData.active + " / " + modelData.sub + "  •  " + modelData.enabled
+                                                opacity: 0.6
+                                                Layout.fillWidth: true
+                                                elide: Text.ElideRight
+                                            }
                                         }
 
-                                        ColumnLayout {
-                                            Layout.preferredWidth: 120
-                                            spacing: 2
+                                        RowLayout {
+                                            Layout.preferredWidth: 410
+                                            spacing: 6
 
-                                            Label {
-                                                text: modelData.active + " / " + modelData.sub
-                                                Layout.alignment: Qt.AlignRight
+                                            Button {
+                                                text: "Start"
+                                                enabled: !ServiceBridge.busy && modelData.active !== "active"
+                                                onClicked: ServiceBridge.startService(modelData.name)
                                             }
 
-                                            Label {
-                                                text: modelData.enabled
-                                                opacity: 0.6
-                                                Layout.alignment: Qt.AlignRight
+                                            Button {
+                                                text: "Stop"
+                                                enabled: !ServiceBridge.busy && modelData.active === "active"
+                                                onClicked: ServiceBridge.stopService(modelData.name)
+                                            }
+
+                                            Button {
+                                                text: "Restart"
+                                                enabled: !ServiceBridge.busy && modelData.active === "active"
+                                                onClicked: ServiceBridge.restartService(modelData.name)
+                                            }
+
+                                            Button {
+                                                text: "Enable"
+                                                enabled: !ServiceBridge.busy && modelData.enabled !== "enabled"
+                                                onClicked: ServiceBridge.enableService(modelData.name)
+                                            }
+
+                                            Button {
+                                                text: "Disable"
+                                                enabled: !ServiceBridge.busy && modelData.enabled === "enabled"
+                                                onClicked: ServiceBridge.disableService(modelData.name)
                                             }
                                         }
                                     }
