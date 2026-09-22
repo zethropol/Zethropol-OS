@@ -17,6 +17,8 @@ class RecoveryService : public QObject
     Q_PROPERTY(QVariantList snapshots READ snapshots NOTIFY stateChanged)
     Q_PROPERTY(QVariantList recoveryEvents READ recoveryEvents NOTIFY stateChanged)
     Q_PROPERTY(QVariantList recoveryPoints READ recoveryPoints NOTIFY stateChanged)
+    Q_PROPERTY(bool actionBusy READ actionBusy NOTIFY stateChanged)
+    Q_PROPERTY(QString actionStatus READ actionStatus NOTIFY stateChanged)
 
 public:
     explicit RecoveryService(QObject *parent = nullptr);
@@ -31,10 +33,14 @@ public:
     QVariantList snapshots() const;
     QVariantList recoveryEvents() const;
     QVariantList recoveryPoints() const;
+    bool actionBusy() const;
+    QString actionStatus() const;
 
 public slots:
     void check();
     void refresh();
+    void createRecoveryPoint(const QString &description);
+    void deleteRecoveryPoint(int snapshotId);
 
 signals:
     void stateChanged();
@@ -47,6 +53,7 @@ private:
     void startProcess(const QString &program, const QStringList &arguments);
 
     QProcess process;
+    QProcess actionProcess;
     bool m_checking = false;
     bool m_available = false;
     bool m_permissionRequired = false;
@@ -57,4 +64,7 @@ private:
     QVariantList m_snapshots;
     QVariantList m_recoveryEvents;
     QVariantList m_recoveryPoints;
+    bool m_actionBusy = false;
+    QString m_actionStatus;
+    QString m_actionOperation;
 };

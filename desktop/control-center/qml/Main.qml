@@ -1157,6 +1157,9 @@ ApplicationWindow {
                     }
 
                     Item {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+
                         ColumnLayout {
                             anchors.fill: parent
                             spacing: 16
@@ -1178,6 +1181,35 @@ ApplicationWindow {
                                     enabled: !RecoveryBridge.checking
                                     onClicked: RecoveryBridge.refresh()
                                 }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 10
+
+                                TextField {
+                                    id: recoveryDescriptionField
+                                    Layout.fillWidth: true
+                                    placeholderText: "Recovery point description"
+                                    enabled: !RecoveryBridge.actionBusy
+                                }
+
+                                Button {
+                                    text: RecoveryBridge.actionBusy
+                                          ? "Creating..."
+                                          : "Create Recovery Point"
+                                    enabled: !RecoveryBridge.actionBusy
+                                    onClicked: RecoveryBridge.createRecoveryPoint(
+                                        recoveryDescriptionField.text)
+                                }
+                            }
+
+                            Label {
+                                visible: RecoveryBridge.actionStatus !== ""
+                                text: RecoveryBridge.actionStatus
+                                opacity: 0.8
+                                wrapMode: Text.Wrap
+                                Layout.fillWidth: true
                             }
 
                             Rectangle {
@@ -1274,6 +1306,7 @@ ApplicationWindow {
                             ScrollView {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
+                                contentWidth: width
                                 clip: true
 
                                 ColumnLayout {
@@ -1297,6 +1330,8 @@ ApplicationWindow {
                                             width: ListView.view.width
                                             height: 104
                                             radius: 10
+                                            border.color: "red"
+                                            border.width: 2
 
                                             RowLayout {
                                                 anchors.fill: parent
@@ -1305,6 +1340,7 @@ ApplicationWindow {
 
                                                 ColumnLayout {
                                                     Layout.fillWidth: true
+                                                    Layout.minimumWidth: 0
                                                     spacing: 4
 
                                                     RowLayout {
@@ -1367,6 +1403,8 @@ ApplicationWindow {
                                             width: ListView.view.width
                                             height: 88
                                             radius: 10
+                                            border.color: "green"
+                                            border.width: 2
 
                                             RowLayout {
                                                 anchors.fill: parent
@@ -1375,10 +1413,12 @@ ApplicationWindow {
 
                                                 ColumnLayout {
                                                     Layout.fillWidth: true
+                                                    Layout.minimumWidth: 0
                                                     spacing: 4
 
                                                     RowLayout {
                                                         spacing: 8
+                                                        Layout.fillWidth: true
 
                                                         Label {
                                                             text: "#" + modelData.id
@@ -1414,9 +1454,16 @@ ApplicationWindow {
                                                         opacity: 0.7
                                                     }
                                                 }
+
+                                                Button {
+                                                    Layout.preferredWidth: 120
+                                                    Layout.alignment: Qt.AlignVCenter
+                                                    text: RecoveryBridge.actionBusy ? "Busy..." : "Delete"
+                                                    enabled: !RecoveryBridge.actionBusy
+                                                    onClicked: RecoveryBridge.deleteRecoveryPoint(modelData.id)
+                                                }
                                             }
                                         }
-
                                         Label {
                                             anchors.centerIn: parent
                                             visible: RecoveryBridge.available && RecoveryBridge.recoveryPoints.length === 0

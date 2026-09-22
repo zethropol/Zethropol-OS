@@ -12,6 +12,48 @@ RecoveryService::RecoveryService(QObject *parent)
     connect(&process, &QProcess::finished, this, &RecoveryService::readOutput);
     connect(&process, &QProcess::errorOccurred, this, &RecoveryService::readError);
 
+    connect(&actionProcess, &QProcess::finished, this, [this](int exitCode, QProcess::ExitStatus exitStatus) {
+        const QString output = QString::fromLocal8Bit(actionProcess.readAllStandardOutput()).trimmed();
+        const QString error = QString::fromLocal8Bit(actionProcess.readAllStandardError()).trimmed();
+
+        m_actionBusy = false;
+
+        if (exitStatus == QProcess::NormalExit && exitCode == 0) {
+            if (m_actionOperation == QStringLiteral("create"))
+                m_actionStatus = QStringLiteral("Recovery point created successfully.");
+            else if (m_actionOperation == QStringLiteral("delete"))
+                m_actionStatus = QStringLiteral("Recovery point deleted successfully.");
+            else
+                m_actionStatus = QStringLiteral("Recovery action completed successfully.");
+        } else if (!error.isEmpty()) {
+            m_actionStatus = error;
+        } else if (!output.isEmpty()) {
+            m_actionStatus = output;
+        } else {
+            if (m_actionOperation == QStringLiteral("create"))
+                m_actionStatus = QStringLiteral("Recovery point creation failed.");
+            else if (m_actionOperation == QStringLiteral("delete"))
+                m_actionStatus = QStringLiteral("Recovery point deletion failed.");
+            else
+                m_actionStatus = QStringLiteral("Recovery action failed.");
+        }
+
+        emit stateChanged();
+
+        if (exitStatus == QProcess::NormalExit && exitCode == 0)
+            refresh();
+    });
+
+    connect(&actionProcess, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
+        if (error == QProcess::FailedToStart)
+            m_actionStatus = QStringLiteral("Could not start recovery action.");
+        else
+            m_actionStatus = QStringLiteral("Recovery action process failed.");
+
+        m_actionBusy = false;
+        emit stateChanged();
+    });
+
     check();
 }
 
@@ -65,6 +107,8 @@ QVariantList RecoveryService::recoveryPoints() const
     return m_recoveryPoints;
 }
 
+bool RecoveryService::actionBusy() const { return m_actionBusy; }
+QString RecoveryService::actionStatus() const { return m_actionStatus; }
 void RecoveryService::check()
 {
     if (process.state() != QProcess::NotRunning)
@@ -269,4 +313,87 @@ void RecoveryService::readError()
 
     m_checking = false;
     emit stateChanged();
+}
+
+void RecoveryService::createRecoveryPoint(const QString &description)
+{
+    if (m_actionBusy)
+        return;
+
+    const QString trimmedDescription = description.trimmed();
+
+    if (trimmedDescription.isEmpty()) {
+        m_actionStatus = QStringLiteral("Recovery point description is required.");
+        emit stateChanged();
+        return;
+    }
+
+    if (process.state() != QProcess::NotRunning || actionProcess.state() != QProcess::NotRunning) {
+        m_actionStatus = QStringLiteral("Recovery service is busy.");
+        emit stateChanged();
+        return;
+    }
+
+    m_actionBusy = true;
+    m_actionOperation = QStringLiteral("create");
+    m_actionStatus = QStringLiteral("Creating recovery point...");
+    emit stateChanged();
+
+    actionProcess.setProgram(QStringLiteral("/usr/bin/pkexec"));
+    actionProcess.setArguments({
+        QStringLiteral("/usr/bin/snapper"),
+        QStringLiteral("create"),
+        QStringLiteral("--description"),
+        trimmedDescription
+    });
+    actionProcess.setProcessChannelMode(QProcess::SeparateChannels);
+    actionProcess.start();
+}
+
+void RecoveryService::deleteRecoveryPoint(int snapshotId)
+{
+    if (m_actionBusy)
+        return;
+
+    if (snapshotId <= 0) {
+        m_actionStatus = QStringLiteral("Invalid recovery point.");
+        emit stateChanged();
+        return;
+    }
+
+    bool knownRecoveryPoint = false;
+
+    for (const QVariant &value : m_recoveryPoints) {
+        const QVariantMap point = value.toMap();
+        if (point.value(QStringLiteral("id")).toInt() == snapshotId) {
+            knownRecoveryPoint = true;
+            break;
+        }
+    }
+
+    if (!knownRecoveryPoint) {
+        m_actionStatus = QStringLiteral("Recovery point is not available for deletion.");
+        emit stateChanged();
+        return;
+    }
+
+    if (process.state() != QProcess::NotRunning || actionProcess.state() != QProcess::NotRunning) {
+        m_actionStatus = QStringLiteral("Recovery service is busy.");
+        emit stateChanged();
+        return;
+    }
+
+    m_actionBusy = true;
+    m_actionOperation = QStringLiteral("delete");
+    m_actionStatus = QStringLiteral("Deleting recovery point #%1...").arg(snapshotId);
+    emit stateChanged();
+
+    actionProcess.setProgram(QStringLiteral("/usr/bin/pkexec"));
+    actionProcess.setArguments({
+        QStringLiteral("/usr/bin/snapper"),
+        QStringLiteral("delete"),
+        QString::number(snapshotId)
+    });
+    actionProcess.setProcessChannelMode(QProcess::SeparateChannels);
+    actionProcess.start();
 }
