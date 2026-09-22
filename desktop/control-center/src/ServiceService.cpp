@@ -30,6 +30,16 @@ int ServiceService::failed() const
     return m_failed;
 }
 
+bool ServiceService::busy() const
+{
+    return m_busy;
+}
+
+QString ServiceService::actionStatus() const
+{
+    return m_actionStatus;
+}
+
 void ServiceService::refresh()
 {
     QProcess unitsProcess;
@@ -135,4 +145,101 @@ void ServiceService::refresh()
     m_failed = failedCount;
 
     emit stateChanged();
+}
+
+
+bool ServiceService::serviceExists(const QString &name) const
+{
+    if (name.isEmpty())
+        return false;
+
+    for (const QVariant &item : m_services) {
+        const QVariantMap service = item.toMap();
+        if (service.value(QStringLiteral("name")).toString() == name)
+            return true;
+    }
+
+    return false;
+}
+
+void ServiceService::runAction(const QString &name, const QString &action)
+{
+    if (m_busy || !serviceExists(name))
+        return;
+
+    m_busy = true;
+    m_actionStatus = QStringLiteral("%1 %2...").arg(action, name);
+    emit stateChanged();
+
+    auto *process = new QProcess(this);
+
+    connect(process, &QProcess::errorOccurred, this,
+            [this, process](QProcess::ProcessError error) {
+        if (error == QProcess::FailedToStart)
+            m_actionStatus = QStringLiteral("Could not start service action.");
+        else
+            m_actionStatus = QStringLiteral("Service action failed.");
+
+        m_busy = false;
+        process->deleteLater();
+        emit stateChanged();
+    });
+
+    connect(process, &QProcess::finished, this,
+            [this, process, action](int exitCode, QProcess::ExitStatus exitStatus) {
+        const QString output =
+            QString::fromLocal8Bit(process->readAllStandardOutput()).trimmed();
+
+        if (exitStatus == QProcess::NormalExit && exitCode == 0) {
+            m_actionStatus =
+                QStringLiteral("Service %1 completed successfully.").arg(action);
+            m_busy = false;
+            process->deleteLater();
+            refresh();
+            emit stateChanged();
+            return;
+        }
+
+        m_actionStatus = !output.isEmpty()
+            ? output
+            : QStringLiteral("Service %1 failed.").arg(action);
+
+        m_busy = false;
+        process->deleteLater();
+        emit stateChanged();
+    });
+
+    process->setProgram(QStringLiteral("/usr/bin/pkexec"));
+    process->setArguments({
+        QStringLiteral("/usr/bin/systemctl"),
+        action,
+        name
+    });
+    process->setProcessChannelMode(QProcess::MergedChannels);
+    process->start();
+}
+
+void ServiceService::startService(const QString &name)
+{
+    runAction(name, QStringLiteral("start"));
+}
+
+void ServiceService::stopService(const QString &name)
+{
+    runAction(name, QStringLiteral("stop"));
+}
+
+void ServiceService::restartService(const QString &name)
+{
+    runAction(name, QStringLiteral("restart"));
+}
+
+void ServiceService::enableService(const QString &name)
+{
+    runAction(name, QStringLiteral("enable"));
+}
+
+void ServiceService::disableService(const QString &name)
+{
+    runAction(name, QStringLiteral("disable"));
 }
