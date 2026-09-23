@@ -8,6 +8,18 @@ UpdateService::UpdateService(QObject *parent)
 {
     connect(&process, &QProcess::finished, this, &UpdateService::readOutput);
     connect(&cleanupProcess, &QProcess::finished, this, &UpdateService::finishCleanup);
+    connect(&orphanProcess, &QProcess::finished, this, &UpdateService::finishOrphanScan);
+    connect(&orphanProcess, &QProcess::errorOccurred, this,
+            [this](QProcess::ProcessError error) {
+        Q_UNUSED(error);
+
+        if (m_installing) {
+            m_installing = false;
+            m_status = QStringLiteral("System update process completed, but orphan package check failed.");
+        }
+
+        emit stateChanged();
+    });
     check();
 }
 
@@ -51,9 +63,24 @@ QVariantList UpdateService::updates() const
     return m_updates;
 }
 
+QStringList UpdateService::orphanPackages() const
+{
+    return m_orphanPackages;
+}
+
+int UpdateService::orphanCount() const
+{
+    return m_orphanPackages.size();
+}
+
+bool UpdateService::removingOrphans() const
+{
+    return m_removingOrphans;
+}
+
 void UpdateService::check()
 {
-    if (process.state() != QProcess::NotRunning)
+    if (process.state() != QProcess::NotRunning || orphanProcess.state() != QProcess::NotRunning)
         return;
 
     m_checking = true;
@@ -65,6 +92,10 @@ void UpdateService::check()
     emit stateChanged();
 
     process.start(QStringLiteral("/usr/bin/checkupdates"));
+
+    orphanProcess.start(QStringLiteral("/usr/bin/pacman"), {
+        QStringLiteral("-Qtdq")
+    });
 }
 
 void UpdateService::install()
@@ -106,10 +137,10 @@ void UpdateService::readOutput()
             m_status = QStringLiteral("Cleaning package cache...");
 
             cleanupProcess.setProgram(QStringLiteral("/usr/bin/pkexec"));
-            m_cleaningUninstalled = false;
             cleanupProcess.setArguments({
-                QStringLiteral("/usr/bin/paccache"),
-                QStringLiteral("-rk3")
+                QStringLiteral("/bin/sh"),
+                QStringLiteral("-c"),
+                QStringLiteral("/usr/bin/paccache -rk3 && /usr/bin/paccache -ruk0")
             });
             cleanupProcess.setProcessChannelMode(QProcess::MergedChannels);
             cleanupProcess.start();
@@ -157,43 +188,105 @@ void UpdateService::readOutput()
 }
 
 
+void UpdateService::finishOrphanScan()
+{
+    const QString output =
+        QString::fromLocal8Bit(orphanProcess.readAllStandardOutput()).trimmed();
+
+    m_orphanPackages = output.isEmpty()
+        ? QStringList()
+        : output.split(QRegularExpression(QStringLiteral("[\r\n]+")), Qt::SkipEmptyParts);
+
+    if (m_installing) {
+        m_installing = false;
+
+        if (m_orphanPackages.isEmpty()) {
+            m_status = QStringLiteral("System updates installed successfully.");
+        } else {
+            m_status = QStringLiteral("System updates installed. Orphan packages found.");
+        }
+    }
+
+    emit stateChanged();
+}
+
+void UpdateService::removeOrphans()
+{
+    if (m_removingOrphans || m_orphanPackages.isEmpty())
+        return;
+
+    m_removingOrphans = true;
+    m_status = QStringLiteral("Removing orphan packages...");
+    emit stateChanged();
+
+    auto *process = new QProcess(this);
+
+    connect(process, &QProcess::errorOccurred, this,
+            [this, process](QProcess::ProcessError error) {
+        Q_UNUSED(error);
+        m_removingOrphans = false;
+        m_status = QStringLiteral("Orphan package removal failed.");
+        process->deleteLater();
+        emit stateChanged();
+    });
+
+    connect(process, &QProcess::finished, this,
+            [this, process](int exitCode, QProcess::ExitStatus exitStatus) {
+        if (exitStatus == QProcess::NormalExit && exitCode == 0) {
+            m_orphanPackages.clear();
+            m_status = QStringLiteral("Orphan packages removed successfully.");
+        } else {
+            const QString output =
+                QString::fromLocal8Bit(process->readAllStandardOutput()).trimmed();
+            m_status = !output.isEmpty()
+                ? output
+                : QStringLiteral("Orphan package removal failed.");
+        }
+
+        m_removingOrphans = false;
+        process->deleteLater();
+        emit stateChanged();
+    });
+
+    QStringList arguments = {
+        QStringLiteral("/usr/bin/pacman"),
+        QStringLiteral("-Rns"),
+        QStringLiteral("--noconfirm")
+    };
+    arguments.append(m_orphanPackages);
+
+    process->setProgram(QStringLiteral("/usr/bin/pkexec"));
+    process->setArguments(arguments);
+    process->setProcessChannelMode(QProcess::MergedChannels);
+    process->start();
+}
+
 void UpdateService::finishCleanup()
 {
     const bool success =
         cleanupProcess.exitStatus() == QProcess::NormalExit &&
         cleanupProcess.exitCode() == 0;
 
-    if (!m_cleaningUninstalled) {
-        if (success) {
-            m_cleaningUninstalled = true;
-            m_status = QStringLiteral("Removing uninstalled packages from cache...");
-
-            cleanupProcess.setProgram(QStringLiteral("/usr/bin/pkexec"));
-            cleanupProcess.setArguments({
-                QStringLiteral("/usr/bin/paccache"),
-                QStringLiteral("-ruk0")
-            });
-            cleanupProcess.setProcessChannelMode(QProcess::MergedChannels);
-            cleanupProcess.start();
-        } else {
-            m_installing = false;
-            m_status =
-                QStringLiteral("System updates installed, but package cache cleanup failed.");
-            emit stateChanged();
-        }
-
-        return;
-    }
+    const QString output =
+        QString::fromLocal8Bit(cleanupProcess.readAllStandardOutput()).trimmed();
 
     if (success) {
-        m_status =
-            QStringLiteral("System updates installed and package cache cleaned.");
+        m_status = QStringLiteral("Checking for orphan packages...");
+
+        if (orphanProcess.state() == QProcess::NotRunning)
+            orphanProcess.start(QStringLiteral("/usr/bin/pacman"), {
+                QStringLiteral("-Qtdq")
+            });
     } else {
-        m_status =
-            QStringLiteral("System updates installed, but package cache cleanup failed.");
+        m_installing = false;
+
+        if (!output.isEmpty()) {
+            m_status = output;
+        } else {
+            m_status =
+                QStringLiteral("System updates installed, but package cache cleanup failed.");
+        }
     }
 
-    m_cleaningUninstalled = false;
-    m_installing = false;
     emit stateChanged();
 }

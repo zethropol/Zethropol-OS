@@ -1106,6 +1106,48 @@ ApplicationWindow {
                                 Layout.fillWidth: true
                             }
 
+                            Rectangle {
+                                visible: UpdateBridge.orphanCount > 0
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 92
+                                radius: 12
+
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 16
+                                    spacing: 8
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 2
+
+                                            Label {
+                                                text: "Orphan Packages"
+                                                font.pixelSize: 18
+                                                font.bold: true
+                                            }
+
+                                            Label {
+                                                text: UpdateBridge.orphanCount + " orphan package(s) detected"
+                                                opacity: 0.7
+                                            }
+                                        }
+
+                                        Button {
+                                            text: UpdateBridge.removingOrphans
+                                                ? "Removing..."
+                                                : "Remove Orphans"
+                                            enabled: !UpdateBridge.removingOrphans
+                                                && !UpdateBridge.installing
+                                            onClicked: UpdateBridge.removeOrphans()
+                                        }
+                                    }
+                                }
+                            }
+
                             ListView {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
