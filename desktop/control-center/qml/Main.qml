@@ -1823,13 +1823,13 @@ ApplicationWindow {
 
                                             Button {
                                                 text: "Enable"
-                                                enabled: !ServiceBridge.busy && modelData.enabled !== "enabled"
+                                                enabled: !ServiceBridge.busy && modelData.canEnable
                                                 onClicked: ServiceBridge.enableService(modelData.name)
                                             }
 
                                             Button {
                                                 text: "Disable"
-                                                enabled: !ServiceBridge.busy && modelData.enabled === "enabled"
+                                                enabled: !ServiceBridge.busy && modelData.canDisable
                                                 onClicked: ServiceBridge.disableService(modelData.name)
                                             }
                                         }

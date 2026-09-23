@@ -117,7 +117,25 @@ void ServiceService::refresh()
             service.insert(QStringLiteral("description"), QString());
         }
 
-        service.insert(QStringLiteral("enabled"), fields.at(1));
+        const QString unitFileState = fields.at(1);
+        const bool masked =
+            unitFileState == QStringLiteral("masked") ||
+            unitFileState == QStringLiteral("masked-runtime");
+
+        const bool canEnable =
+            unitFileState == QStringLiteral("disabled") ||
+            unitFileState == QStringLiteral("indirect");
+
+        const bool canDisable =
+            unitFileState == QStringLiteral("enabled") ||
+            unitFileState == QStringLiteral("enabled-runtime") ||
+            unitFileState == QStringLiteral("linked") ||
+            unitFileState == QStringLiteral("linked-runtime");
+
+        service.insert(QStringLiteral("enabled"), unitFileState);
+        service.insert(QStringLiteral("masked"), masked);
+        service.insert(QStringLiteral("canEnable"), canEnable);
+        service.insert(QStringLiteral("canDisable"), canDisable);
         servicesByName.insert(name, service);
     }
 
