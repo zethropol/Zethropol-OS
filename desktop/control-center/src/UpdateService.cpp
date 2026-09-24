@@ -2,6 +2,7 @@
 
 #include <QRegularExpression>
 #include <QStringList>
+#include <QStandardPaths>
 
 UpdateService::UpdateService(QObject *parent)
     : QObject(parent)
@@ -9,6 +10,8 @@ UpdateService::UpdateService(QObject *parent)
     connect(&process, &QProcess::finished, this, &UpdateService::readOutput);
     connect(&cleanupProcess, &QProcess::finished, this, &UpdateService::finishCleanup);
     connect(&orphanProcess, &QProcess::finished, this, &UpdateService::finishOrphanScan);
+    connect(&aurProcess, &QProcess::finished, this, &UpdateService::finishAurScan);
+    connect(&flatpakProcess, &QProcess::finished, this, &UpdateService::finishFlatpakScan);
     connect(&orphanProcess, &QProcess::errorOccurred, this,
             [this](QProcess::ProcessError error) {
         Q_UNUSED(error);
@@ -78,9 +81,43 @@ bool UpdateService::removingOrphans() const
     return m_removingOrphans;
 }
 
+bool UpdateService::aurAvailable() const
+{
+    return m_aurAvailable;
+}
+
+bool UpdateService::flatpakAvailable() const
+{
+    return m_flatpakAvailable;
+}
+
+int UpdateService::aurCount() const
+{
+    return m_aurUpdates.size();
+}
+
+int UpdateService::flatpakCount() const
+{
+    return m_flatpakUpdates.size();
+}
+
+QVariantList UpdateService::aurUpdates() const
+{
+    return m_aurUpdates;
+}
+
+QVariantList UpdateService::flatpakUpdates() const
+{
+    return m_flatpakUpdates;
+}
+
 void UpdateService::check()
 {
-    if (process.state() != QProcess::NotRunning || orphanProcess.state() != QProcess::NotRunning)
+    if (m_checking ||
+        process.state() != QProcess::NotRunning ||
+        orphanProcess.state() != QProcess::NotRunning ||
+        aurProcess.state() != QProcess::NotRunning ||
+        flatpakProcess.state() != QProcess::NotRunning)
         return;
 
     m_checking = true;
@@ -88,6 +125,35 @@ void UpdateService::check()
     m_failed = false;
     m_status = QStringLiteral("Checking for updates...");
     m_output.clear();
+    m_updates.clear();
+    m_aurUpdates.clear();
+    m_flatpakUpdates.clear();
+    m_aurAvailable = false;
+    m_flatpakAvailable = false;
+    m_pendingChecks = 2;
+
+    m_aurHelper.clear();
+
+    const QStringList aurHelpers = {
+        QStringLiteral("paru"),
+        QStringLiteral("yay"),
+        QStringLiteral("pikaur")
+    };
+
+    for (const QString &helper : aurHelpers) {
+        const QString path = QStandardPaths::findExecutable(helper);
+        if (!path.isEmpty()) {
+            m_aurHelper = path;
+            ++m_pendingChecks;
+            break;
+        }
+    }
+
+    const QString flatpakPath =
+        QStandardPaths::findExecutable(QStringLiteral("flatpak"));
+
+    if (!flatpakPath.isEmpty())
+        ++m_pendingChecks;
 
     emit stateChanged();
 
@@ -96,6 +162,19 @@ void UpdateService::check()
     orphanProcess.start(QStringLiteral("/usr/bin/pacman"), {
         QStringLiteral("-Qtdq")
     });
+
+    if (!m_aurHelper.isEmpty()) {
+        aurProcess.start(m_aurHelper, {
+            QStringLiteral("-Qua")
+        });
+    }
+
+    if (!flatpakPath.isEmpty()) {
+        flatpakProcess.start(flatpakPath, {
+            QStringLiteral("remote-ls"),
+            QStringLiteral("--updates")
+        });
+    }
 }
 
 void UpdateService::install()
@@ -178,11 +257,17 @@ void UpdateService::readOutput()
     m_updates = updates;
     m_count = updates.size();
     m_available = m_count > 0;
-    m_checking = false;
-    m_failed = false;
-    m_status = m_available
-        ? QStringLiteral("Updates are available.")
-        : QStringLiteral("System is up to date.");
+
+    if (m_pendingChecks > 0)
+        --m_pendingChecks;
+
+    if (m_pendingChecks == 0) {
+        m_checking = false;
+        m_failed = false;
+        m_status = (m_available || m_aurAvailable || m_flatpakAvailable)
+            ? QStringLiteral("Updates are available.")
+            : QStringLiteral("System is up to date.");
+    }
 
     emit stateChanged();
 }
@@ -204,6 +289,17 @@ void UpdateService::finishOrphanScan()
             m_status = QStringLiteral("System updates installed successfully.");
         } else {
             m_status = QStringLiteral("System updates installed. Orphan packages found.");
+        }
+    } else {
+        if (m_pendingChecks > 0)
+            --m_pendingChecks;
+
+        if (m_pendingChecks == 0) {
+            m_checking = false;
+            m_failed = false;
+            m_status = (m_available || m_aurAvailable || m_flatpakAvailable)
+                ? QStringLiteral("Updates are available.")
+                : QStringLiteral("System is up to date.");
         }
     }
 
@@ -286,6 +382,83 @@ void UpdateService::finishCleanup()
             m_status =
                 QStringLiteral("System updates installed, but package cache cleanup failed.");
         }
+    }
+
+    emit stateChanged();
+}
+
+void UpdateService::finishAurScan()
+{
+    const QString output =
+        QString::fromLocal8Bit(aurProcess.readAllStandardOutput()).trimmed();
+
+    QVariantList updates;
+
+    const QStringList lines = output.split(
+        QRegularExpression(QStringLiteral("[\r\n]+")),
+        Qt::SkipEmptyParts);
+
+    for (const QString &line : lines) {
+        const QStringList fields = line.split(
+            QRegularExpression(QStringLiteral("[[:space:]]+")),
+            Qt::SkipEmptyParts);
+
+        if (fields.size() < 4 || fields.at(2) != QStringLiteral("->"))
+            continue;
+
+        QVariantMap update;
+        update.insert(QStringLiteral("name"), fields.at(0));
+        update.insert(QStringLiteral("currentVersion"), fields.at(1));
+        update.insert(QStringLiteral("newVersion"), fields.at(3));
+        updates.append(update);
+    }
+
+    m_aurUpdates = updates;
+    m_aurAvailable = !m_aurUpdates.isEmpty();
+
+    if (m_pendingChecks > 0)
+        --m_pendingChecks;
+
+    if (m_pendingChecks == 0) {
+        m_checking = false;
+        m_failed = false;
+        m_status = (m_available || m_aurAvailable || m_flatpakAvailable)
+            ? QStringLiteral("Updates are available.")
+            : QStringLiteral("System is up to date.");
+    }
+
+    emit stateChanged();
+}
+
+void UpdateService::finishFlatpakScan()
+{
+    const QString output =
+        QString::fromLocal8Bit(flatpakProcess.readAllStandardOutput()).trimmed();
+
+    QVariantList updates;
+
+    const QStringList lines = output.split(
+        QRegularExpression(QStringLiteral("[\r\n]+")),
+        Qt::SkipEmptyParts);
+
+    for (const QString &line : lines) {
+        QVariantMap update;
+        update.insert(QStringLiteral("name"), line.trimmed());
+        updates.append(update);
+    }
+
+    m_flatpakUpdates = updates;
+    m_flatpakAvailable = !m_flatpakUpdates.isEmpty();
+
+    if (m_pendingChecks > 0)
+        --m_pendingChecks;
+
+    if (m_pendingChecks == 0) {
+        m_checking = false;
+        m_failed = false;
+        m_status = (m_available || m_aurAvailable || m_flatpakAvailable)
+            ? QStringLiteral("Updates are available.")
+            : QStringLiteral("System is up to date.");
     }
 
     emit stateChanged();

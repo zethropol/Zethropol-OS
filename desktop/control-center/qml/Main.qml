@@ -1107,6 +1107,97 @@ ApplicationWindow {
                             }
 
                             Rectangle {
+                                visible: UpdateBridge.aurAvailable
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 92
+                                radius: 12
+
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 16
+                                    spacing: 8
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 2
+
+                                            Label {
+                                                text: "AUR Updates"
+                                                font.pixelSize: 18
+                                                font.bold: true
+                                            }
+
+                                            Label {
+                                                text: UpdateBridge.aurCount + " AUR package(s) available"
+                                                opacity: 0.7
+                                            }
+                                        }
+                                    }
+
+                                    ListView {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: Math.min(120, UpdateBridge.aurUpdates.length * 28)
+                                        model: UpdateBridge.aurUpdates
+                                        interactive: false
+
+                                        delegate: Label {
+                                            text: modelData.name + "  " + modelData.currentVersion
+                                                  + " → " + modelData.newVersion
+                                            opacity: 0.8
+                                        }
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                visible: UpdateBridge.flatpakAvailable
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 92
+                                radius: 12
+
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 16
+                                    spacing: 8
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 2
+
+                                            Label {
+                                                text: "Flatpak Updates"
+                                                font.pixelSize: 18
+                                                font.bold: true
+                                            }
+
+                                            Label {
+                                                text: UpdateBridge.flatpakCount + " Flatpak update(s) available"
+                                                opacity: 0.7
+                                            }
+                                        }
+                                    }
+
+                                    ListView {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: Math.min(120, UpdateBridge.flatpakUpdates.length * 28)
+                                        model: UpdateBridge.flatpakUpdates
+                                        interactive: false
+
+                                        delegate: Label {
+                                            text: modelData.name
+                                            opacity: 0.8
+                                        }
+                                    }
+                                }
+                            }
+
+                            Rectangle {
                                 visible: UpdateBridge.orphanCount > 0
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 92

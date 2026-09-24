@@ -4,6 +4,7 @@
 #include <QProcess>
 #include <QVariantList>
 #include <QStringList>
+#include <QString>
 
 class UpdateService : public QObject
 {
@@ -19,6 +20,12 @@ class UpdateService : public QObject
     Q_PROPERTY(QStringList orphanPackages READ orphanPackages NOTIFY stateChanged)
     Q_PROPERTY(int orphanCount READ orphanCount NOTIFY stateChanged)
     Q_PROPERTY(bool removingOrphans READ removingOrphans NOTIFY stateChanged)
+    Q_PROPERTY(bool aurAvailable READ aurAvailable NOTIFY stateChanged)
+    Q_PROPERTY(bool flatpakAvailable READ flatpakAvailable NOTIFY stateChanged)
+    Q_PROPERTY(int aurCount READ aurCount NOTIFY stateChanged)
+    Q_PROPERTY(int flatpakCount READ flatpakCount NOTIFY stateChanged)
+    Q_PROPERTY(QVariantList aurUpdates READ aurUpdates NOTIFY stateChanged)
+    Q_PROPERTY(QVariantList flatpakUpdates READ flatpakUpdates NOTIFY stateChanged)
 
 public:
     explicit UpdateService(QObject *parent = nullptr);
@@ -34,6 +41,12 @@ public:
     QStringList orphanPackages() const;
     int orphanCount() const;
     bool removingOrphans() const;
+    bool aurAvailable() const;
+    bool flatpakAvailable() const;
+    int aurCount() const;
+    int flatpakCount() const;
+    QVariantList aurUpdates() const;
+    QVariantList flatpakUpdates() const;
 
 public slots:
     void check();
@@ -47,11 +60,15 @@ private slots:
     void readOutput();
     void finishCleanup();
     void finishOrphanScan();
+    void finishAurScan();
+    void finishFlatpakScan();
 
 private:
     QProcess process;
     QProcess cleanupProcess;
     QProcess orphanProcess;
+    QProcess aurProcess;
+    QProcess flatpakProcess;
     bool m_checking = false;
     bool m_installing = false;
     bool m_removingOrphans = false;
@@ -62,4 +79,10 @@ private:
     QString m_output;
     QVariantList m_updates;
     QStringList m_orphanPackages;
+    bool m_aurAvailable = false;
+    bool m_flatpakAvailable = false;
+    QVariantList m_aurUpdates;
+    QVariantList m_flatpakUpdates;
+    QString m_aurHelper;
+    int m_pendingChecks = 0;
 };
