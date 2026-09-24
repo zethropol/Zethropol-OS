@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Zethropol Control Center
+Comment=Manage Zethropol system settings and hardware
+Exec=zethropol-control-center
+Icon=preferences-system
+Terminal=false
+Type=Application
+Categories=Settings;

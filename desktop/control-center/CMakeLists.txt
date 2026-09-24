@@ -39,3 +39,7 @@ install(TARGETS zethropol-control-center
     BUNDLE DESTINATION .
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
+
+install(FILES zethropol-control-center.desktop
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/applications
+)
