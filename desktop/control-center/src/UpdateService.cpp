@@ -226,7 +226,29 @@ void UpdateService::readOutput()
         } else {
             m_installing = false;
             m_failed = true;
-            m_status = QStringLiteral("System update failed.");
+
+            if (process.exitStatus() != QProcess::NormalExit) {
+                m_status = QStringLiteral("Update process failed: %1")
+                               .arg(process.errorString());
+            } else if (output.contains(QStringLiteral("Authentication cancelled"),
+                                       Qt::CaseInsensitive)) {
+                m_status = QStringLiteral("Authentication was cancelled.");
+            } else if (output.contains(QStringLiteral("Not authorized"),
+                                       Qt::CaseInsensitive)) {
+                m_status = QStringLiteral("Authentication was not authorized.");
+            } else {
+                const QStringList errorLines = output.split(
+                    QRegularExpression(QStringLiteral("[\r\n]+")),
+                    Qt::SkipEmptyParts);
+
+                if (!errorLines.isEmpty()) {
+                    m_status = errorLines.constLast().trimmed();
+                } else {
+                    m_status = QStringLiteral(
+                        "System update failed with exit code %1.")
+                        .arg(process.exitCode());
+                }
+            }
         }
 
         emit stateChanged();

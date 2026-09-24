@@ -1078,9 +1078,7 @@ ApplicationWindow {
                                               ? "Checking for updates..."
                                               : UpdateBridge.installing
                                                 ? "Installing system updates..."
-                                                : UpdateBridge.failed
-                                                  ? "System update failed"
-                                                  : UpdateBridge.status
+                                                : UpdateBridge.status
                                         font.pixelSize: 20
                                         font.bold: true
                                     }
