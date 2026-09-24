@@ -62,6 +62,8 @@ private slots:
     void finishOrphanScan();
     void finishAurScan();
     void finishFlatpakScan();
+    void finishAurInstall();
+    void finishFlatpakInstall();
 
 private:
     QProcess process;
@@ -69,6 +71,8 @@ private:
     QProcess orphanProcess;
     QProcess aurProcess;
     QProcess flatpakProcess;
+    QProcess aurInstallProcess;
+    QProcess flatpakInstallProcess;
     bool m_checking = false;
     bool m_installing = false;
     bool m_removingOrphans = false;
