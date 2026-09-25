@@ -201,13 +201,14 @@ ApplicationWindow {
 
                                 Rectangle {
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: 130
+                                    Layout.preferredHeight: 150
                                     radius: 8
                                     border.width: 1
 
                                     ColumnLayout {
                                         anchors.fill: parent
                                         anchors.margins: 14
+                                        spacing: 6
 
                                         Label {
                                             text: "CPU"
@@ -225,18 +226,24 @@ ApplicationWindow {
                                             opacity: 0.65
                                             Layout.fillWidth: true
                                         }
+
+                                        Label {
+                                            text: "Health: " + SystemState.cpuStatus
+                                            opacity: 0.65
+                                        }
                                     }
                                 }
 
                                 Rectangle {
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: 130
+                                    Layout.preferredHeight: 150
                                     radius: 8
                                     border.width: 1
 
                                     ColumnLayout {
                                         anchors.fill: parent
                                         anchors.margins: 14
+                                        spacing: 6
 
                                         Label {
                                             text: "GPU"
@@ -259,7 +266,14 @@ ApplicationWindow {
                                         }
 
                                         Label {
-                                            text: "Status: " + SystemState.gpuStatus
+                                            text: "Capability: " + SystemState.gpuMessage
+                                            Layout.fillWidth: true
+                                            wrapMode: Text.WordWrap
+                                            opacity: 0.65
+                                        }
+
+                                        Label {
+                                            text: "Health: " + SystemState.gpuStatus
                                             opacity: 0.65
                                         }
                                     }
@@ -267,13 +281,14 @@ ApplicationWindow {
 
                                 Rectangle {
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: 110
+                                    Layout.preferredHeight: 140
                                     radius: 8
                                     border.width: 1
 
                                     ColumnLayout {
                                         anchors.fill: parent
                                         anchors.margins: 14
+                                        spacing: 6
 
                                         Label {
                                             text: "Memory"
@@ -283,19 +298,27 @@ ApplicationWindow {
                                         Label {
                                             text: SystemState.memoryDetails
                                             opacity: 0.65
+                                            Layout.fillWidth: true
+                                            wrapMode: Text.WordWrap
+                                        }
+
+                                        Label {
+                                            text: "Health: " + SystemState.memoryStatus
+                                            opacity: 0.65
                                         }
                                     }
                                 }
 
                                 Rectangle {
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: 110
+                                    Layout.preferredHeight: 140
                                     radius: 8
                                     border.width: 1
 
                                     ColumnLayout {
                                         anchors.fill: parent
                                         anchors.margins: 14
+                                        spacing: 6
 
                                         Label {
                                             text: "Storage"
@@ -308,18 +331,24 @@ ApplicationWindow {
                                             Layout.fillWidth: true
                                             wrapMode: Text.WordWrap
                                         }
+
+                                        Label {
+                                            text: "Health: " + SystemState.storageStatus
+                                            opacity: 0.65
+                                        }
                                     }
                                 }
 
                                 Rectangle {
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: 110
+                                    Layout.preferredHeight: 140
                                     radius: 8
                                     border.width: 1
 
                                     ColumnLayout {
                                         anchors.fill: parent
                                         anchors.margins: 14
+                                        spacing: 6
 
                                         Label {
                                             text: "Network"
@@ -332,18 +361,24 @@ ApplicationWindow {
                                             Layout.fillWidth: true
                                             wrapMode: Text.WordWrap
                                         }
+
+                                        Label {
+                                            text: "Status: " + SystemState.networkStatus
+                                            opacity: 0.65
+                                        }
                                     }
                                 }
 
                                 Rectangle {
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: 110
+                                    Layout.preferredHeight: 140
                                     radius: 8
                                     border.width: 1
 
                                     ColumnLayout {
                                         anchors.fill: parent
                                         anchors.margins: 14
+                                        spacing: 6
 
                                         Label {
                                             text: "Firmware"
@@ -356,18 +391,24 @@ ApplicationWindow {
                                             Layout.fillWidth: true
                                             wrapMode: Text.WordWrap
                                         }
+
+                                        Label {
+                                            text: "Status: " + SystemState.firmwareStatus
+                                            opacity: 0.65
+                                        }
                                     }
                                 }
 
                                 Rectangle {
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: 110
+                                    Layout.preferredHeight: 140
                                     radius: 8
                                     border.width: 1
 
                                     ColumnLayout {
                                         anchors.fill: parent
                                         anchors.margins: 14
+                                        spacing: 6
 
                                         Label {
                                             text: "Capabilities"
@@ -380,18 +421,24 @@ ApplicationWindow {
                                             Layout.fillWidth: true
                                             wrapMode: Text.WordWrap
                                         }
+
+                                        Label {
+                                            text: "Status: " + SystemState.systemStatus
+                                            opacity: 0.65
+                                        }
                                     }
                                 }
 
                                 Rectangle {
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: 110
+                                    Layout.preferredHeight: 140
                                     radius: 8
                                     border.width: 1
 
                                     ColumnLayout {
                                         anchors.fill: parent
                                         anchors.margins: 14
+                                        spacing: 6
 
                                         Label {
                                             text: "Hardware Changes"
@@ -403,6 +450,11 @@ ApplicationWindow {
                                             opacity: 0.65
                                             Layout.fillWidth: true
                                             wrapMode: Text.WordWrap
+                                        }
+
+                                        Label {
+                                            text: "Status: " + SystemState.changesStatus
+                                            opacity: 0.65
                                         }
                                     }
                                 }
