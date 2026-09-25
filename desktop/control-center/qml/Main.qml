@@ -74,38 +74,51 @@ ApplicationWindow {
                                 opacity: 0.7
                             }
 
-                            RowLayout {
+                            GridLayout {
+                                columns: 2
                                 Layout.fillWidth: true
-                                spacing: 16
+                                rowSpacing: 12
+                                columnSpacing: 12
 
                                 Repeater {
-                                    model: ["System Status", "Hardware", "Performance"]
+                                    model: ["Overall Health", "Hardware Health", "System Activity", "Power & Updates"]
 
                                     delegate: Rectangle {
                                         Layout.fillWidth: true
-                                        Layout.preferredHeight: 140
+                                        Layout.preferredHeight: 125
                                         radius: 8
                                         border.width: 1
 
                                         ColumnLayout {
-                                            anchors.centerIn: parent
-                                            width: parent.width - 24
-                                            spacing: 8
+                                            anchors.fill: parent
+                                            anchors.margins: 12
+                                            spacing: 5
 
                                             Label {
                                                 text: modelData
                                                 font.pixelSize: 18
-                                                Layout.alignment: Qt.AlignHCenter
                                             }
 
                                             Label {
-                                                text: index === 0 ? SystemState.systemStatus :
-                                                      index === 1 ? SystemState.hardwareSummary :
-                                                                    SystemState.performanceStatus
-                                                opacity: 0.6
+                                                text: index === 0 ? SystemState.overallHealth :
+                                                      index === 1 ? SystemState.cpuStatus + " · " + SystemState.gpuStatus + " · " + SystemState.memoryStatus + " · " + SystemState.storageStatus :
+                                                      index === 2 ? SystemState.performanceStatus :
+                                                                    SystemState.powerAvailability + " · " + SystemState.updatesCount + " updates"
+                                                opacity: 0.7
                                                 Layout.fillWidth: true
                                                 wrapMode: Text.WordWrap
-                                                horizontalAlignment: Text.AlignHCenter
+                                                maximumLineCount: 2
+                                                elide: Text.ElideRight
+                                            }
+
+                                            Label {
+                                                text: index === 0 ? SystemState.systemMessage :
+                                                      index === 1 ? "Network: " + SystemState.networkStatus :
+                                                      index === 2 ? SystemState.performanceMessage :
+                                                                    SystemState.powerSource
+                                                opacity: 0.5
+                                                Layout.fillWidth: true
+                                                wrapMode: Text.WordWrap
                                                 maximumLineCount: 2
                                                 elide: Text.ElideRight
                                             }
