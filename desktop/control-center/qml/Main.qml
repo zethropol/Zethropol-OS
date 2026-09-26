@@ -60,9 +60,17 @@ ApplicationWindow {
                     Layout.fillHeight: true
 
                     Item {
-                        ColumnLayout {
+                        Flickable {
                             anchors.fill: parent
-                            spacing: 14
+                            clip: true
+                            contentWidth: width
+                            contentHeight: overviewContent.implicitHeight
+                            boundsBehavior: Flickable.StopAtBounds
+
+                            ColumnLayout {
+                                id: overviewContent
+                                width: parent.width
+                                spacing: 14
 
                             Label {
                                 text: "Overview"
@@ -186,6 +194,215 @@ ApplicationWindow {
                                         }
                                     }
                                 }
+                            }
+
+                            Item {
+                                Layout.fillWidth: true
+                                implicitHeight: childrenRect.height
+                                visible: UpdateBridge.available || UpdateBridge.aurAvailable || UpdateBridge.flatpakAvailable || (RecoveryBridge.available && RecoveryBridge.snapshotCount === 0) || ServiceBridge.failed > 0 || String(SystemState.overallHealth).toUpperCase() === "WARNING" || String(SystemState.firmwareStatus).toLowerCase().indexOf("firmware update available") >= 0
+                                ColumnLayout {
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    spacing: 10
+
+                                    Label {
+                                        text: "Recommendations"
+                                        font.pixelSize: 22
+                                    }
+
+                                    Label {
+                                        text: "Actions that may require your attention"
+                                        opacity: 0.6
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 8
+
+                                        Rectangle {
+                                            visible: String(SystemState.firmwareStatus).toLowerCase().indexOf("firmware update available") >= 0
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 72
+                                            radius: 8
+                                            border.width: 1
+
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.margins: 12
+                                                spacing: 12
+
+                                                ColumnLayout {
+                                                    Layout.fillWidth: true
+                                                    spacing: 2
+
+                                                    Label {
+                                                        text: "Firmware update recommended"
+                                                        font.pixelSize: 16
+                                                    }
+
+                                                    Label {
+                                                        text: SystemState.firmwareStatus
+                                                        opacity: 0.6
+                                                        Layout.fillWidth: true
+                                                        elide: Text.ElideRight
+                                                    }
+                                                }
+
+                                                Button {
+                                                    text: "Diagnostics"
+                                                    onClicked: contentStack.currentIndex = 2
+                                                }
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            visible: UpdateBridge.available || UpdateBridge.aurAvailable || UpdateBridge.flatpakAvailable
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 72
+                                            radius: 8
+                                            border.width: 1
+
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.margins: 12
+                                                spacing: 12
+
+                                                ColumnLayout {
+                                                    Layout.fillWidth: true
+                                                    spacing: 2
+
+                                                    Label {
+                                                        text: "Software updates available"
+                                                        font.pixelSize: 16
+                                                    }
+
+                                                    Label {
+                                                        text: UpdateBridge.count + " system · " + UpdateBridge.aurCount + " AUR · " + UpdateBridge.flatpakCount + " Flatpak"
+                                                        opacity: 0.6
+                                                        Layout.fillWidth: true
+                                                    }
+                                                }
+
+                                                Button {
+                                                    text: "Updates"
+                                                    onClicked: contentStack.currentIndex = 6
+                                                }
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            visible: RecoveryBridge.available && RecoveryBridge.snapshotCount === 0
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 72
+                                            radius: 8
+                                            border.width: 1
+
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.margins: 12
+                                                spacing: 12
+
+                                                ColumnLayout {
+                                                    Layout.fillWidth: true
+                                                    spacing: 2
+
+                                                    Label {
+                                                        text: "No recovery point available"
+                                                        font.pixelSize: 16
+                                                    }
+
+                                                    Label {
+                                                        text: "Consider creating a recovery point before major changes."
+                                                        opacity: 0.6
+                                                        Layout.fillWidth: true
+                                                        elide: Text.ElideRight
+                                                    }
+                                                }
+
+                                                Button {
+                                                    text: "Recovery"
+                                                    onClicked: contentStack.currentIndex = 7
+                                                }
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            visible: ServiceBridge.failed > 0
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 72
+                                            radius: 8
+                                            border.width: 1
+
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.margins: 12
+                                                spacing: 12
+
+                                                ColumnLayout {
+                                                    Layout.fillWidth: true
+                                                    spacing: 2
+
+                                                    Label {
+                                                        text: ServiceBridge.failed + " failed service" + (ServiceBridge.failed === 1 ? "" : "s")
+                                                        font.pixelSize: 16
+                                                    }
+
+                                                    Label {
+                                                        text: "A system service may require attention."
+                                                        opacity: 0.6
+                                                        Layout.fillWidth: true
+                                                    }
+                                                }
+
+                                                Button {
+                                                    text: "Services"
+                                                    onClicked: contentStack.currentIndex = 9
+                                                }
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            visible: String(SystemState.overallHealth).toUpperCase() === "WARNING"
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 72
+                                            radius: 8
+                                            border.width: 1
+
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.margins: 12
+                                                spacing: 12
+
+                                                ColumnLayout {
+                                                    Layout.fillWidth: true
+                                                    spacing: 2
+
+                                                    Label {
+                                                        text: "Hardware health requires attention"
+                                                        font.pixelSize: 16
+                                                    }
+
+                                                    Label {
+                                                        text: SystemState.overallHealth
+                                                        opacity: 0.6
+                                                        Layout.fillWidth: true
+                                                    }
+                                                }
+
+                                                Button {
+                                                    text: "Hardware"
+                                                    onClicked: contentStack.currentIndex = 1
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            }
+
+                            ScrollBar.vertical: ScrollBar {
+                                policy: ScrollBar.AsNeeded
                             }
                         }
                     }
