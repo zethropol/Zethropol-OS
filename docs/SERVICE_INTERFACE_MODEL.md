@@ -350,6 +350,189 @@ Names should not be based on:
 
 The validated D-Bus prototype establishes the baseline naming convention for service identities. Service-specific members and additional interfaces remain subject to the logical service model.
 
+## Initial Production Service Contracts
+
+The current Control Center implementation provides the following concrete service responsibilities. These contracts represent the initial production API surface derived from the validated desktop implementation. They are subject to implementation-stage D-Bus validation before being treated as immutable public API.
+
+### Security Service
+
+Logical identity:
+
+- Security
+
+READ state:
+
+- Firewall state
+- Secure Boot state
+- Kernel Lockdown state
+- LSM state
+- AppArmor state
+- Failed service count
+
+OBSERVE:
+
+- Security state changes
+
+ACTION:
+
+- Refresh security state
+
+ADMIN:
+
+- None currently exposed by the Control Center Security service
+
+The Security Service is responsible for reporting normalized security state. Privileged security changes are outside the current service contract.
+
+### Services Service
+
+Logical identity:
+
+- Services
+
+READ state:
+
+- Service list
+- Total service count
+- Active service count
+- Failed service count
+- Current action state
+
+OBSERVE:
+
+- Service state changes
+
+ACTION:
+
+- Refresh service state
+
+ADMIN:
+
+- Start service
+- Stop service
+- Restart service
+- Enable service
+- Disable service
+
+Service names must be validated by the service before an administrative operation is performed.
+
+### Update Service
+
+Logical identity:
+
+- Update
+
+READ state:
+
+- System update availability
+- System update list
+- Update count
+- AUR availability and updates
+- Flatpak availability and updates
+- Orphan package list and count
+- Current operation state
+- Failure state
+
+OBSERVE:
+
+- Update state and operation state changes
+
+ACTION:
+
+- Check for updates
+
+ADMIN:
+
+- Install available updates
+- Remove orphan packages
+
+Update operations may involve multiple package-management backends. Backend-specific implementation details must remain behind the service boundary.
+
+### Recovery Service
+
+Logical identity:
+
+- Recovery
+
+READ state:
+
+- Recovery availability
+- Permission requirement state
+- Filesystem
+- Snapshot tool
+- Snapshot count
+- Current snapshot
+- Snapshot list
+- Recovery events
+- Recovery points
+- Current operation state
+
+OBSERVE:
+
+- Recovery state and operation state changes
+
+ACTION:
+
+- Check recovery capabilities
+- Refresh recovery state
+
+ADMIN:
+
+- Create recovery point
+- Delete recovery point
+
+Recovery operations must validate snapshot identifiers and requested descriptions before modifying system state.
+
+### Applications Service
+
+Logical identity:
+
+- Applications
+
+READ state:
+
+- Installed application list
+- Application count
+- Current removal state
+
+OBSERVE:
+
+- Application state changes
+
+ACTION:
+
+- Refresh application state
+
+ADMIN:
+
+- Remove application
+
+Application removal must validate the requested package identifier and enforce the service authorization boundary before modifying installed software.
+
+### Hardware Service Client Boundary
+
+The current `HardwareServiceClient` is a Control Center client/bridge rather than the production Hardware Service itself.
+
+It currently consumes:
+
+- Normalized hardware state
+- Normalized performance state
+- Hardware state changes
+- Performance state changes
+
+The production Hardware Service remains responsible for providing the authoritative hardware interface. The Control Center must not become the authoritative source of hardware state.
+
+### User-Session Notification Service
+
+`NotificationService` is a user-session/UI integration component.
+
+It provides:
+
+- User notification delivery
+
+It does not belong to the privileged system-service D-Bus boundary.
+
+Desktop notifications should remain separate from privileged system operations.
+
 ## D-Bus Service Identity Mapping
 
 The validated D-Bus prototype establishes the following baseline identity model for Zethropol services.
