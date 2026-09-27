@@ -26,9 +26,9 @@ D-Bus is the primary IPC candidate for Zethropol OS.
 
 D-Bus is widely integrated with Linux and system services and provides mechanisms for service discovery, method calls, return values, errors, signals, service activation, and policy-based access control.
 
-The existing Linux and systemd environment provides substantial D-Bus integration, making it a strong candidate for communication between Zethropol services and between user-session components and system services.
+The existing Linux and systemd environment provides substantial D-Bus integration, supporting its use as the primary IPC mechanism for communication between Zethropol services and between user-session components and system services.
 
-The final IPC technology decision remains open until a Zethropol IPC prototype evaluates the practical requirements of the service architecture.
+The D-Bus prototype has validated D-Bus as the primary IPC mechanism for Zethropol OS. Production bus topology, service registration, activation, authorization, and interface details remain subject to implementation-stage validation.
 
 ## IPC Responsibilities
 
@@ -198,9 +198,13 @@ Zethropol IPC naming should follow a consistent namespace and object organizatio
 
 Names should represent stable Zethropol concepts rather than implementation-specific process names or hardware paths.
 
-The final naming convention for bus names, object paths, interfaces, methods, properties, and signals remains open.
+The baseline D-Bus service identity naming convention is established by the validated prototype.
 
-Naming should support multiple services and future extensions without creating ambiguous ownership.
+- Bus name: `org.zethropol.<Service>`
+- Object path: `/org/zethropol/<Service>`
+- Primary interface: `org.zethropol.<Service>.v1`
+
+Service-specific methods, properties, signals, additional interfaces, and production service names remain subject to the logical service model.
 
 ## Privileged Operations
 
@@ -300,16 +304,14 @@ The following IPC principles are established:
 
 The following decisions remain open:
 
-- Final IPC technology selection
-- Exact D-Bus bus and namespace structure
-- Object and interface naming conventions
-- Exact method, property, and signal definitions
+- Production D-Bus bus topology and service registration details
+- Service-specific object, interface, method, property, and signal definitions
 - Final authorization policy
 - Service activation model
 - Timeout and asynchronous operation conventions
 - Interface versioning implementation
 
-These decisions will be refined through IPC and service-interface prototyping.
+These decisions will be refined through production service implementation and IPC integration.
 
 ## IPC Architecture Status
 

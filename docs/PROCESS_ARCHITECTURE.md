@@ -138,7 +138,7 @@ Zethropol should reuse systemd and Linux resource-control mechanisms where appro
 
 Processes should communicate through defined Zethropol service interfaces.
 
-D-Bus is the primary IPC candidate established by the current architecture, but the final IPC mechanism remains open until prototyping and evaluation are completed.
+D-Bus is the validated primary IPC mechanism established by the current architecture and prototype. Production service topology and activation details remain subject to implementation-stage validation.
 
 IPC interfaces should distinguish read, observe, action, and administrative operations according to the API architecture.
 
