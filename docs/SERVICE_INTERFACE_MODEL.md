@@ -764,6 +764,146 @@ Normalized service state should initially be exposed through `GetState` and rele
 
 Signals must use structured data and must not expose implementation-specific paths, process details, package-manager internals, or kernel-specific identifiers unless those values are explicitly part of the public Zethropol data model.
 
+## Initial Structured Data Schemas
+
+The initial `GetState` and state-change payloads use structured data derived from the validated Control Center models.
+
+These schemas define the initial logical data contract. Transport-specific serialization details remain implementation-stage decisions.
+
+### SecurityState
+
+Fields:
+
+- `firewall` — normalized firewall state
+- `secureBoot` — normalized Secure Boot state
+- `kernelLockdown` — normalized kernel lockdown state
+- `lsm` — list of active LSM entries
+- `appArmor` — normalized AppArmor state
+- `failedServices` — number of failed system services
+
+### ServicesState
+
+Fields:
+
+- `services` — list of service records
+- `total` — total service count
+- `active` — active service count
+- `failed` — failed service count
+- `busy` — whether an administrative operation is active
+- `actionStatus` — normalized current operation status
+
+A service record contains:
+
+- `name`
+- `load`
+- `active`
+- `sub`
+- `description`
+- `enabled`
+- `masked`
+- `canEnable`
+- `canDisable`
+
+Values such as `load`, `active`, `sub`, and `enabled` are normalized service-state values and must not require consumers to understand systemd implementation details beyond their defined semantics.
+
+### UpdateState
+
+Fields:
+
+- `checking` — whether update discovery is active
+- `installing` — whether update installation is active
+- `available` — whether updates are available
+- `failed` — whether the current update operation failed
+- `count` — system update count
+- `status` — normalized operation status
+- `updates` — system update records
+- `orphanPackages` — orphan package identifiers
+- `orphanCount` — orphan package count
+- `removingOrphans` — whether orphan removal is active
+- `aurAvailable` — whether AUR update integration is available
+- `flatpakAvailable` — whether Flatpak update integration is available
+- `aurCount` — AUR update count
+- `flatpakCount` — Flatpak update count
+- `aurUpdates` — AUR update records
+- `flatpakUpdates` — Flatpak update records
+
+A system or AUR update record contains:
+
+- `name`
+- `currentVersion`
+- `newVersion`
+
+A Flatpak update record contains:
+
+- `name`
+
+Backend-specific package-manager commands remain outside the public interface.
+
+### RecoveryState
+
+Fields:
+
+- `checking` — whether recovery capability discovery is active
+- `available` — whether recovery functionality is available
+- `permissionRequired` — whether authorization is required
+- `filesystem` — detected filesystem
+- `snapshotTool` — normalized snapshot implementation identifier
+- `snapshotCount` — snapshot count
+- `currentSnapshotId` — current snapshot identifier
+- `snapshots` — snapshot records
+- `recoveryEvents` — paired recovery event records
+- `recoveryPoints` — usable recovery point records
+- `actionBusy` — whether a recovery operation is active
+- `actionStatus` — normalized operation status
+
+A snapshot record may contain:
+
+- `id`
+- `type`
+- `isCurrent`
+- `isPre`
+- `isPost`
+- `pairedSnapshotId`
+- `preNumber`
+- `date`
+- `user`
+- `cleanup`
+- `description`
+- `important`
+- `zethropolTag`
+
+Snapshot identifiers are service-defined identifiers and must not be interpreted as filesystem paths or implementation-specific object references.
+
+### ApplicationsState
+
+Fields:
+
+- `applications` — installed application records
+- `total` — application count
+- `removing` — whether application removal is active
+- `removeStatus` — normalized removal operation status
+
+An application record may contain:
+
+- `name`
+- `genericName`
+- `description`
+- `icon`
+- `categories`
+- `exec`
+- `desktopFile`
+- `package`
+- `packageManager`
+- `removable`
+
+Filesystem paths used internally to discover applications are not part of the public application state contract.
+
+### Operation State
+
+Operation state fields should use normalized values and remain independent of backend-specific process or command output.
+
+Human-readable diagnostic text may be carried separately through the structured result `message` field or an operation-specific diagnostic field where required. It must not replace machine-readable state or result codes.
+
 ### Naming Stability
 
 The member names defined here form the initial production D-Bus API candidate.
