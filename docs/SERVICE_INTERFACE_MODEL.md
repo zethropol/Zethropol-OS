@@ -631,6 +631,145 @@ Core service interfaces should not require Plasma-specific APIs unless a feature
 
 This preserves the possibility of supporting additional desktop environments in the future.
 
+## Initial D-Bus Member Model
+
+The initial production D-Bus mapping uses a deliberately small and consistent member model. Service state is exposed through structured method results rather than duplicating the complete state model across individual D-Bus properties.
+
+### Common Conventions
+
+Method names use PascalCase.
+
+Signal names use PascalCase.
+
+Initial production services should prefer structured state methods over large collections of individual properties.
+
+Common state operations:
+
+- `GetState` — return the current normalized service state
+- `Refresh` — request a state refresh where the service exposes an explicit refresh operation
+
+State-change signals should provide sufficient structured information for consumers to identify the new state without depending on implementation details.
+
+### Security
+
+Interface:
+
+`org.zethropol.Security.v1`
+
+Methods:
+
+- `GetState`
+- `Refresh`
+
+Signals:
+
+- `StateChanged`
+
+No privileged security modification methods are currently exposed.
+
+### Services
+
+Interface:
+
+`org.zethropol.Services.v1`
+
+Methods:
+
+- `GetState`
+- `Refresh`
+- `StartService`
+- `StopService`
+- `RestartService`
+- `EnableService`
+- `DisableService`
+
+Signals:
+
+- `StateChanged`
+- `OperationChanged`
+
+Administrative service operations must validate the requested service name and authorization before execution.
+
+### Update
+
+Interface:
+
+`org.zethropol.Update.v1`
+
+Methods:
+
+- `GetState`
+- `CheckForUpdates`
+- `InstallUpdates`
+- `RemoveOrphans`
+
+Signals:
+
+- `StateChanged`
+- `OperationChanged`
+
+Package-manager-specific operations remain behind the Update Service boundary.
+
+### Recovery
+
+Interface:
+
+`org.zethropol.Recovery.v1`
+
+Methods:
+
+- `GetState`
+- `CheckCapabilities`
+- `Refresh`
+- `CreateRecoveryPoint`
+- `DeleteRecoveryPoint`
+
+Signals:
+
+- `StateChanged`
+- `OperationChanged`
+
+Recovery operations must validate snapshot identifiers, requested descriptions, capability state, current operation state, and authorization before modifying system state.
+
+### Applications
+
+Interface:
+
+`org.zethropol.Applications.v1`
+
+Methods:
+
+- `GetState`
+- `Refresh`
+- `RemoveApplication`
+
+Signals:
+
+- `StateChanged`
+- `OperationChanged`
+
+Application removal must validate the package identifier and authorization before modifying installed software.
+
+### Initial Property Policy
+
+The initial production interfaces do not require a complete one-property-per-state-field D-Bus mapping.
+
+Normalized service state should initially be exposed through `GetState` and relevant state-change signals. Individual D-Bus properties may be introduced later where a property provides clear interoperability or observation benefits without duplicating or fragmenting the service state model.
+
+### Initial Signal Policy
+
+`StateChanged` represents a change to normalized service state.
+
+`OperationChanged` represents a change to an active or recently completed service operation.
+
+Signals must use structured data and must not expose implementation-specific paths, process details, package-manager internals, or kernel-specific identifiers unless those values are explicitly part of the public Zethropol data model.
+
+### Naming Stability
+
+The member names defined here form the initial production D-Bus API candidate.
+
+Their exact signatures, structured input/output schemas, result encoding, asynchronous behavior, and authorization requirements remain subject to implementation-stage validation.
+
 ## Current Architectural Status
 
 The following interface principles are established:
