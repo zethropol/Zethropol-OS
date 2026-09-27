@@ -186,6 +186,25 @@ Long-running operations should therefore use the established asynchronous mechan
 
 Services should remain usable when unrelated IPC services are unavailable.
 
+### Retry Safety
+
+A timeout or communication failure does not establish whether the requested operation was executed.
+
+Clients must not automatically retry an operation unless its retry behavior is explicitly defined by the service contract.
+
+The initial retry-safety rules are:
+
+- READ operations should be safe to retry when they are defined as idempotent.
+- OBSERVE operations should be re-established according to the observation contract rather than treated as repeated state-changing requests.
+- ACTION and ADMIN operations must not be automatically retried unless the service contract explicitly defines them as retry-safe.
+- When an operation is not retry-safe, the client should obtain current service or operation state before deciding whether another request is necessary.
+- An asynchronous operation that has already been accepted must be tracked through its `operationId`; retrying the original operation must not be used as a substitute for operation tracking.
+- If an acceptance response is lost before the client obtains an `operationId`, the client must treat the outcome as unknown unless the operation provides an explicit request identity mechanism that makes retry safe.
+
+Services may support request identity or idempotency keys for operations where reliable retry is required. Such mechanisms must define their scope, lifetime, duplicate-request behavior, and relationship to the resulting `operationId`.
+
+Service-specific timeout values and retry behavior are implementation-stage properties and must be documented by each production service contract.
+
 ## Compatibility and Versioning
 
 Zethropol IPC interfaces should be designed for controlled evolution.

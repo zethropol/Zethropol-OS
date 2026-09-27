@@ -389,6 +389,26 @@ An asynchronous operation should provide a way for the consumer to determine:
 
 The initial asynchronous operation model is defined by the production service contract. Timeout policy is defined separately from operation execution.
 
+## Timeout and Retry Safety
+
+Timeout policy and retry safety are separate service-contract concerns.
+
+A D-Bus timeout indicates that the client did not receive the expected response within the applicable request deadline. It does not establish whether the service executed the requested operation.
+
+Service contracts must therefore define retry behavior for operations that can change system state.
+
+The initial rules are:
+
+- READ operations should be retry-safe when their semantics are idempotent.
+- ACTION and ADMIN operations are not retry-safe by default.
+- A service may explicitly define an ACTION or ADMIN operation as retry-safe when repeated requests have the same intended effect.
+- Clients must not infer retry safety from the method name, implementation behavior, or current process state.
+- For an accepted asynchronous operation, `operationId` is the authoritative identifier for tracking that execution.
+- If an asynchronous acceptance response is lost before an `operationId` is obtained, the client must not blindly submit the same operation again unless the service contract provides a request identity or idempotency mechanism.
+- Where request identity is supported, the service contract must define duplicate-request handling and the lifetime during which the identity remains valid.
+
+Concrete timeout values, retry limits, backoff behavior, and request-identity mechanisms remain service-specific implementation decisions.
+
 ## Interface Versioning
 
 Interfaces must support controlled evolution.

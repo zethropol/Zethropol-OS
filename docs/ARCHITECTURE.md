@@ -182,7 +182,8 @@ The D-Bus prototype has validated the mechanism against the initial architectura
 - Authorization and policy integration
 - Production interface and data contracts
 - Error handling conventions
-- Service-specific timeout values and retry-safe semantics
+- Service-specific timeout values, retry limits, and backoff behavior
+- Service-specific request identity or idempotency mechanisms where required
 - Debugging, logging, and observability
 - Compatibility with future Zethropol components
 

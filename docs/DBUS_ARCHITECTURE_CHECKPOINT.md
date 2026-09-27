@@ -56,7 +56,8 @@ This validates the architectural boundary but does not yet define the final auth
 
 ## Production Decisions Still Open
 
-- Service-specific timeout values and retry-safe semantics
+- Service-specific timeout values, retry limits, and backoff behavior
+- Service-specific request identity or idempotency mechanisms where required
 - Concrete authorization mechanism and policy
 - Logging and audit requirements
 - Sandboxing and systemd hardening
