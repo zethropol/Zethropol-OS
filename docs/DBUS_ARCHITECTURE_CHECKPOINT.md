@@ -44,8 +44,8 @@ This validates the architectural boundary but does not yet define the final auth
 
 - Production service-specific naming within the established D-Bus identity convention
 - Concrete READ / OBSERVE / ACTION / ADMIN method definitions
-- Structured result and error model
-- Authorization mechanism and policy
+- Structured result and error model — defined in the service interface model
+- Authorization boundary and result codes — defined; concrete mechanism/policy remains implementation-stage
 - Service readiness and availability states
 - Timeout and asynchronous-operation rules
 - Service lifecycle and failure-recovery policy

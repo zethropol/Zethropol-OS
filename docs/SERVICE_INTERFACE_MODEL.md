@@ -225,6 +225,34 @@ Initial error categories include:
 
 Errors should provide sufficient diagnostic information while avoiding unnecessary disclosure of sensitive implementation details.
 
+## Structured Result Model
+
+Operations that complete normally should return a structured result rather than relying on a human-readable string alone.
+
+The common result model contains:
+
+- `success` — whether the requested operation completed successfully
+- `code` — machine-readable result code
+- `message` — optional human-readable diagnostic text
+- `operationId` — optional identifier for an asynchronous operation
+- `data` — optional structured operation-specific data
+
+Initial result codes include:
+
+- `ok`
+- `invalid-argument`
+- `not-found`
+- `not-available`
+- `busy`
+- `timeout`
+- `failed`
+- `permission-denied`
+- `authorization-required`
+- `unsupported`
+- `internal-error`
+
+The `code` is the primary machine-readable contract. Human-readable messages must not be required for client-side decision making.
+
 ## Authorization Boundary
 
 Authorization belongs at the service boundary for privileged operations.
@@ -239,7 +267,9 @@ The receiving service should evaluate:
 - Current system state
 - Applicable security policy
 
-The final authorization mechanism and policy remain open for implementation-stage definition.
+The authorization mechanism must be implemented behind the service boundary. The initial architecture distinguishes `authorization-required` from `permission-denied`: the former indicates that an authorization step is required before the operation can proceed, while the latter indicates that the current identity or policy does not permit the operation.
+
+The concrete authorization mechanism and policy remain an implementation-stage decision. The service API must not expose implementation-specific authorization details to consumers.
 
 ## Service Dependencies
 
