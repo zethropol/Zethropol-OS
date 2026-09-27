@@ -318,7 +318,61 @@ Names should not be based on:
 - Driver-specific paths
 - Temporary implementation details
 
-The final naming convention for service identifiers, interfaces, methods, properties, and signals will be established during IPC prototyping.
+The validated D-Bus prototype establishes the baseline naming convention for service identities. Service-specific members and additional interfaces remain subject to the logical service model.
+
+## D-Bus Service Identity Mapping
+
+The validated D-Bus prototype establishes the following baseline identity model for Zethropol services.
+
+### Bus Name
+
+Each system-level Zethropol service should use a stable well-known D-Bus name:
+
+`org.zethropol.<Service>`
+
+The bus name identifies the logical Zethropol service responsibility and must not depend on the executable name, process ID, hardware vendor, or implementation technology.
+
+### Object Path
+
+Each service should expose its primary object through:
+
+`/org/zethropol/<Service>`
+
+Object paths should remain stable across implementation changes.
+
+### Interface Name
+
+The primary versioned interface should use:
+
+`org.zethropol.<Service>.v1`
+
+Additional interfaces may be introduced when a service exposes clearly separated responsibilities.
+
+### Example
+
+A Hardware Service would use:
+
+- Bus name: `org.zethropol.Hardware`
+- Object path: `/org/zethropol/Hardware`
+- Interface: `org.zethropol.Hardware.v1`
+
+The exact production service set and service-specific interface members remain subject to the logical service model.
+
+### Versioning
+
+Interface evolution must be explicit. Compatible additions should preserve the existing interface contract where practical. Breaking semantic changes must use an explicit version transition or another clearly defined compatibility mechanism.
+
+The versioning mechanism must allow consumers to determine the supported interface version and relevant capabilities without relying on executable or package versions.
+
+### Prototype Relationship
+
+The prototype names are intentionally separate from production service identities:
+
+- Prototype system bus: `org.zethropol.SystemPrototype`
+- Prototype object path: `/org/zethropol/Prototype`
+- Prototype interface: `org.zethropol.Service`
+
+These names validate the D-Bus mapping mechanism and must not be treated as production service names.
 
 ## IPC Mapping
 
@@ -382,13 +436,13 @@ The following interface principles are established:
 
 The following decisions remain open:
 
-- Exact service naming convention
+- Production service-specific names within the established naming convention
 - Exact interface, method, property, and signal names
 - Final data schemas
 - Final capability representation
 - Asynchronous operation model
 - Final authorization integration
-- Concrete IPC mapping
+- Concrete IPC mapping and activation details for each production service
 - Final interface versioning mechanism
 
 These decisions will be refined during service-interface and IPC prototyping.
