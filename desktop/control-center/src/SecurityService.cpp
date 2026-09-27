@@ -2,12 +2,15 @@
 
 #include <QFile>
 #include <QProcess>
-#include <QRegularExpression>
 
 SecurityService::SecurityService(QObject *parent)
     : QObject(parent)
 {
     refresh();
+
+    m_refreshTimer.setInterval(5000);
+    connect(&m_refreshTimer, &QTimer::timeout, this, &SecurityService::refresh);
+    m_refreshTimer.start();
 }
 
 QString SecurityService::firewall() const

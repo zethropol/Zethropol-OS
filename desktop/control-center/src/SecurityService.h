@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QString>
 #include <QStringList>
+#include <QTimer>
 
 class SecurityService : public QObject
 {
@@ -38,4 +39,5 @@ private:
     QStringList m_lsm;
     QString m_appArmor;
     int m_failedServices = 0;
+    QTimer m_refreshTimer;
 };
