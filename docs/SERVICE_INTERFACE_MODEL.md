@@ -6,7 +6,7 @@ This document defines the logical interface model used by Zethropol services.
 
 The service interface model establishes how services expose capabilities and operations to other Zethropol components without exposing implementation-specific details.
 
-The model is independent of the final IPC technology and may later be mapped to D-Bus or another IPC mechanism.
+The model defines the logical service contract independently of implementation details. The validated D-Bus architecture provides the current concrete IPC mapping.
 
 ## Interface Principles
 
@@ -50,7 +50,7 @@ A service interface may contain:
 - Capability information
 - Interface version information
 
-The exact representation will depend on the final IPC implementation.
+The concrete representation is mapped to the validated D-Bus architecture while preserving the logical service contract.
 
 ## Operation Categories
 
@@ -292,7 +292,7 @@ An asynchronous operation should provide a way for the consumer to determine:
 - Failure
 - Cancellation support where available
 
-The exact asynchronous model remains open for IPC prototyping.
+The exact asynchronous model remains open for production service implementation and IPC integration.
 
 ## Interface Versioning
 
@@ -376,9 +376,9 @@ These names validate the D-Bus mapping mechanism and must not be treated as prod
 
 ## IPC Mapping
 
-The logical service interface model is independent of the final IPC technology.
+The logical service interface model remains independent of transport-specific implementation details.
 
-D-Bus is the current primary IPC candidate and may provide the concrete transport and object/interface representation.
+D-Bus is the validated primary IPC mechanism and provides the concrete transport and object/interface representation for the current Zethropol architecture.
 
 The mapping should preserve the logical interface model rather than allowing IPC-specific implementation details to redefine service responsibilities.
 
@@ -445,12 +445,12 @@ The following decisions remain open:
 - Concrete IPC mapping and activation details for each production service
 - Final interface versioning mechanism
 
-These decisions will be refined during service-interface and IPC prototyping.
+These decisions will be refined during production service implementation and IPC integration.
 
 ## Service Interface Model Status
 
-This document represents the initial logical service interface model for Stage 2.
+This document represents the validated logical service interface model for the Zethropol service architecture.
 
-It defines the contract principles that later implementation and IPC prototypes should follow.
+It defines the contract principles that production service implementations and D-Bus interfaces should follow.
 
-The model is intentionally implementation-independent and will evolve as the Zethropol service architecture is validated.
+The model remains intentionally implementation-independent and will evolve as production service boundaries and interfaces are concretized.

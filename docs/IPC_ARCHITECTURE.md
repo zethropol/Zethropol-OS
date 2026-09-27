@@ -20,9 +20,9 @@ IPC should provide clear service boundaries while supporting security, reliabili
 - The IPC mechanism should support both system-level and user-session communication where required.
 - Existing Linux IPC and security mechanisms should be preferred over unnecessary custom mechanisms.
 
-## IPC Technology Candidate
+## IPC Technology
 
-D-Bus is the primary IPC candidate for Zethropol OS.
+D-Bus is the validated primary IPC mechanism for Zethropol OS.
 
 D-Bus is widely integrated with Linux and system services and provides mechanisms for service discovery, method calls, return values, errors, signals, service activation, and policy-based access control.
 

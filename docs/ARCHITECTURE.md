@@ -171,18 +171,19 @@ The distinction between these categories is intended to provide a clear foundati
 
 An IPC mechanism is required for communication between Zethropol components.
 
-D-Bus is currently the primary candidate because its interface, object, method, signal, and error model fits the identified communication requirements and integrates naturally with the Linux/systemd ecosystem.
+D-Bus is the validated primary IPC mechanism for Zethropol OS. Its interface, object, method, signal, and error model fits the identified communication requirements and integrates naturally with the Linux/systemd ecosystem.
 
-However, D-Bus is not yet considered the final architectural decision.
+The D-Bus mechanism is architecturally validated; production service topology, activation, authorization, and interface details remain subject to implementation-stage validation.
 
-The final IPC mechanism should be selected after a small prototype evaluates:
+The D-Bus prototype has validated the mechanism against the initial architectural requirements. The following concerns remain implementation-stage decisions:
 
-- API complexity
-- Performance characteristics
-- Error handling
-- Service activation
+- Production service topology
+- Service activation and lifecycle
 - Authorization and policy integration
-- Debugging and observability
+- Production interface and data contracts
+- Error handling conventions
+- Timeout and asynchronous operation conventions
+- Debugging, logging, and observability
 - Compatibility with future Zethropol components
 
 ## Privilege Model
