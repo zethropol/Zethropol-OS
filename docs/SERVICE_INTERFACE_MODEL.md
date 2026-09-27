@@ -904,6 +904,92 @@ Operation state fields should use normalized values and remain independent of ba
 
 Human-readable diagnostic text may be carried separately through the structured result `message` field or an operation-specific diagnostic field where required. It must not replace machine-readable state or result codes.
 
+## Initial Asynchronous Operation Model
+
+Long-running service operations must not require consumers to keep a synchronous D-Bus method call open until completion.
+
+### Operation Categories
+
+Operations are initially divided into:
+
+- Synchronous operations — expected to complete quickly and return their final structured result directly.
+- Asynchronous operations — may take significant time or depend on external system operations and return an acceptance result before completion.
+
+Read operations such as `GetState` should remain synchronous.
+
+Administrative operations such as package installation, orphan removal, service administration, recovery-point creation, recovery-point deletion, and application removal should use the asynchronous model where their implementation may take significant time.
+
+### Asynchronous Acceptance
+
+An asynchronous method returns the common structured result.
+
+When the operation is accepted:
+
+- `success` indicates that the request was accepted for execution.
+- `code` is `ok` unless another defined result code describes the acceptance state.
+- `operationId` identifies the accepted operation.
+- `data` may contain operation-specific information where required.
+
+When the operation cannot be accepted, the method returns the appropriate result code and does not create an operation.
+
+### Operation Identity
+
+`operationId` is a service-defined opaque identifier.
+
+Consumers must treat it as an identifier only and must not infer process IDs, command names, filesystem paths, package-manager state, or other implementation details from its value.
+
+An operation identifier is unique within the service context for its applicable lifetime.
+
+### Operation State
+
+The service exposes operation progress and completion through the structured `OperationChanged` signal.
+
+An operation state should provide, at minimum:
+
+- `operationId`
+- operation type
+- normalized state
+- result code when completed
+- optional human-readable message
+- optional structured result data
+
+Initial normalized operation states are:
+
+- `running`
+- `succeeded`
+- `failed`
+- `cancelled`
+
+A service may expose additional documented states when required, without changing the meaning of the initial states.
+
+### Operation Observation
+
+Consumers may observe asynchronous operations through `OperationChanged`.
+
+The service state returned by `GetState` remains authoritative for current service availability and overall operational state.
+
+A consumer must not depend on backend process output or implementation-specific progress information.
+
+### Busy and Concurrency Rules
+
+A service must reject a conflicting operation when its current state does not permit concurrent execution.
+
+The service should return `busy` when a requested operation cannot be accepted because an incompatible operation is already active.
+
+Concurrency between independent operations is permitted only when explicitly supported by the service contract.
+
+### Cancellation
+
+Cancellation is not part of the common operation contract initially.
+
+A service may expose cancellation later when the underlying operation can be safely cancelled and the cancellation semantics can be defined without exposing backend-specific behavior.
+
+### Failure and Completion
+
+Operation completion must be represented by the structured result code and normalized operation state.
+
+A failed operation should provide sufficient diagnostic information through the optional message or structured data without exposing unnecessary implementation or security-sensitive details.
+
 ## Initial D-Bus Transport Encoding
 
 The initial production D-Bus mapping uses standard D-Bus container types for structured Zethropol data.
