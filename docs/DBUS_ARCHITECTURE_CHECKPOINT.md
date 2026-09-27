@@ -1,0 +1,67 @@
+# Zethropol D-Bus Architecture Checkpoint
+
+## Status
+
+The D-Bus architecture prototype has been validated on both the user session bus and the system bus.
+This document records validated architectural evidence. It does not define the final production service API.
+
+## Validated Architecture
+
+- System D-Bus broker: dbus-broker
+- IPC transport: D-Bus
+- Service activation: D-Bus activation through systemd
+- Service type: systemd Type=dbus
+- Qt implementation: Qt 6 QDBus
+- System bus name used by the prototype: org.zethropol.SystemPrototype
+- Object path used by the prototype: /org/zethropol/Prototype
+- Interface used by the prototype: org.zethropol.Service
+
+## Validated Operations
+
+- READ: serviceStatus()
+- READ: serviceInfo()
+- ACTION: performAction(QString)
+- ADMIN: performAdminAction(QString)
+- OBSERVE: statusChanged(QString)
+
+## Validated Security Boundary
+
+The prototype demonstrates that privileged system-facing operations can be placed behind a system-bus service boundary rather than being executed directly by the desktop UI.
+
+ADMIN operations are explicitly separated from normal ACTION operations.
+The prototype currently returns authorization-required for the ADMIN operation.
+This validates the architectural boundary but does not yet define the final authorization mechanism.
+
+## Validated Activation Model
+
+1. A D-Bus client requests the service name.
+2. The system D-Bus broker resolves the activation definition.
+3. systemd starts the corresponding service unit.
+4. The service acquires its D-Bus name.
+5. The client communicates through the declared object path and interface.
+
+## Production Decisions Still Open
+
+- Final service naming convention
+- Final bus-name convention
+- Final object-path convention
+- Final interface namespace and versioning scheme
+- Concrete READ / OBSERVE / ACTION / ADMIN method definitions
+- Structured result and error model
+- Authorization mechanism and policy
+- Service readiness and availability states
+- Timeout and asynchronous-operation rules
+- Service lifecycle and failure-recovery policy
+- Logging and audit requirements
+- Sandboxing and systemd hardening
+
+## Architectural Rule
+
+Zethropol desktop components must not directly perform privileged system operations when a dedicated Zethropol service boundary is responsible for that operation.
+
+The final production service architecture must remain hardware-independent and must expose normalized Zethropol data rather than machine-specific implementation details.
+
+## Prototype Commits
+
+- c8a4940 Add D-Bus service architecture prototype
+- 26bbba6 Add system D-Bus service prototype
