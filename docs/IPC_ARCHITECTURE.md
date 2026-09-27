@@ -172,11 +172,17 @@ The final activation model will be determined during process and IPC prototyping
 
 IPC clients should not assume that every request completes immediately.
 
-Operations should have appropriate timeout and failure behavior.
+Operations should have bounded request deadlines appropriate to their operation type.
 
-Timeout handling must not automatically imply that an operation failed if the underlying operation may still be executing.
+A D-Bus request timeout applies to communication and request-response handling. It must not automatically imply that an underlying operation failed or was cancelled.
 
-Long-running operations should provide a suitable asynchronous mechanism where required.
+Synchronous operations should complete within an operation-appropriate bounded deadline.
+
+Asynchronous operations should use a bounded acceptance deadline. Once accepted, execution is tracked independently through the asynchronous operation model.
+
+Timeouts must not be treated as implicit cancellation.
+
+Long-running operations should therefore use the established asynchronous mechanism rather than extending a synchronous D-Bus call indefinitely.
 
 Services should remain usable when unrelated IPC services are unavailable.
 
@@ -308,7 +314,7 @@ The following decisions remain open:
 - Service-specific object, interface, method, property, and signal definitions
 - Final authorization policy
 - Service activation model
-- Timeout and asynchronous operation conventions
+- Service-specific timeout values and retry-safe semantics
 - Interface versioning implementation
 
 These decisions will be refined through production service implementation and IPC integration.

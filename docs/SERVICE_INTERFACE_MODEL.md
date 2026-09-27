@@ -385,7 +385,7 @@ An asynchronous operation should provide a way for the consumer to determine:
 - Failure
 - Cancellation support where available
 
-The exact asynchronous model remains open for production service implementation and IPC integration.
+The initial asynchronous operation model is defined by the production service contract. Timeout policy is defined separately from operation execution.
 
 ## Interface Versioning
 
@@ -1126,7 +1126,7 @@ This transport encoding is the initial production D-Bus convention. Individual s
 
 The member names defined here form the initial production D-Bus API candidate.
 
-Their exact signatures, structured input/output schemas, result encoding, asynchronous behavior, and authorization requirements remain subject to implementation-stage validation.
+Their exact signatures, structured input/output schemas, result encoding, service-specific asynchronous usage, and authorization requirements remain subject to implementation-stage validation.
 
 ## Current Architectural Status
 
@@ -1147,7 +1147,7 @@ The following interface principles are established:
 The following decisions remain open:
 
 - Final capability representation
-- Asynchronous operation model
+- Service-specific asynchronous operation usage
 - Final authorization integration
 - Concrete IPC activation details for each production service
 - Final interface compatibility and versioning mechanism
