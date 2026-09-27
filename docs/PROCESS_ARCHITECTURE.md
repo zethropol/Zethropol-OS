@@ -93,7 +93,13 @@ The lifecycle should account for:
 
 Services should not assume that all dependencies are permanently available.
 
-Where systemd manages a service, systemd dependency and readiness mechanisms should be evaluated rather than implementing unnecessary custom lifecycle management.
+Where systemd manages a service, systemd dependency, readiness, restart, and resource-control mechanisms should be evaluated rather than implementing unnecessary custom lifecycle management.
+
+Zethropol services should not duplicate systemd process lifecycle management when the required behavior can be expressed through systemd.
+
+Restart behavior is service-specific. A service may use controlled automatic restart when safe and appropriate, while services with unsafe or non-restartable failure modes should define a different recovery path.
+
+Restart limits and repeated-failure handling should use systemd mechanisms where appropriate.
 
 ## Startup and Dependency Management
 
@@ -113,7 +119,9 @@ A failure in a non-critical service should not unnecessarily terminate unrelated
 
 Critical services should have clearly defined failure behavior.
 
-Where a service can be safely restarted, the process architecture should allow controlled restart without requiring a complete system restart.
+Where a service can be safely restarted, the process architecture should allow controlled service restart without requiring a complete system restart.
+
+A service restart must not be treated as a guarantee that in-flight service state or operation identifiers survive unless the service contract explicitly defines persistence.
 
 Failure isolation must not be achieved by creating unnecessary processes when the resulting complexity provides no meaningful reliability or security benefit.
 
@@ -253,6 +261,7 @@ The following process architecture principles are established:
 - Desktop independence
 - Integration with systemd and Linux mechanisms
 - Independent service testing
+- Service-specific lifecycle and failure-recovery policy
 
 The following decisions remain open:
 

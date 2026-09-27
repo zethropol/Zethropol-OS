@@ -52,11 +52,11 @@ This validates the architectural boundary but does not yet define the final auth
 - Initial service readiness and availability model
 - Initial asynchronous operation model
 - Initial D-Bus timeout semantics
+- Initial service lifecycle and failure-recovery policy
 
 ## Production Decisions Still Open
 
 - Service-specific timeout values and retry-safe semantics
-- Service lifecycle and failure-recovery policy
 - Concrete authorization mechanism and policy
 - Logging and audit requirements
 - Sandboxing and systemd hardening

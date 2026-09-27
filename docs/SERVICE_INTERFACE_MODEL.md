@@ -361,6 +361,8 @@ Consumers must not infer readiness from process existence, systemd unit state, b
 
 A consumer must treat D-Bus service disappearance as `unavailable`.
 
+Service process failure, controlled restart, or loss of D-Bus registration therefore becomes an availability event for consumers, regardless of whether systemd later restarts the service.
+
 When the service reappears, the consumer must establish a new connection or proxy as required and obtain the current state again.
 
 Consumers must not assume that a previous service proxy, operation state, or `operationId` remains valid after service disappearance unless the service contract explicitly guarantees persistence.
@@ -1143,6 +1145,7 @@ The following interface principles are established:
 - Interface versioning
 - Independent service and interface testing
 - Separation between service interfaces and user-facing presentation
+- Service lifecycle and failure-recovery policy
 
 The following decisions remain open:
 
@@ -1151,7 +1154,6 @@ The following decisions remain open:
 - Final authorization integration
 - Concrete IPC activation details for each production service
 - Final interface compatibility and versioning mechanism
-- Service lifecycle and failure-recovery policy
 - Logging, audit, sandboxing, and systemd hardening requirements
 
 These decisions will be refined during production service implementation and IPC integration.
