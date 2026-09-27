@@ -49,11 +49,12 @@ This validates the architectural boundary but does not yet define the final auth
 - Structured result and error model
 - D-Bus structured transport encoding
 - Initial D-Bus method and signal naming convention
+- Initial service readiness and availability model
+- Initial asynchronous operation model
 
 ## Production Decisions Still Open
 
-- Service readiness and availability states
-- Initial asynchronous operation model defined; timeout policy remains implementation-stage
+- Timeout policy remains implementation-stage
 - Service lifecycle and failure-recovery policy
 - Concrete authorization mechanism and policy
 - Logging and audit requirements

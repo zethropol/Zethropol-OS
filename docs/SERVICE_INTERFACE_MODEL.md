@@ -310,6 +310,69 @@ Consumers should be able to detect:
 
 Consumers must handle service disappearance and reappearance without assuming a permanent connection.
 
+## Initial Service Readiness Model
+
+Production services use a common normalized readiness model.
+
+### Readiness States
+
+The initial readiness states are:
+
+- `initializing` — the service is registered or starting but is not yet ready to provide its normal contract.
+- `ready` — the service is operating normally and its published contract is available.
+- `degraded` — the service is available but one or more non-fatal capabilities or dependencies are unavailable or impaired.
+- `dependency-failed` — a required dependency prevents the service from providing its normal contract.
+
+`unavailable` represents the absence of an accessible service rather than a readiness state reported by a running service.
+
+### Availability and Readiness
+
+Service availability and readiness are separate concepts.
+
+A consumer determines service availability from the D-Bus service being reachable and its interface being accessible.
+
+When a service is reachable, `GetState` should expose its normalized readiness state where the service provides readiness information.
+
+A service must not report `ready` when a required dependency prevents the service from fulfilling its published contract.
+
+### State Transitions
+
+Services may transition between readiness states during their lifetime.
+
+Typical transitions include:
+
+- `initializing` → `ready`
+- `initializing` → `dependency-failed`
+- `ready` → `degraded`
+- `ready` → `dependency-failed`
+- `degraded` → `ready`
+- `degraded` → `dependency-failed`
+- `dependency-failed` → `initializing`
+
+A service may transition directly between states when required by its implementation and current system conditions.
+
+### State Change Observation
+
+Readiness changes are part of the normalized service state and therefore may be reported through `StateChanged`.
+
+Consumers must not infer readiness from process existence, systemd unit state, backend process identifiers, or implementation-specific log messages.
+
+### Service Disappearance and Reappearance
+
+A consumer must treat D-Bus service disappearance as `unavailable`.
+
+When the service reappears, the consumer must establish a new connection or proxy as required and obtain the current state again.
+
+Consumers must not assume that a previous service proxy, operation state, or `operationId` remains valid after service disappearance unless the service contract explicitly guarantees persistence.
+
+### Dependency Handling
+
+A service should expose dependency-related failure through `dependency-failed` when a required dependency prevents normal operation.
+
+Optional dependency or capability loss should normally result in `degraded` when the core service contract remains usable.
+
+The service must not expose private dependency implementation details merely to explain its readiness state.
+
 ## Long-Running Operations
 
 Operations that may take significant time should expose an asynchronous execution model where appropriate.
