@@ -1,1 +1,0 @@
-/usr/bin/c++ -Wl,--dependency-file=CMakeFiles/zethropol-dbus-client.dir/link.d "CMakeFiles/zethropol-dbus-client.dir/zethropol-dbus-client_autogen/mocs_compilation.cpp.o" "CMakeFiles/zethropol-dbus-client.dir/client.cpp.o" -o zethropol-dbus-client  /usr/lib/libQt6DBus.so.6.11.2 /usr/lib/libQt6Core.so.6.11.2

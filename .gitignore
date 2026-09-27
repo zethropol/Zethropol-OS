@@ -5,3 +5,4 @@ services/hardware/target/
 services/hardware/diagnostics-helper/target/
 
 desktop/control-center/build/
+prototypes/dbus/build/

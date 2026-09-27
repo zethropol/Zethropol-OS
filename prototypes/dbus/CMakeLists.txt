@@ -25,3 +25,21 @@ target_link_libraries(zethropol-dbus-client PRIVATE
     Qt6::Core
     Qt6::DBus
 )
+
+qt_add_executable(zethropol-dbus-system-service
+    service-system.cpp
+)
+
+target_link_libraries(zethropol-dbus-system-service PRIVATE
+    Qt6::Core
+    Qt6::DBus
+)
+
+qt_add_executable(zethropol-dbus-system-client
+    client-system.cpp
+)
+
+target_link_libraries(zethropol-dbus-system-client PRIVATE
+    Qt6::Core
+    Qt6::DBus
+)

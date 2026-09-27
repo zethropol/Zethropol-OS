@@ -1,8 +1,0 @@
-/home/Zevor/Zethropol-OS/prototypes/dbus/build/CMakeFiles/zethropol-dbus-service.dir
-/home/Zevor/Zethropol-OS/prototypes/dbus/build/CMakeFiles/zethropol-dbus-client.dir
-/home/Zevor/Zethropol-OS/prototypes/dbus/build/CMakeFiles/edit_cache.dir
-/home/Zevor/Zethropol-OS/prototypes/dbus/build/CMakeFiles/rebuild_cache.dir
-/home/Zevor/Zethropol-OS/prototypes/dbus/build/CMakeFiles/zethropol-dbus-service_autogen_timestamp_deps.dir
-/home/Zevor/Zethropol-OS/prototypes/dbus/build/CMakeFiles/zethropol-dbus-service_autogen.dir
-/home/Zevor/Zethropol-OS/prototypes/dbus/build/CMakeFiles/zethropol-dbus-client_autogen_timestamp_deps.dir
-/home/Zevor/Zethropol-OS/prototypes/dbus/build/CMakeFiles/zethropol-dbus-client_autogen.dir
