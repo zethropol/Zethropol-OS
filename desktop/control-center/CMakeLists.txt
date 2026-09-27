@@ -20,6 +20,8 @@ qt_add_executable(zethropol-control-center
     src/ServiceService.cpp
     src/ServiceService.h
     src/ApplicationService.cpp
+    src/NotificationService.cpp
+    src/NotificationService.h
     src/ApplicationService.h
 )
 

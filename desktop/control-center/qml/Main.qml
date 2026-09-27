@@ -5,6 +5,98 @@ import QtQuick.Controls.Material
 import Zethropol.ControlCenter
 
 ApplicationWindow {
+    QtObject {
+        id: notificationState
+
+        property bool previousUpdatesAvailable: false
+        property bool previousFirmwareAvailable: false
+        property bool previousFailedServices: false
+        property bool previousHardwareWarning: false
+
+        Component.onCompleted: {
+            previousUpdatesAvailable = UpdateBridge.available || UpdateBridge.aurAvailable || UpdateBridge.flatpakAvailable
+            previousFirmwareAvailable = String(SystemState.firmwareStatus).toLowerCase().indexOf("firmware update available") >= 0
+            previousFailedServices = ServiceBridge.failed > 0
+            previousHardwareWarning = String(SystemState.overallHealth).toUpperCase() === "WARNING"
+        }
+    }
+
+    Connections {
+        target: UpdateBridge
+        property bool initialized: false
+
+        function onStateChanged() {
+            var current = UpdateBridge.available || UpdateBridge.aurAvailable || UpdateBridge.flatpakAvailable
+            if (!initialized) {
+                notificationState.previousUpdatesAvailable = current
+                initialized = true
+                return
+            }
+            if (current && !notificationState.previousUpdatesAvailable) {
+                NotificationBridge.send(
+                    "Software updates available",
+                    UpdateBridge.count + " system · " + UpdateBridge.aurCount + " AUR · " + UpdateBridge.flatpakCount + " Flatpak"
+                )
+            }
+            notificationState.previousUpdatesAvailable = current
+        }
+    }
+
+    Connections {
+        target: HardwareBridge
+        property bool initialized: false
+
+        function onStateChanged() {
+            var currentFirmware = String(SystemState.firmwareStatus).toLowerCase().indexOf("firmware update available") >= 0
+            var currentWarning = String(SystemState.overallHealth).toUpperCase() === "WARNING"
+
+            if (!initialized) {
+                notificationState.previousFirmwareAvailable = currentFirmware
+                notificationState.previousHardwareWarning = currentWarning
+                initialized = true
+                return
+            }
+
+            if (currentFirmware && !notificationState.previousFirmwareAvailable) {
+                NotificationBridge.send(
+                    "Firmware update available",
+                    "A firmware update requires your attention. Open Diagnostics to review it."
+                )
+            }
+
+            if (currentWarning && !notificationState.previousHardwareWarning) {
+                NotificationBridge.send(
+                    "Hardware health requires attention",
+                    "Open Hardware to review the current hardware health status."
+                )
+            }
+
+            notificationState.previousFirmwareAvailable = currentFirmware
+            notificationState.previousHardwareWarning = currentWarning
+        }
+    }
+
+    Connections {
+        target: ServiceBridge
+        property bool initialized: false
+
+        function onStateChanged() {
+            var current = ServiceBridge.failed > 0
+            if (!initialized) {
+                notificationState.previousFailedServices = current
+                initialized = true
+                return
+            }
+            if (current && !notificationState.previousFailedServices) {
+                NotificationBridge.send(
+                    "Failed service detected",
+                    ServiceBridge.failed + " system service" + (ServiceBridge.failed === 1 ? "" : "s") + " require attention."
+                )
+            }
+            notificationState.previousFailedServices = current
+        }
+    }
+
     visible: true
     width: 1280
     height: 800
