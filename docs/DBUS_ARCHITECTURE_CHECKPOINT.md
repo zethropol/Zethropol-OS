@@ -42,10 +42,7 @@ This validates the architectural boundary but does not yet define the final auth
 
 ## Production Decisions Still Open
 
-- Final service naming convention
-- Final bus-name convention
-- Final object-path convention
-- Final interface namespace and versioning scheme
+- Production service-specific naming within the established D-Bus identity convention
 - Concrete READ / OBSERVE / ACTION / ADMIN method definitions
 - Structured result and error model
 - Authorization mechanism and policy
