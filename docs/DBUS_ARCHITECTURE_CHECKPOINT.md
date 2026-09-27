@@ -40,17 +40,25 @@ This validates the architectural boundary but does not yet define the final auth
 4. The service acquires its D-Bus name.
 5. The client communicates through the declared object path and interface.
 
+## Production Decisions Established
+
+- Production service identity convention
+- Initial production service contracts
+- Initial READ / OBSERVE / ACTION / ADMIN member model
+- Initial structured data schemas
+- Structured result and error model
+- D-Bus structured transport encoding
+- Initial D-Bus method and signal naming convention
+
 ## Production Decisions Still Open
 
-- Production service-specific naming within the established D-Bus identity convention
-- Concrete READ / OBSERVE / ACTION / ADMIN method definitions
-- Structured result and error model — defined in the service interface model
-- Authorization boundary and result codes — defined; concrete mechanism/policy remains implementation-stage
 - Service readiness and availability states
 - Timeout and asynchronous-operation rules
 - Service lifecycle and failure-recovery policy
+- Concrete authorization mechanism and policy
 - Logging and audit requirements
 - Sandboxing and systemd hardening
+- Final compatibility and interface-versioning mechanism
 
 ## Architectural Rule
 

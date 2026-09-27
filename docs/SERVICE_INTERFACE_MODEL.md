@@ -904,6 +904,75 @@ Operation state fields should use normalized values and remain independent of ba
 
 Human-readable diagnostic text may be carried separately through the structured result `message` field or an operation-specific diagnostic field where required. It must not replace machine-readable state or result codes.
 
+## Initial D-Bus Transport Encoding
+
+The initial production D-Bus mapping uses standard D-Bus container types for structured Zethropol data.
+
+The logical schemas defined above remain authoritative. D-Bus encoding provides the transport representation of those schemas and must not introduce backend-specific semantics.
+
+### Structured Result
+
+The common structured result is encoded as a D-Bus dictionary:
+
+- `a{sv}` — result map
+
+The initial result keys are:
+
+- `success` — boolean
+- `code` — string
+- `message` — string when present
+- `operationId` — string when present
+- `data` — structured value when present
+
+The `code` value uses the defined machine-readable result codes.
+
+### Structured State
+
+Service state returned by `GetState` is encoded as:
+
+- `a{sv}` — state map
+
+The keys and value types are defined by the corresponding service state schema.
+
+### Structured Records
+
+A single structured record is encoded as:
+
+- `a{sv}` — record map
+
+A list of structured records is encoded as:
+
+- `aa{sv}` — list of record maps
+
+String lists use:
+
+- `as` — array of strings
+
+Nested structured values may use additional standard D-Bus container types where required by the published schema.
+
+### Type Stability
+
+The published schema defines the expected key names and value types for each structured result and state.
+
+A consumer must not infer semantics from the runtime D-Bus signature alone. Unknown fields may be added only when doing so preserves backward compatibility.
+
+Required fields must retain their defined type and semantics within the same interface version.
+
+### Initial Method Signature Convention
+
+Methods returning structured results use the common result encoding unless explicitly documented otherwise.
+
+Initial examples:
+
+- `GetState` → structured result containing the service state in `data`
+- `Refresh` → structured result
+- synchronous ACTION methods → structured result
+- asynchronous ADMIN methods → structured result containing `operationId` when accepted for asynchronous execution
+
+Signals carry structured state or operation information using the corresponding published schema.
+
+This transport encoding is the initial production D-Bus convention. Individual service signatures remain subject to implementation validation, but they must remain compatible with this structured encoding model.
+
 ### Naming Stability
 
 The member names defined here form the initial production D-Bus API candidate.
@@ -928,14 +997,13 @@ The following interface principles are established:
 
 The following decisions remain open:
 
-- Production service-specific names within the established naming convention
-- Exact interface, method, property, and signal names
-- Final data schemas
 - Final capability representation
 - Asynchronous operation model
 - Final authorization integration
-- Concrete IPC mapping and activation details for each production service
-- Final interface versioning mechanism
+- Concrete IPC activation details for each production service
+- Final interface compatibility and versioning mechanism
+- Service lifecycle and failure-recovery policy
+- Logging, audit, sandboxing, and systemd hardening requirements
 
 These decisions will be refined during production service implementation and IPC integration.
 
