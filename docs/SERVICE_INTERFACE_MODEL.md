@@ -1174,7 +1174,8 @@ The following decisions remain open:
 - Final authorization integration
 - Concrete IPC activation details for each production service
 - Final interface compatibility and versioning mechanism
-- Logging, audit, sandboxing, and systemd hardening requirements
+- Service-specific logging detail, event selection, retention, and audit requirements
+- Sandboxing and systemd hardening requirements
 
 These decisions will be refined during production service implementation and IPC integration.
 

@@ -274,6 +274,18 @@ Where practical, observability should allow developers and administrators to det
 
 Observability should avoid exposing sensitive data unnecessarily.
 
+### Logging and Audit
+
+Zethropol services should use established Linux and systemd logging facilities, including the systemd journal, rather than introducing a separate Zethropol-wide logging daemon.
+
+Diagnostic logging should provide sufficient context for service lifecycle, readiness, IPC failures, operation failures, timeouts, and unexpected service restarts.
+
+Audit logging should be considered for privileged operations, authorization decisions and failures, and significant security-state changes.
+
+Logs and audit records must avoid unnecessary exposure of sensitive data.
+
+Service-specific log detail, event selection, retention, and other implementation requirements remain the responsibility of the applicable production service contract.
+
 ## Testing
 
 IPC interfaces should be independently testable.

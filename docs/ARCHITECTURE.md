@@ -184,7 +184,7 @@ The D-Bus prototype has validated the mechanism against the initial architectura
 - Error handling conventions
 - Service-specific timeout values, retry limits, and backoff behavior
 - Service-specific request identity or idempotency mechanisms where required
-- Debugging, logging, and observability
+- Service-specific logging detail, event selection, retention, and audit requirements
 - Compatibility with future Zethropol components
 
 ## Privilege Model
