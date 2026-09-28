@@ -12,12 +12,12 @@ QtObject {
     property var power: hardware.power
     property string powerAvailability: power ? (power.available ? "Available" : "Unavailable") : "Unknown"
     property string powerSource: power && power.battery_present ? "Battery" : (power && power.ac_online === true ? "AC Power" : "No battery detected")
-    property string batteryLevel: power && power.battery_percent !== null ? power.battery_percent.toFixed(1) + "%" : "N/A"
+    property string batteryLevel: power && power.battery_percent !== null && power.battery_percent !== undefined ? power.battery_percent.toFixed(1) + "%" : "N/A"
     property string batteryStatus: power && power.battery_status ? power.battery_status : "N/A"
-    property string chargingStatus: power && power.charging !== null ? (power.charging ? "Charging" : "Not charging") : "N/A"
-    property string powerUsage: power && power.power_w !== null ? power.power_w.toFixed(2) + " W" : "N/A"
-    property string energyNow: power && power.energy_now_wh !== null ? power.energy_now_wh.toFixed(2) + " Wh" : "N/A"
-    property string energyFull: power && power.energy_full_wh !== null ? power.energy_full_wh.toFixed(2) + " Wh" : "N/A"
+    property string chargingStatus: power && power.charging !== null && power.charging !== undefined ? (power.charging ? "Charging" : "Not charging") : "N/A"
+    property string powerUsage: power && power.power_w !== null && power.power_w !== undefined ? power.power_w.toFixed(2) + " W" : "N/A"
+    property string energyNow: power && power.energy_now_wh !== null && power.energy_now_wh !== undefined ? power.energy_now_wh.toFixed(2) + " Wh" : "N/A"
+    property string energyFull: power && power.energy_full_wh !== null && power.energy_full_wh !== undefined ? power.energy_full_wh.toFixed(2) + " Wh" : "N/A"
     property string powerProfile: power && power.profile ? power.profile : "Not available"
     property string powerGovernor: power && power.governor ? power.governor : "Not available"
 

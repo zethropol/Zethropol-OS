@@ -4,6 +4,7 @@
 #include <QProcess>
 #include <QTimer>
 #include <QVariantMap>
+#include <QDBusInterface>
 
 class HardwareServiceClient : public QObject
 {
@@ -22,11 +23,11 @@ signals:
     void performanceChanged();
 
 private slots:
-    void readOutput();
     void readMonitorOutput();
+    void readState();
 
 private:
-    QProcess process;
+    QDBusInterface hardwareInterface;
     QProcess monitorProcess;
     QTimer monitorTimer;
     QVariantMap m_state;
