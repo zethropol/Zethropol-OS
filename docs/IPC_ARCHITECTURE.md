@@ -207,15 +207,26 @@ Service-specific timeout values and retry behavior are implementation-stage prop
 
 ## Compatibility and Versioning
 
-Zethropol IPC interfaces should be designed for controlled evolution.
+Zethropol IPC compatibility is explicitly versioned through D-Bus interface names.
 
-Interfaces should have explicit versions or another clearly defined compatibility mechanism.
+The primary production interface follows the established form:
 
-Backward-compatible additions should be preferred where practical.
+`org.zethropol.<Service>.v1`
 
-Breaking interface changes should require an explicit version transition rather than silently changing the meaning of an existing operation.
+A version identifies the public contract and its semantics. Compatible additions should preserve the existing interface version where practical. Required fields, existing method meanings, result codes, and established data types must not be changed incompatibly within the same interface version.
 
-Clients should be able to determine which interface version and capabilities a service provides.
+Breaking semantic or contract changes require a new interface version, for example:
+
+`org.zethropol.<Service>.v1`
+`org.zethropol.<Service>.v2`
+
+A new interface version must not silently change the meaning of an existing version.
+
+During a compatibility transition, a service may expose multiple interface versions simultaneously when practical. Clients should select a supported version rather than assuming that the newest version is available.
+
+Clients must be able to determine the interface version and relevant capabilities provided by a service at runtime. Capability information supplements interface versioning and must not be used to redefine the semantics of an existing version.
+
+Executable, package, or service implementation versions must not be used as the IPC compatibility mechanism.
 
 ## Naming and Interface Organization
 
@@ -346,9 +357,9 @@ The following decisions remain open:
 - Service-specific polkit action definitions and authorization policy
 - Service activation model
 - Service-specific timeout values and retry-safe semantics
-- Interface versioning implementation
+- Explicit interface-versioned compatibility using versioned D-Bus interface names
 
-These decisions will be refined through production service implementation and IPC integration.
+Service-specific decisions will be refined through production service implementation and IPC integration.
 
 ## IPC Architecture Status
 

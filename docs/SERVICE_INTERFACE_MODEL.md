@@ -413,13 +413,25 @@ Concrete timeout values, retry limits, backoff behavior, and request-identity me
 
 Interfaces must support controlled evolution.
 
-Versioning should prevent a client from silently interpreting changed semantics as the original interface.
+Zethropol IPC compatibility is explicitly versioned through D-Bus interface names.
 
-Backward-compatible additions should be preferred where practical.
+The primary production interface uses the established form:
 
-Breaking changes should use an explicit version transition or another clearly defined compatibility mechanism.
+`org.zethropol.<Service>.v1`
 
-Clients should be able to determine the interface version and relevant capabilities provided by a service.
+Compatible additions should preserve the existing interface version where practical. Required fields, existing operation semantics, result codes, and established data types must remain compatible within the same interface version.
+
+Breaking semantic or contract changes require a new interface version, such as:
+
+`org.zethropol.<Service>.v2`
+
+A new version must not silently alter the semantics of an existing version.
+
+A service may expose multiple interface versions simultaneously during a compatibility transition when practical. Consumers should select a supported interface version rather than assuming that the newest version is available.
+
+Consumers must be able to determine the interface version and relevant capabilities provided by a service at runtime. Capability information supplements versioning and must not redefine the semantics of an existing interface version.
+
+Executable, package, and implementation versions are not IPC compatibility identifiers.
 
 ## Naming
 
@@ -658,9 +670,17 @@ The exact production service set and service-specific interface members remain s
 
 ### Versioning
 
-Interface evolution must be explicit. Compatible additions should preserve the existing interface contract where practical. Breaking semantic changes must use an explicit version transition or another clearly defined compatibility mechanism.
+Interface evolution is explicitly versioned through the D-Bus interface name.
 
-The versioning mechanism must allow consumers to determine the supported interface version and relevant capabilities without relying on executable or package versions.
+Compatible additions should preserve the existing interface version where practical. Required fields, existing operation semantics, result codes, and established data types must remain compatible within the same interface version.
+
+Breaking semantic or contract changes require a new interface version, such as `org.zethropol.<Service>.v2`. A new version must not silently alter the semantics of an existing version.
+
+A service may expose multiple interface versions simultaneously during a compatibility transition when practical. Consumers should select a supported interface version rather than assuming that the newest version is available.
+
+Consumers must be able to determine the interface version and relevant capabilities provided by a service at runtime. Capability information supplements versioning and must not redefine the semantics of an existing interface version.
+
+Executable, package, and implementation versions are not IPC compatibility identifiers.
 
 ### Prototype Relationship
 
@@ -1173,7 +1193,6 @@ The following decisions remain open:
 - Service-specific asynchronous operation usage
 - Service-specific polkit action definitions and authorization policy
 - Concrete IPC activation details for each production service
-- Final interface compatibility and versioning mechanism
 - Service-specific logging detail, event selection, retention, and audit requirements
 - Service-specific sandboxing and systemd hardening profiles
 

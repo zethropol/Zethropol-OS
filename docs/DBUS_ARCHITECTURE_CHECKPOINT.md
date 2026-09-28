@@ -53,6 +53,7 @@ This validates the architectural boundary but does not yet define the final auth
 - Initial asynchronous operation model
 - Initial D-Bus timeout semantics
 - Initial service lifecycle and failure-recovery policy
+- Explicit interface-versioned compatibility using versioned D-Bus interface names
 
 ## Production Decisions Still Open
 
@@ -61,9 +62,7 @@ This validates the architectural boundary but does not yet define the final auth
 - Service-specific polkit action definitions and authorization policy
 - Service-specific logging detail, event selection, retention, and audit requirements
 - Service-specific sandboxing and systemd hardening profiles
-- Final compatibility and interface-versioning mechanism
-
-## Architectural Rule
+## Production Decisions Still Open
 
 Zethropol desktop components must not directly perform privileged system operations when a dedicated Zethropol service boundary is responsible for that operation.
 
