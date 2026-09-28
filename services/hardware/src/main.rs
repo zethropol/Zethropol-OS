@@ -1,4 +1,5 @@
 mod hardware;
+mod dbus;
 use hardware::network::NetworkInfo;
 use hardware::power::PowerInfo;
 
@@ -20,6 +21,10 @@ struct HardwareInfo {
 }
 
 fn main() {
+    if std::env::args().any(|arg| arg == "--dbus-service") {
+        run_dbus_service();
+        return;
+    }
     if std::env::args().any(|arg| arg == "--intelligence") {
         print_intelligence();
         return;
@@ -349,4 +354,26 @@ fn print_monitor_data() {
         hardware.network.ping_ms.unwrap_or(0.0),
     );
     io::stdout().flush().ok();
+}
+
+
+fn run_dbus_service() {
+    let runtime = tokio::runtime::Runtime::new()
+        .expect("failed to create Tokio runtime");
+
+    runtime.block_on(async {
+        let service = dbus::HardwareService;
+
+        let _connection = zbus::connection::Builder::system()
+            .expect("failed to connect to system D-Bus")
+            .name("org.zethropol.Hardware")
+            .expect("failed to acquire D-Bus service name")
+            .serve_at("/org/zethropol/Hardware", service)
+            .expect("failed to register Hardware service")
+            .build()
+            .await
+            .expect("failed to build Hardware D-Bus service connection");
+
+        std::future::pending::<()>().await;
+    });
 }
