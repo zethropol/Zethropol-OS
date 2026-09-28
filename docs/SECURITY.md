@@ -59,7 +59,11 @@ Authorization should be evaluated at the service boundary before privileged oper
 
 Authorization decisions should be based on the requested operation, the requesting user or service, and the security policy applicable to that operation.
 
-Zethropol should reuse established Linux authorization mechanisms where appropriate rather than introducing an independent authorization system without a clear architectural requirement.
+Zethropol will use established Linux authorization mechanisms for privileged service operations.
+
+For production privileged operations, PolicyKit (polkit) will provide the authorization decision mechanism, with service-specific polkit action identifiers and policies. D-Bus policy will provide the IPC access boundary but will not replace the service authorization decision.
+
+The service remains responsible for requesting and enforcing the authorization decision before performing the privileged operation.
 
 Policy decisions and authorization failures should be represented through the structured service error model defined by the API architecture.
 
@@ -97,7 +101,7 @@ IPC interfaces should distinguish between read-only operations and operations th
 
 Sensitive operations should require explicit authorization at the service boundary.
 
-The final IPC security policy will be defined after the IPC and process architecture prototypes are evaluated.
+The D-Bus security policy will restrict service ownership and IPC access according to the production service topology. Privileged operation authorization will remain enforced at the service boundary through polkit.
 
 ## Input Validation
 
@@ -220,10 +224,10 @@ The following security principles are established:
 The following decisions remain open:
 
 - Exact service execution privileges
-- Final authorization mechanism and policy structure
-- Final IPC security policy
+- Service-specific polkit action definitions and authorization policy
+- Service-specific D-Bus security policy
 - Detailed filesystem permissions and ownership
-- Logging and audit policy
+- Service-specific logging detail, event selection, retention, and audit requirements
 - Service-specific sandboxing and systemd hardening profiles
 - External access and remote administration architecture
 

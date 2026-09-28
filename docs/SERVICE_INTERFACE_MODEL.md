@@ -1171,7 +1171,7 @@ The following decisions remain open:
 
 - Final capability representation
 - Service-specific asynchronous operation usage
-- Final authorization integration
+- Service-specific polkit action definitions and authorization policy
 - Concrete IPC activation details for each production service
 - Final interface compatibility and versioning mechanism
 - Service-specific logging detail, event selection, retention, and audit requirements

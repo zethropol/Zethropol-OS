@@ -58,7 +58,7 @@ This validates the architectural boundary but does not yet define the final auth
 
 - Service-specific timeout values, retry limits, and backoff behavior
 - Service-specific request identity or idempotency mechanisms where required
-- Concrete authorization mechanism and policy
+- Service-specific polkit action definitions and authorization policy
 - Service-specific logging detail, event selection, retention, and audit requirements
 - Service-specific sandboxing and systemd hardening profiles
 - Final compatibility and interface-versioning mechanism

@@ -144,9 +144,9 @@ User interfaces must not be granted unrestricted access to privileged service me
 
 Authorization should consider the requesting identity, requested operation, and applicable security policy.
 
-Zethropol should reuse established Linux, D-Bus, systemd, and authorization mechanisms where appropriate.
+Zethropol will use established Linux authorization mechanisms for privileged service operations. Production services should use polkit for service-side authorization decisions, with service-specific action identifiers and policies.
 
-The final authorization policy will be defined together with the service security and process architecture.
+D-Bus policy will control service ownership and IPC access but will not be treated as a replacement for operation-level authorization. The receiving service remains responsible for enforcing authorization before performing privileged operations.
 
 ## Service Discovery and Availability
 
@@ -343,7 +343,7 @@ The following decisions remain open:
 
 - Production D-Bus bus topology and service registration details
 - Service-specific object, interface, method, property, and signal definitions
-- Final authorization policy
+- Service-specific polkit action definitions and authorization policy
 - Service activation model
 - Service-specific timeout values and retry-safe semantics
 - Interface versioning implementation
