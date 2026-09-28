@@ -60,7 +60,7 @@ This validates the architectural boundary but does not yet define the final auth
 - Service-specific request identity or idempotency mechanisms where required
 - Concrete authorization mechanism and policy
 - Service-specific logging detail, event selection, retention, and audit requirements
-- Sandboxing and systemd hardening
+- Service-specific sandboxing and systemd hardening profiles
 - Final compatibility and interface-versioning mechanism
 
 ## Architectural Rule

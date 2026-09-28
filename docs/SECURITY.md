@@ -41,6 +41,18 @@ The privilege model should distinguish between:
 
 The exact privilege separation and service execution model will be refined during service and process architecture prototyping.
 
+## Sandboxing and Systemd Hardening
+
+Production services should use established Linux and systemd mechanisms to reduce unnecessary filesystem, device, network, capability, and resource access.
+
+Hardening must be service-specific. A common baseline should be applied where compatible with the service responsibility, while stronger restrictions should be added when they do not prevent the required contract from operating.
+
+Where appropriate, service units should use mechanisms such as `NoNewPrivileges=`, filesystem protection, private temporary or device namespaces, capability bounding, restricted address families, and narrowly scoped writable paths.
+
+D-Bus communication must not by itself justify broader service privileges. A service should retain only the privileges and system access required to implement its defined contract.
+
+Hardening failures must not cause a service to silently disable or weaken its security restrictions. Service-specific hardening profiles will be validated during production implementation.
+
 ## Authorization
 
 Authorization should be evaluated at the service boundary before privileged operations are performed.
@@ -212,7 +224,7 @@ The following decisions remain open:
 - Final IPC security policy
 - Detailed filesystem permissions and ownership
 - Logging and audit policy
-- Security hardening requirements
+- Service-specific sandboxing and systemd hardening profiles
 - External access and remote administration architecture
 
 These decisions will be refined through service, process, IPC, and security prototyping.

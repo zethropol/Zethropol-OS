@@ -185,6 +185,10 @@ Where appropriate, services should use operating-system mechanisms for restricti
 
 Security hardening should be applied according to actual service requirements rather than through a one-size-fits-all process policy.
 
+Established systemd and Linux mechanisms should be preferred for sandboxing, including privilege reduction, filesystem and device restrictions, capability bounding, network-family restrictions, and narrowly scoped writable paths where applicable.
+
+D-Bus access must not be treated as a reason to grant additional process privileges. Service privileges should remain limited to the responsibilities defined by the service contract.
+
 The final sandboxing and hardening profile for each service will be defined during service implementation and security validation.
 
 ## Desktop Independence
@@ -271,7 +275,7 @@ The following decisions remain open:
 - User-session service structure
 - Exact service startup and readiness model
 - Final resource-control policies
-- Service-specific sandboxing and hardening
+- Service-specific sandboxing and hardening profiles
 - Final IPC implementation
 
 These decisions will be refined through service, IPC, and process prototyping.
