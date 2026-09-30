@@ -1,11 +1,9 @@
 #include "HardwareServiceClient.h"
 
-#include <QDir>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDBusArgument>
+#include <QTimer>
 
 HardwareServiceClient::HardwareServiceClient(QObject *parent)
     : QObject(parent)
@@ -15,31 +13,30 @@ HardwareServiceClient::HardwareServiceClient(QObject *parent)
         QStringLiteral("org.zethropol.Hardware.v1"),
         QDBusConnection::systemBus(),
         this)
+    , performanceInterface(
+        QStringLiteral("org.zethropol.Performance"),
+        QStringLiteral("/org/zethropol/Performance"),
+        QStringLiteral("org.zethropol.Performance.v1"),
+        QDBusConnection::systemBus(),
+        this)
 {
-    connect(&monitorProcess, &QProcess::finished, this, &HardwareServiceClient::readMonitorOutput);
-
-    monitorTimer.setInterval(1000);
-    connect(&monitorTimer, &QTimer::timeout, this, [this]() {
-        if (monitorProcess.state() == QProcess::NotRunning) {
-            monitorProcess.start(
-                QDir::homePath() + QStringLiteral("/Zethropol-OS/services/hardware/target/debug/hardware"),
-                {QStringLiteral("--monitor-json")}
-            );
-        }
-    });
-
-    monitorProcess.start(
-        QDir::homePath() + QStringLiteral("/Zethropol-OS/services/hardware/target/debug/hardware"),
-        {QStringLiteral("--monitor-json")}
-    );
-    monitorTimer.start();
-
-    auto *watcher = new QDBusPendingCallWatcher(
+    auto *stateWatcher = new QDBusPendingCallWatcher(
         hardwareInterface.asyncCall(QStringLiteral("GetState")),
         this
     );
 
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, &HardwareServiceClient::readState);
+    connect(
+        stateWatcher,
+        &QDBusPendingCallWatcher::finished,
+        this,
+        &HardwareServiceClient::readState
+    );
+
+    performanceTimer.setInterval(1000);
+    connect(&performanceTimer, &QTimer::timeout, this, &HardwareServiceClient::requestPerformance);
+    performanceTimer.start();
+
+    requestPerformance();
 }
 
 QVariantMap HardwareServiceClient::state() const
@@ -99,15 +96,39 @@ void HardwareServiceClient::readState()
     watcher->deleteLater();
 }
 
-void HardwareServiceClient::readMonitorOutput()
+void HardwareServiceClient::requestPerformance()
 {
-    const QByteArray output = monitorProcess.readAllStandardOutput();
+    auto *watcher = new QDBusPendingCallWatcher(
+        performanceInterface.asyncCall(QStringLiteral("GetState")),
+        this
+    );
 
-    const QJsonDocument document = QJsonDocument::fromJson(output);
+    connect(
+        watcher,
+        &QDBusPendingCallWatcher::finished,
+        this,
+        &HardwareServiceClient::readPerformance
+    );
+}
 
-    if (!document.isObject())
+void HardwareServiceClient::readPerformance()
+{
+    auto *watcher = qobject_cast<QDBusPendingCallWatcher *>(sender());
+    if (!watcher)
         return;
 
-    m_performance = document.object().toVariantMap();
-    emit performanceChanged();
+    QDBusPendingReply<QVariantMap> reply = *watcher;
+
+    if (!reply.isError()) {
+        const QVariantMap result = reply.value();
+
+        if (result.value(QStringLiteral("success")).toBool()
+            && result.value(QStringLiteral("code")).toString() == QStringLiteral("ok")) {
+            const QVariant rawData = result.value(QStringLiteral("data"));
+            m_performance = dbusValueToVariant(rawData).toMap();
+            emit performanceChanged();
+        }
+    }
+
+    watcher->deleteLater();
 }

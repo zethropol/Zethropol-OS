@@ -1,7 +1,6 @@
 #pragma once
 
 #include <QObject>
-#include <QProcess>
 #include <QTimer>
 #include <QVariantMap>
 #include <QDBusInterface>
@@ -23,13 +22,14 @@ signals:
     void performanceChanged();
 
 private slots:
-    void readMonitorOutput();
     void readState();
+    void readPerformance();
+    void requestPerformance();
 
 private:
     QDBusInterface hardwareInterface;
-    QProcess monitorProcess;
-    QTimer monitorTimer;
+    QDBusInterface performanceInterface;
+    QTimer performanceTimer;
     QVariantMap m_state;
     QVariantMap m_performance;
 };

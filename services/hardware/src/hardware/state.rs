@@ -40,6 +40,13 @@ pub struct NormalizedGpuState {
     pub family: Option<String>,
     pub driver: Option<String>,
     pub capability_status: String,
+    pub usage_percent: Option<f64>,
+    pub memory_usage_percent: Option<f64>,
+    pub vram_used_gb: Option<f64>,
+    pub vram_total_gb: Option<f64>,
+    pub temperature_c: Option<f64>,
+    pub core_clock_mhz: Option<f64>,
+    pub memory_clock_mhz: Option<f64>,
 }
 
 #[derive(Serialize)]
@@ -224,6 +231,13 @@ impl NormalizedHardwareState {
             family: gpu.map(|value| value.family.clone()),
             driver: gpu.map(|value| value.driver.clone()),
             capability_status: assessment.gpu_capability_status.clone(),
+            usage_percent: gpu.and_then(|value| value.usage_percent),
+            memory_usage_percent: gpu.and_then(|value| value.memory_usage_percent),
+            vram_used_gb: gpu.and_then(|value| value.vram_used_gb),
+            vram_total_gb: gpu.and_then(|value| value.vram_total_gb),
+            temperature_c: gpu.and_then(|value| value.temperature_c),
+            core_clock_mhz: gpu.and_then(|value| value.core_clock_mhz),
+            memory_clock_mhz: gpu.and_then(|value| value.memory_clock_mhz),
         };
 
         let normalized_storage = NormalizedStorageState {
