@@ -1,0 +1,3 @@
+[D-BUS Service]
+Name=org.zethropol.Hardware
+SystemdService=zethropol-hardware.service

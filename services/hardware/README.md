@@ -187,26 +187,88 @@ It should not replace established kernel or system hardware-management mechanism
 
 ## Implementation Status
 
-This directory currently defines the initial Hardware Service boundary.
+The Hardware Service has a production D-Bus implementation.
 
-The service implementation has not yet been finalized.
+The service is implemented in Rust and exposes normalized hardware state through the system D-Bus.
 
-The following implementation decisions remain open:
+### D-Bus Identity
 
-- Programming language
-- Process model
-- Exact hardware discovery implementation
-- Normalized data schemas
-- Hardware identity strategy
-- Capability representation
-- Event model
-- IPC mapping
-- Exact service interface names
+- Bus name: org.zethropol.Hardware
+- Object path: /org/zethropol/Hardware
+- Interface: org.zethropol.Hardware.v1
 
-These decisions will be resolved through Hardware Service prototyping while preserving the architectural principles defined by the Zethropol system architecture.
+### Current Interface
+
+The production interface currently exposes:
+
+- GetState
+
+GetState returns the normalized hardware state using the standard Zethropol structured result model:
+
+- success
+- code
+- message
+- operationId
+- data
+
+The data payload contains normalized hardware information collected dynamically from the running system.
+
+### Implementation
+
+The service currently integrates hardware modules for:
+
+- CPU
+- GPU
+- Memory
+- Storage
+- Network
+- Power
+- System information
+- Hardware diagnostics
+- Hardware intelligence
+- Hardware fingerprinting
+- Hardware change detection
+
+The service remains independent of user-facing components.
+
+### Deployment
+
+The production service is designed for system-level D-Bus activation through systemd.
+
+Deployment definitions are maintained under:
+
+- deployment/dbus/
+- deployment/systemd/
+
+The packaged runtime binary is installed under:
+
+- /usr/lib/zethropol/zethropol-hardware
+
+The D-Bus service is activated on demand and managed by systemd.
+
+### Service Relationship
+
+The Hardware Service is a foundational Zethropol service.
+
+Higher-level services consume its normalized state rather than accessing hardware-specific Linux interfaces directly.
+
+Examples:
+
+- Monitoring consumes hardware telemetry.
+- Performance consumes hardware capabilities and performance-related state.
+- Power consumes power and hardware capability information.
+- Diagnostics consumes hardware inventory and hardware state.
+
+### Development Compatibility
+
+The command-line modes currently retained by the Hardware binary provide compatibility for existing development and diagnostic workflows.
+
+The production service path uses the D-Bus interface and does not depend on user-specific paths under /home.
 
 ## Hardware Service Status
 
-The Hardware Service is the initial implementation target for Stage 3 — Hardware Intelligence.
+The Hardware Service is implemented as a production Stage 3 — Hardware Intelligence service.
 
-This document defines its responsibility and service boundary before implementation begins.
+The foundational D-Bus boundary and systemd activation model are established.
+
+Future work may extend the interface with additional methods or signals where required by the Zethropol service architecture.

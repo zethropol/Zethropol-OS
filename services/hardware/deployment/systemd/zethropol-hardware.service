@@ -1,0 +1,9 @@
+[Unit]
+Description=Zethropol Hardware D-Bus Service
+
+[Service]
+Type=dbus
+BusName=org.zethropol.Hardware
+ExecStart=/usr/lib/zethropol/zethropol-hardware --dbus-service
+Restart=on-failure
+RestartSec=2s
