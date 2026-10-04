@@ -1,0 +1,9 @@
+[Unit]
+Description=Zethropol Monitoring Service
+
+[Service]
+Type=dbus
+BusName=org.zethropol.Monitoring
+ExecStart=/usr/lib/zethropol/zethropol-monitoring
+Restart=on-failure
+RestartSec=2s
