@@ -1,0 +1,32 @@
+pkgname=zethropol-monitoring
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Zethropol Monitoring D-Bus service"
+arch=("x86_64")
+license=("MIT")
+depends=("glibc")
+makedepends=("cargo")
+_commit=4f756f929016a583bc83eb8b3a8b100b5a134786
+source=("git+https://github.com/zethropol/Zethropol-OS.git#commit=${_commit}")
+sha256sums=("SKIP")
+
+build() {
+    cd "$srcdir/Zethropol-OS/services/monitoring"
+    cargo build --release --locked
+}
+
+package() {
+    cd "$srcdir/Zethropol-OS/services/monitoring"
+
+    install -Dm755 "target/release/monitoring" \
+        "$pkgdir/usr/lib/zethropol/zethropol-monitoring"
+
+    install -Dm644 "deployment/dbus/org.zethropol.Monitoring.conf" \
+        "$pkgdir/etc/dbus-1/system.d/org.zethropol.Monitoring.conf"
+
+    install -Dm644 "deployment/dbus/org.zethropol.Monitoring.service" \
+        "$pkgdir/usr/share/dbus-1/system-services/org.zethropol.Monitoring.service"
+
+    install -Dm644 "deployment/systemd/zethropol-monitoring.service" \
+        "$pkgdir/usr/lib/systemd/system/zethropol-monitoring.service"
+}
