@@ -64,7 +64,7 @@ Potential responsibilities:
 - Power/performance balancing
 - Application or workload-oriented performance modes
 
-The final relationship between Zethropol profiles and existing Linux/CachyOS power-management mechanisms remains to be defined.
+The Performance Service integrates with existing Linux/CachyOS performance and power-management mechanisms rather than replacing them.
 
 ### Power Service
 
@@ -159,9 +159,11 @@ Zethropol System Layer
 Linux / systemd / CachyOS / Arch
 ```
 
-The listed services represent initial logical boundaries.
+The listed services represent logical service boundaries.
 
-They do not yet require one process, package, or systemd unit per service.
+A logical service boundary does not automatically require a separate process, package, or systemd unit. The final process and packaging layout is determined by responsibility, privilege, lifecycle, failure isolation, resource usage, and communication requirements.
+
+Production services that require system-wide execution may use dedicated systemd-managed processes where appropriate.
 
 ## Privilege Boundaries
 
@@ -181,7 +183,15 @@ In particular:
 
 Services are expected to communicate through the Zethropol service interface.
 
-D-Bus is currently the primary IPC candidate, but the final IPC mechanism remains an open architectural decision.
+D-Bus is the validated primary IPC mechanism for Zethropol service communication.
+
+Production system services use the established Zethropol D-Bus identity convention:
+
+- Bus name: org.zethropol.<Service>
+- Object path: /org/zethropol/<Service>
+- Interface: org.zethropol.<Service>.v1
+
+Where system-level service activation is required, D-Bus activation should integrate with systemd. A system service may therefore be activated on demand through D-Bus and managed by systemd for lifecycle, restart, dependency, and resource-control behavior.
 
 The service interface should provide:
 
@@ -228,15 +238,14 @@ The following service boundaries are established as initial architectural concep
 - Recovery Service
 - Configuration Service
 
-The following remain open:
+The following remain service-specific or implementation-level decisions:
 
-- Exact service names
-- Process boundaries
-- systemd unit structure
-- D-Bus object and interface model
-- API data structures
-- Authorization implementation
+- Process boundaries where isolation is required
+- Service-specific systemd unit settings
+- Service-specific D-Bus methods and data structures
+- Service-specific authorization and polkit policies
 - Configuration storage
 - Service dependency relationships
+- Service-specific sandboxing and resource controls
 
-These decisions will be refined through research and prototyping.
+The common D-Bus identity, IPC, and system-service activation architecture is established and should be applied consistently across production services.
