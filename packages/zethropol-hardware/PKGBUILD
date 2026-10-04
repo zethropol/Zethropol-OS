@@ -1,0 +1,29 @@
+pkgname=zethropol-hardware
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Zethropol Hardware D-Bus service"
+url="https://github.com/zethropol/Zethropol-OS"
+arch=("x86_64")
+license=("MIT")
+depends=("glibc" "dbus" "systemd")
+makedepends=("cargo")
+_commit=3a8e40c
+source=("git+https://github.com/zethropol/Zethropol-OS.git#commit=${_commit}")
+sha256sums=("SKIP")
+
+build() {
+    cd "$srcdir/Zethropol-OS/services/hardware"
+    cargo build --release --locked
+}
+
+package() {
+    cd "$srcdir/Zethropol-OS/services/hardware"
+
+    install -Dm755 "target/release/hardware"         "$pkgdir/usr/lib/zethropol/zethropol-hardware"
+
+    install -Dm644 "deployment/dbus/org.zethropol.Hardware.conf"         "$pkgdir/etc/dbus-1/system.d/org.zethropol.Hardware.conf"
+
+    install -Dm644 "deployment/dbus/org.zethropol.Hardware.service"         "$pkgdir/usr/share/dbus-1/system-services/org.zethropol.Hardware.service"
+
+    install -Dm644 "deployment/systemd/zethropol-hardware.service"         "$pkgdir/usr/lib/systemd/system/zethropol-hardware.service"
+}
