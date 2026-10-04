@@ -1,47 +1,37 @@
-cmake_minimum_required(VERSION 3.24)
-project(zethropol-control-center VERSION 0.1.0 LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.16)
+project(control_center LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Quick DBus)
-qt_policy(SET QTP0001 NEW)
-qt_policy(SET QTP0004 NEW)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick DBus)
 
-qt_standard_project_setup()
+set(ZETHROPOL_DBUS_SRCS
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/zethropol_security_client.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/zethropol_services_client.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/zethropol_update_client.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/zethropol_recovery_client.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/zethropol_applications_client.cpp
+)
 
-qt_add_executable(zethropol-control-center
+qt_add_executable(control_center
     src/main.cpp
-    src/HardwareServiceClient.cpp
-    src/UpdateService.cpp
-    src/RecoveryService.cpp
-    src/SecurityService.cpp
-    src/SecurityService.h
-    src/ServiceService.cpp
-    src/ServiceService.h
-    src/ApplicationService.cpp
-    src/NotificationService.cpp
-    src/NotificationService.h
-    src/ApplicationService.h
+    ${ZETHROPOL_DBUS_SRCS}
 )
 
-set_source_files_properties(qml/SystemState.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
-qt_add_qml_module(zethropol-control-center
-    URI Zethropol.ControlCenter
-    VERSION 1.0
-    QML_FILES
-        qml/SystemState.qml
-        qml/Main.qml
+set_source_files_properties(src/main.qml PROPERTIES QT_RESOURCE_ALIAS "main.qml")
+
+qt_add_resources(control_center "control_center_qml"
+    PREFIX "/"
+    FILES
+        src/main.qml
 )
 
-target_link_libraries(zethropol-control-center PRIVATE Qt6::Quick Qt6::DBus)
-
-include(GNUInstallDirs)
-install(TARGETS zethropol-control-center
-    BUNDLE DESTINATION .
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-)
-
-install(FILES zethropol-control-center.desktop
-    DESTINATION ${CMAKE_INSTALL_DATADIR}/applications
+target_link_libraries(control_center PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Qml
+    Qt6::Quick
+    Qt6::DBus
 )
