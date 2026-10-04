@@ -2,9 +2,10 @@ pkgname=zethropol-monitoring
 pkgver=0.1.0
 pkgrel=1
 pkgdesc="Zethropol Monitoring D-Bus service"
+url="https://github.com/zethropol/Zethropol-OS"
 arch=("x86_64")
 license=("MIT")
-depends=("glibc")
+depends=("glibc" "dbus" "systemd")
 makedepends=("cargo")
 _commit=4f756f929016a583bc83eb8b3a8b100b5a134786
 source=("git+https://github.com/zethropol/Zethropol-OS.git#commit=${_commit}")
