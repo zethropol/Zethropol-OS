@@ -1,0 +1,27 @@
+pkgname=zethropol-performance
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Zethropol Performance D-Bus service"
+url="https://github.com/zethropol/Zethropol-OS"
+arch=("x86_64")
+license=("MIT")
+depends=("glibc" "dbus" "systemd")
+makedepends=("cargo")
+
+source=("git+https://github.com/zethropol/Zethropol-OS.git#commit=814a1d5c6934c880c0c9789683e60df0c869198c")
+sha256sums=("SKIP")
+
+build() {
+    cd "$srcdir/Zethropol-OS/services/performance"
+    cargo build --release --locked
+}
+
+package() {
+    install -Dm755 "$srcdir/Zethropol-OS/services/performance/target/release/performance"         "$pkgdir/usr/lib/zethropol/zethropol-performance"
+
+    install -Dm644 "$srcdir/Zethropol-OS/services/performance/deployment/dbus/org.zethropol.Performance.conf"         "$pkgdir/etc/dbus-1/system.d/org.zethropol.Performance.conf"
+
+    install -Dm644 "$srcdir/Zethropol-OS/services/performance/deployment/dbus/org.zethropol.Performance.service"         "$pkgdir/usr/share/dbus-1/system-services/org.zethropol.Performance.service"
+
+    install -Dm644 "$srcdir/Zethropol-OS/services/performance/deployment/systemd/zethropol-performance.service"         "$pkgdir/usr/lib/systemd/system/zethropol-performance.service"
+}
