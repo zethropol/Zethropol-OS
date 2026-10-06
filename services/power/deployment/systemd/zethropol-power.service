@@ -1,0 +1,13 @@
+[Unit]
+Description=Zethropol Power D-Bus Service
+After=dbus.socket
+BindsTo=dbus.socket
+
+[Service]
+Type=dbus
+BusName=org.zethropol.Power
+ExecStart=/usr/lib/zethropol/zethropol-power
+Restart=on-failure
+RestartSec=2s
+PrivateTmp=true
+ProtectSystem=full
