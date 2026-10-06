@@ -1,0 +1,29 @@
+pkgname=zethropol-security
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Zethropol Security D-Bus service"
+url="https://github.com/zethropol/Zethropol-OS"
+arch=("x86_64")
+license=("MIT")
+depends=("glibc" "dbus" "systemd" "polkit")
+makedepends=("cargo")
+
+_commit=a809b71e100b8f54252c6b3232afa6a70f00a81a
+
+source=("git+https://github.com/zethropol/Zethropol-OS.git#commit=a809b71e100b8f54252c6b3232afa6a70f00a81a")
+sha256sums=("SKIP")
+
+build() {
+    cd "$srcdir/Zethropol-OS/services/security"
+    cargo build --release --locked
+}
+
+package() {
+    cd "$srcdir/Zethropol-OS/services/security"
+
+    install -Dm755 target/release/security "$pkgdir/usr/lib/zethropol/zethropol-security"
+    install -Dm644 deployment/dbus/org.zethropol.Security.conf "$pkgdir/etc/dbus-1/system.d/org.zethropol.Security.conf"
+    install -Dm644 deployment/dbus/org.zethropol.Security.service "$pkgdir/usr/share/dbus-1/system-services/org.zethropol.Security.service"
+    install -Dm644 deployment/systemd/zethropol-security.service "$pkgdir/usr/lib/systemd/system/zethropol-security.service"
+    install -Dm644 deployment/polkit/org.zethropol.security.policy "$pkgdir/usr/share/polkit-1/actions/org.zethropol.security.policy"
+}
