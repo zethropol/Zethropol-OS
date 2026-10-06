@@ -1,0 +1,3 @@
+[D-BUS Service]
+Name=org.zethropol.Security
+SystemdService=zethropol-security.service

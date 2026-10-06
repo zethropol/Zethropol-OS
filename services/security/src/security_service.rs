@@ -99,22 +99,70 @@ impl SecurityService {
         Ok(self.collect_security_state())
     }
 
-    async fn toggle_firewall(&self, #[zbus(header)] _header: zbus::message::Header<'_>, enable: bool) -> Result<OperationResult, zbus::fdo::Error> {
+    async fn toggle_firewall(&self, #[zbus(header)] header: zbus::message::Header<'_>, enable: bool) -> Result<OperationResult, zbus::fdo::Error> {
         let operation_id = uuid::Uuid::new_v4().to_string();
         let action = if enable { "enable" } else { "disable" };
 
-        // Zethropol privileged komut çalıştırma sınırı
-        let _status = Command::new("ufw")
-            .arg(action)
+        let sender = match header.sender() {
+            Some(sender) => sender,
+            None => {
+                return Ok(OperationResult {
+                    success: false,
+                    code: "invalid-caller".to_string(),
+                    message: "D-Bus caller identity is unavailable.".to_string(),
+                    operation_id,
+                    data: HashMap::new(),
+                });
+            }
+        };
+
+        let sender_name = sender.to_string();
+        let polkit_status = Command::new("pkcheck")
+            .args([
+                "--action-id",
+                "org.zethropol.security.modify",
+                "--system-bus-name",
+                &sender_name,
+                "--allow-user-interaction",
+            ])
             .status();
 
-        Ok(OperationResult {
-            success: true,
-            code: "ok".to_string(),
-            message: format!("Firewall {} operation executed.", action),
-            operation_id,
-            data: HashMap::new(),
-        })
+        match polkit_status {
+            Ok(status) if status.success() => {}
+            _ => {
+                return Ok(OperationResult {
+                    success: false,
+                    code: "permission-denied".to_string(),
+                    message: "Polkit authentication required or denied.".to_string(),
+                    operation_id,
+                    data: HashMap::new(),
+                });
+            }
+        }
+
+        match Command::new("ufw").arg(action).status() {
+            Ok(status) if status.success() => Ok(OperationResult {
+                success: true,
+                code: "ok".to_string(),
+                message: format!("Firewall {} operation completed.", action),
+                operation_id,
+                data: HashMap::new(),
+            }),
+            Ok(_) => Ok(OperationResult {
+                success: false,
+                code: "operation-failed".to_string(),
+                message: format!("Firewall {} operation failed.", action),
+                operation_id,
+                data: HashMap::new(),
+            }),
+            Err(error) => Ok(OperationResult {
+                success: false,
+                code: "execution-failed".to_string(),
+                message: format!("Failed to execute ufw: {}", error),
+                operation_id,
+                data: HashMap::new(),
+            }),
+        }
     }
 
     #[zbus(signal)]

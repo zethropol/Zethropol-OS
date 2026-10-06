@@ -1,0 +1,13 @@
+[Unit]
+Description=Zethropol Security D-Bus Service
+After=dbus.socket
+BindsTo=dbus.socket
+
+[Service]
+Type=dbus
+BusName=org.zethropol.Security
+ExecStart=/usr/lib/zethropol/zethropol-security
+Restart=on-failure
+RestartSec=2s
+PrivateTmp=true
+ProtectSystem=full
