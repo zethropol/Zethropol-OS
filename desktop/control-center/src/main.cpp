@@ -10,6 +10,8 @@
 #include "ServiceService.h"
 #include "ApplicationService.h"
 #include "NotificationService.h"
+#include "core/zethropol_power_client.h"
+#include "core/zethropol_monitoring_client.h"
 
 int main(int argc, char *argv[])
 {
@@ -22,6 +24,8 @@ int main(int argc, char *argv[])
     ServiceService serviceService;
     ApplicationService applicationService;
     NotificationService notificationService;
+    ZethropolPowerClient powerClient;
+    ZethropolMonitoringClient monitoringClient;
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("HardwareBridge"), &hardwareServiceClient);
     engine.rootContext()->setContextProperty(QStringLiteral("UpdateBridge"), &updateService);
@@ -30,8 +34,10 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("ServiceBridge"), &serviceService);
     engine.rootContext()->setContextProperty(QStringLiteral("ApplicationBridge"), &applicationService);
     engine.rootContext()->setContextProperty(QStringLiteral("NotificationBridge"), &notificationService);
+    engine.rootContext()->setContextProperty(QStringLiteral("PowerBridge"), &powerClient);
+    engine.rootContext()->setContextProperty(QStringLiteral("MonitoringBridge"), &monitoringClient);
 
-    const QUrl url(QStringLiteral("qrc:/qt/qml/Zethropol/ControlCenter/qml/Main.qml"));
+    const QUrl url(QStringLiteral("qrc:/Zethropol/ControlCenter/qml/Main.qml"));
 
     QObject::connect(
         &engine,

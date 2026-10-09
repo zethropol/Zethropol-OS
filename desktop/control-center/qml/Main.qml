@@ -1142,20 +1142,20 @@ ApplicationWindow {
 
                                         Label { text: "CPU"; font.pixelSize: 20 }
                                         Label {
-                                            text: HardwareBridge.performance.cpu_usage_percent !== undefined
-                                                  ? "Usage: " + Number(HardwareBridge.performance.cpu_usage_percent).toFixed(1) + "%"
+                                            text: MonitoringBridge.state.cpu_usage_percent !== undefined
+                                                  ? "Usage: " + Number(MonitoringBridge.state.cpu_usage_percent).toFixed(1) + "%"
                                                   : "Usage: Unknown"
                                             font.pixelSize: 16
                                         }
                                         Label {
-                                            text: HardwareBridge.performance.cpu_temperature_c !== null && HardwareBridge.performance.cpu_temperature_c !== undefined
-                                                  ? "Temperature: " + Number(HardwareBridge.performance.cpu_temperature_c).toFixed(1) + " °C"
+                                            text: MonitoringBridge.state.cpu_temperature_c !== null && MonitoringBridge.state.cpu_temperature_c !== undefined
+                                                  ? "Temperature: " + Number(MonitoringBridge.state.cpu_temperature_c).toFixed(1) + " °C"
                                                   : "Temperature: Unknown"
                                             opacity: 0.65
                                         }
                                         Label {
-                                            text: HardwareBridge.performance.cpu_frequency_ghz !== null && HardwareBridge.performance.cpu_frequency_ghz !== undefined
-                                                  ? "Frequency: " + Number(HardwareBridge.performance.cpu_frequency_ghz).toFixed(2) + " GHz"
+                                            text: MonitoringBridge.state.cpu_frequency_ghz !== null && MonitoringBridge.state.cpu_frequency_ghz !== undefined
+                                                  ? "Frequency: " + Number(MonitoringBridge.state.cpu_frequency_ghz).toFixed(2) + " GHz"
                                                   : "Frequency: Unknown"
                                             opacity: 0.65
                                         }
@@ -1175,20 +1175,20 @@ ApplicationWindow {
 
                                         Label { text: "GPU"; font.pixelSize: 20 }
                                         Label {
-                                            text: HardwareBridge.performance.gpu_usage_percent !== null && HardwareBridge.performance.gpu_usage_percent !== undefined
-                                                  ? "Usage: " + Number(HardwareBridge.performance.gpu_usage_percent).toFixed(1) + "%"
+                                            text: MonitoringBridge.state.gpu_usage_percent !== null && MonitoringBridge.state.gpu_usage_percent !== undefined
+                                                  ? "Usage: " + Number(MonitoringBridge.state.gpu_usage_percent).toFixed(1) + "%"
                                                   : "Usage: Unknown"
                                             font.pixelSize: 16
                                         }
                                         Label {
-                                            text: HardwareBridge.performance.gpu_temperature_c !== null && HardwareBridge.performance.gpu_temperature_c !== undefined
-                                                  ? "Temperature: " + Number(HardwareBridge.performance.gpu_temperature_c).toFixed(1) + " °C"
+                                            text: MonitoringBridge.state.gpu_temperature_c !== null && MonitoringBridge.state.gpu_temperature_c !== undefined
+                                                  ? "Temperature: " + Number(MonitoringBridge.state.gpu_temperature_c).toFixed(1) + " °C"
                                                   : "Temperature: Unknown"
                                             opacity: 0.65
                                         }
                                         Label {
-                                            text: HardwareBridge.performance.gpu_vram_used_gb !== null && HardwareBridge.performance.gpu_vram_total_gb !== null
-                                                  ? "VRAM: " + Number(HardwareBridge.performance.gpu_vram_used_gb).toFixed(2) + " / " + Number(HardwareBridge.performance.gpu_vram_total_gb).toFixed(2) + " GB"
+                                            text: MonitoringBridge.state.gpu_vram_used_gb !== null && MonitoringBridge.state.gpu_vram_total_gb !== null
+                                                  ? "VRAM: " + Number(MonitoringBridge.state.gpu_vram_used_gb).toFixed(2) + " / " + Number(MonitoringBridge.state.gpu_vram_total_gb).toFixed(2) + " GB"
                                                   : "VRAM: Unknown"
                                             opacity: 0.65
                                         }
@@ -1208,8 +1208,8 @@ ApplicationWindow {
 
                                         Label { text: "Memory"; font.pixelSize: 20 }
                                         Label {
-                                            text: HardwareBridge.performance.memory_used_gb !== undefined && HardwareBridge.performance.memory_total_gb !== undefined
-                                                  ? "Usage: " + Number(HardwareBridge.performance.memory_used_gb).toFixed(2) + " / " + Number(HardwareBridge.performance.memory_total_gb).toFixed(2) + " GB"
+                                            text: MonitoringBridge.state.memory_used_gb !== undefined && MonitoringBridge.state.memory_total_gb !== undefined
+                                                  ? "Usage: " + Number(MonitoringBridge.state.memory_used_gb).toFixed(2) + " / " + Number(MonitoringBridge.state.memory_total_gb).toFixed(2) + " GB"
                                                   : "Usage: Unknown"
                                             font.pixelSize: 16
                                         }
@@ -1229,14 +1229,14 @@ ApplicationWindow {
 
                                         Label { text: "Storage"; font.pixelSize: 20 }
                                         Label {
-                                            text: HardwareBridge.performance.storage_used_gb !== null && HardwareBridge.performance.storage_capacity_gb !== null
-                                                  ? "Usage: " + Number(HardwareBridge.performance.storage_used_gb).toFixed(1) + " / " + Number(HardwareBridge.performance.storage_capacity_gb).toFixed(1) + " GB"
+                                            text: MonitoringBridge.state.storage_used_gb !== null && MonitoringBridge.state.storage_capacity_gb !== null
+                                                  ? "Usage: " + Number(MonitoringBridge.state.storage_used_gb).toFixed(1) + " / " + Number(MonitoringBridge.state.storage_capacity_gb).toFixed(1) + " GB"
                                                   : "Usage: Unknown"
                                             font.pixelSize: 16
                                         }
                                         Label {
-                                            text: HardwareBridge.performance.storage_temperature_c !== null && HardwareBridge.performance.storage_temperature_c !== undefined
-                                                  ? "Temperature: " + Number(HardwareBridge.performance.storage_temperature_c).toFixed(1) + " °C"
+                                            text: MonitoringBridge.state.storage_temperature_c !== null && MonitoringBridge.state.storage_temperature_c !== undefined
+                                                  ? "Temperature: " + Number(MonitoringBridge.state.storage_temperature_c).toFixed(1) + " °C"
                                                   : "Temperature: Unknown"
                                             opacity: 0.65
                                         }
@@ -1256,16 +1256,16 @@ ApplicationWindow {
 
                                         Label { text: "Network"; font.pixelSize: 20 }
                                         Label {
-                                            text: "Download: " + Number(HardwareBridge.performance.network_download_mbps || 0).toFixed(2) + " Mbps"
+                                            text: "Download: " + Number(MonitoringBridge.state.network_download_mbps || 0).toFixed(2) + " Mbps"
                                             font.pixelSize: 16
                                         }
                                         Label {
-                                            text: "Upload: " + Number(HardwareBridge.performance.network_upload_mbps || 0).toFixed(2) + " Mbps"
+                                            text: "Upload: " + Number(MonitoringBridge.state.network_upload_mbps || 0).toFixed(2) + " Mbps"
                                             opacity: 0.65
                                         }
                                         Label {
-                                            text: HardwareBridge.performance.network_ping_ms !== null && HardwareBridge.performance.network_ping_ms !== undefined
-                                                  ? "Ping: " + Number(HardwareBridge.performance.network_ping_ms).toFixed(1) + " ms"
+                                            text: MonitoringBridge.state.network_ping_ms !== null && MonitoringBridge.state.network_ping_ms !== undefined
+                                                  ? "Ping: " + Number(MonitoringBridge.state.network_ping_ms).toFixed(1) + " ms"
                                                   : "Ping: Unknown"
                                             opacity: 0.65
                                         }
@@ -1308,12 +1308,12 @@ ApplicationWindow {
                                         }
 
                                         Label {
-                                            text: SystemState.powerAvailability
+                                            text: PowerBridge.state.available === true ? "Available" : (PowerBridge.state.available === false ? "Unavailable" : "Unknown")
                                             font.pixelSize: 20
                                         }
 
                                         Label {
-                                            text: SystemState.powerSource
+                                            text: PowerBridge.state.battery_present === true ? "Battery" : (PowerBridge.state.available === true ? "No battery detected" : "Unknown")
                                             opacity: 0.7
                                         }
                                     }
@@ -1335,12 +1335,12 @@ ApplicationWindow {
                                         }
 
                                         Label {
-                                            text: SystemState.batteryLevel
+                                            text: PowerBridge.state.battery_percent !== undefined && PowerBridge.state.battery_percent !== null ? Number(PowerBridge.state.battery_percent).toFixed(1) + "%" : "N/A"
                                             font.pixelSize: 20
                                         }
 
                                         Label {
-                                            text: SystemState.batteryStatus + " · " + SystemState.chargingStatus
+                                            text: (PowerBridge.state.battery_status || "N/A") + " · " + (PowerBridge.state.charging === true ? "Charging" : (PowerBridge.state.charging === false ? "Not charging" : "N/A"))
                                             opacity: 0.7
                                         }
                                     }
@@ -1362,7 +1362,7 @@ ApplicationWindow {
                                         }
 
                                         Label {
-                                            text: SystemState.powerUsage
+                                            text: PowerBridge.state.power_w !== undefined && PowerBridge.state.power_w !== null ? Number(PowerBridge.state.power_w).toFixed(2) + " W" : "N/A"
                                             font.pixelSize: 20
                                         }
 
@@ -1389,12 +1389,12 @@ ApplicationWindow {
                                         }
 
                                         Label {
-                                            text: SystemState.powerGovernor
+                                            text: PowerBridge.state.governor || "Not available"
                                             font.pixelSize: 20
                                         }
 
                                         Label {
-                                            text: "Profile: " + SystemState.powerProfile
+                                            text: "Profile: " + (PowerBridge.state.profile || "Not available")
                                             opacity: 0.7
                                         }
                                     }
