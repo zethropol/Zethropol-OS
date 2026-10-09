@@ -1,0 +1,17 @@
+pkgbase = zethropol-power
+	pkgdesc = Zethropol Power D-Bus service
+	pkgver = 0.1.0
+	pkgrel = 1
+	url = https://github.com/zethropol/Zethropol-OS
+	arch = x86_64
+	license = MIT
+	makedepends = cargo
+	depends = glibc
+	depends = dbus
+	depends = systemd
+	depends = polkit
+	depends = power-profiles-daemon
+	source = Zethropol-OS::git+https://github.com/zethropol/Zethropol-OS.git#commit=7a402f35d84e579873e027a9e3ab03fb929c76e0
+	sha256sums = SKIP
+
+pkgname = zethropol-power
