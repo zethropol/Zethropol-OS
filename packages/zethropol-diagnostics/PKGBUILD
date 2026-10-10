@@ -9,7 +9,7 @@ depends=("glibc" "dbus" "systemd")
 makedepends=("cargo")
 
 # Replace this with the full commit hash after the Diagnostics source is committed and pushed.
-_commit="REPLACE_WITH_COMMIT_HASH"
+_commit="ff86546a897fb80616354bd231d4a7da1e2529ae"
 source=("Zethropol-OS::git+https://github.com/zethropol/Zethropol-OS.git#commit=${_commit}")
 sha256sums=("SKIP")
 

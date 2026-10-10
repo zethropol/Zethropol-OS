@@ -1,0 +1,15 @@
+pkgbase = zethropol-diagnostics
+	pkgdesc = Zethropol Diagnostics D-Bus service
+	pkgver = 0.1.0
+	pkgrel = 1
+	url = https://github.com/zethropol/Zethropol-OS
+	arch = x86_64
+	license = MIT
+	makedepends = cargo
+	depends = glibc
+	depends = dbus
+	depends = systemd
+	source = Zethropol-OS::git+https://github.com/zethropol/Zethropol-OS.git#commit=ff86546a897fb80616354bd231d4a7da1e2529ae
+	sha256sums = SKIP
+
+pkgname = zethropol-diagnostics
