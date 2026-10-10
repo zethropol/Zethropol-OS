@@ -1,0 +1,14 @@
+[Unit]
+Description=Zethropol Diagnostics D-Bus Service
+After=dbus.socket
+BindsTo=dbus.socket
+
+[Service]
+Type=dbus
+BusName=org.zethropol.Diagnostics
+ExecStart=/usr/lib/zethropol/zethropol-diagnostics
+Restart=on-failure
+RestartSec=2s
+PrivateTmp=true
+ProtectSystem=full
+NoNewPrivileges=true
