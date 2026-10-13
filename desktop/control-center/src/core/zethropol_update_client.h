@@ -12,20 +12,25 @@ public:
     explicit ZethropolUpdateClient(QObject *parent = nullptr);
     QVariantMap updateState() const { return m_updateState; }
     QVariantList pendingUpdates() const { return m_pendingUpdates; }
+
 public slots:
     void refreshUpdateState();
     void triggerSystemUpdate();
     void checkOperationStatus(const QString &operationId);
+
 signals:
     void updateStateChanged();
     void pendingUpdatesChanged();
+    void refreshFinished(bool success, const QString &message);
     void operationInitiated(const QString &operationId);
     void operationStatusReceived(const QString &operationId, const QString &status, const QString &message);
     void errorOccurred(const QString &message);
+
 private slots:
-    void handleUpdateSignal(const QVariantMap &newState);
+    void handleUpdateSignal(const QVariant &newState);
+
 private:
-    QDBusInterface *m_interface;
+    QDBusInterface *m_interface = nullptr;
     QVariantMap m_updateState;
     QVariantList m_pendingUpdates;
 };

@@ -1,5 +1,7 @@
 #include "UpdateService.h"
 
+#include "core/zethropol_update_client.h"
+
 #include <QRegularExpression>
 #include <QStringList>
 #include <QStandardPaths>
@@ -7,49 +9,32 @@
 UpdateService::UpdateService(QObject *parent)
     : QObject(parent)
 {
-    connect(&process, &QProcess::finished, this, &UpdateService::readOutput);
-    connect(&cleanupProcess, &QProcess::finished, this, &UpdateService::finishCleanup);
-    connect(&orphanProcess, &QProcess::finished, this, &UpdateService::finishOrphanScan);
-    connect(&aurProcess, &QProcess::finished, this, &UpdateService::finishAurScan);
-    connect(&flatpakProcess, &QProcess::finished, this, &UpdateService::finishFlatpakScan);
-    connect(&aurInstallProcess, &QProcess::finished, this, &UpdateService::finishAurInstall);
-    connect(&flatpakInstallProcess, &QProcess::finished, this, &UpdateService::finishFlatpakInstall);
-    connect(&aurInstallProcess, &QProcess::errorOccurred, this,
-            [this](QProcess::ProcessError error) {
-        Q_UNUSED(error);
+    connect(&m_updateClient, &ZethropolUpdateClient::refreshFinished,
+            this, &UpdateService::finishOfficialScan);
+    connect(&orphanProcess, &QProcess::finished,
+            this, &UpdateService::finishOrphanScan);
+    connect(&aurProcess, &QProcess::finished,
+            this, &UpdateService::finishAurScan);
+    connect(&flatpakProcess, &QProcess::finished,
+            this, &UpdateService::finishFlatpakScan);
 
-        if (m_installing) {
-            m_installing = false;
-            m_failed = true;
-            m_status = QStringLiteral("AUR update process failed: %1")
-                           .arg(aurInstallProcess.errorString());
-            emit stateChanged();
-        }
+    connect(&aurProcess, &QProcess::errorOccurred, this,
+            [this](QProcess::ProcessError error) {
+        if (error == QProcess::FailedToStart && m_checking && !m_installing)
+            handleScanStartFailure(QStringLiteral("AUR scan"), aurProcess.errorString());
     });
-
-    connect(&flatpakInstallProcess, &QProcess::errorOccurred, this,
+    connect(&flatpakProcess, &QProcess::errorOccurred, this,
             [this](QProcess::ProcessError error) {
-        Q_UNUSED(error);
-
-        if (m_installing) {
-            m_installing = false;
-            m_failed = true;
-            m_status = QStringLiteral("Flatpak update process failed: %1")
-                           .arg(flatpakInstallProcess.errorString());
-            emit stateChanged();
-        }
+        if (error == QProcess::FailedToStart && m_checking && !m_installing)
+            handleScanStartFailure(QStringLiteral("Flatpak scan"), flatpakProcess.errorString());
     });
     connect(&orphanProcess, &QProcess::errorOccurred, this,
             [this](QProcess::ProcessError error) {
-        Q_UNUSED(error);
-
-        if (m_installing) {
-            m_installing = false;
-            m_status = QStringLiteral("System update process completed, but orphan package check failed.");
-        }
-
-        emit stateChanged();
+        if (error == QProcess::FailedToStart && m_checking && !m_installing)
+            handleScanStartFailure(QStringLiteral("Orphan package scan"),
+                                   orphanProcess.errorString());
     });
+
     check();
 }
 
@@ -138,10 +123,130 @@ QVariantList UpdateService::flatpakUpdates() const
     return m_flatpakUpdates;
 }
 
+int UpdateService::selectedCount() const
+{
+    int total = 0;
+    const auto countSelected = [](const QVariantList &items) {
+        int count = 0;
+        for (const QVariant &item : items) {
+            if (item.toMap().value(QStringLiteral("selected")).toBool())
+                ++count;
+        }
+        return count;
+    };
+
+    total += countSelected(m_updates);
+    total += countSelected(m_aurUpdates);
+    total += countSelected(m_flatpakUpdates);
+    return total;
+}
+
+QString UpdateService::planPreview() const
+{
+    QStringList lines;
+    lines << QStringLiteral("UPDATE PLAN PREVIEW — NOT APPROVED FOR EXECUTION");
+    lines << QStringLiteral("Selected packages: %1").arg(selectedCount());
+    lines << QString();
+
+    const auto appendSelected = [&lines](
+        const QString &source, const QVariantList &items) {
+        lines << QStringLiteral("[%1]").arg(source);
+        int found = 0;
+        for (const QVariant &item : items) {
+            const QVariantMap package = item.toMap();
+            if (!package.value(QStringLiteral("selected")).toBool())
+                continue;
+            QString entry = package.value(QStringLiteral("name")).toString();
+            const QString current = package.value(QStringLiteral("currentVersion")).toString();
+            const QString next = package.value(QStringLiteral("newVersion")).toString();
+            if (!current.isEmpty() || !next.isEmpty())
+                entry += QStringLiteral("  %1 -> %2").arg(current, next);
+            lines << QStringLiteral("  • %1").arg(entry);
+            ++found;
+        }
+        if (found == 0)
+            lines << QStringLiteral("  No packages selected");
+        lines << QString();
+    };
+
+    appendSelected(QStringLiteral("Official repositories"), m_updates);
+    appendSelected(QStringLiteral("AUR"), m_aurUpdates);
+    appendSelected(QStringLiteral("Flatpak"), m_flatpakUpdates);
+
+    lines << QStringLiteral("SAFETY CHECKS");
+    if (selectedCount() == 0)
+        lines << QStringLiteral("BLOCKED: Select at least one package.");
+
+    bool official = false, aur = false, flatpak = false;
+    for (const QVariant &item : m_updates)
+        official |= item.toMap().value(QStringLiteral("selected")).toBool();
+    for (const QVariant &item : m_aurUpdates)
+        aur |= item.toMap().value(QStringLiteral("selected")).toBool();
+    for (const QVariant &item : m_flatpakUpdates)
+        flatpak |= item.toMap().value(QStringLiteral("selected")).toBool();
+
+    if (official)
+        lines << QStringLiteral("BLOCKED: Official dependency transaction and compatibility plan are unverified; partial upgrades are not permitted.");
+    if (aur)
+        lines << QStringLiteral("BLOCKED: AUR PKGBUILD changes, dependencies, conflicts and build effects are unverified.");
+    if (flatpak)
+        lines << QStringLiteral("BLOCKED: Stable Flatpak refs and runtime/dependency effects are unverified.");
+
+    lines << QString();
+    lines << QStringLiteral("This preview does not resolve dependencies or simulate the package-manager transaction.");
+    lines << QStringLiteral("No packages will be installed. Installation remains disabled.");
+    return lines.join(QStringLiteral("\n"));
+}
+
+void UpdateService::removeOrphans()
+{
+    m_removingOrphans = false;
+    m_failed = true;
+    m_status = QStringLiteral(
+        "Orphan package removal is disabled until transaction preflight is implemented.");
+    m_output = QStringLiteral("No package removal was started.");
+    emit stateChanged();
+}
+
+void UpdateService::install()
+{
+    m_failed = true;
+    m_status = QStringLiteral(
+        "Updates blocked: package selection and transaction preflight are not implemented yet.");
+    m_output = QStringLiteral(
+        "No package changes were started. Dependency, conflict, and compatibility checks are required before execution.");
+    emit stateChanged();
+}
+
+void UpdateService::setPackageSelected(
+    const QString &source, const QString &name, bool selected)
+{
+    QVariantList *items = nullptr;
+
+    if (source == QStringLiteral("official"))
+        items = &m_updates;
+    else if (source == QStringLiteral("aur"))
+        items = &m_aurUpdates;
+    else if (source == QStringLiteral("flatpak"))
+        items = &m_flatpakUpdates;
+    else
+        return;
+
+    for (QVariant &item : *items) {
+        QVariantMap package = item.toMap();
+        if (package.value(QStringLiteral("name")).toString() != name)
+            continue;
+
+        package.insert(QStringLiteral("selected"), selected);
+        item = package;
+        emit stateChanged();
+        return;
+    }
+}
+
 void UpdateService::check()
 {
     if (m_checking ||
-        process.state() != QProcess::NotRunning ||
         orphanProcess.state() != QProcess::NotRunning ||
         aurProcess.state() != QProcess::NotRunning ||
         flatpakProcess.state() != QProcess::NotRunning)
@@ -158,6 +263,8 @@ void UpdateService::check()
     m_aurAvailable = false;
     m_flatpakAvailable = false;
     m_pendingChecks = 2;
+    m_scanErrors.clear();
+    m_scanWarnings.clear();
 
     m_aurHelper.clear();
 
@@ -171,7 +278,6 @@ void UpdateService::check()
         const QString path = QStandardPaths::findExecutable(helper);
         if (!path.isEmpty()) {
             m_aurHelper = path;
-            ++m_pendingChecks;
             break;
         }
     }
@@ -179,306 +285,156 @@ void UpdateService::check()
     const QString flatpakPath =
         QStandardPaths::findExecutable(QStringLiteral("flatpak"));
 
-    if (!flatpakPath.isEmpty())
-        ++m_pendingChecks;
+    if (m_aurHelper.isEmpty())
+        m_scanWarnings.append(QStringLiteral("AUR helper unavailable"));
+    if (flatpakPath.isEmpty())
+        m_scanWarnings.append(QStringLiteral("Flatpak unavailable"));
 
     emit stateChanged();
 
-    process.start(QStringLiteral("/usr/bin/checkupdates"));
+    m_updateClient.refreshUpdateState();
 
     orphanProcess.start(QStringLiteral("/usr/bin/pacman"), {
         QStringLiteral("-Qtdq")
     });
 
     if (!m_aurHelper.isEmpty()) {
+        ++m_pendingChecks;
         aurProcess.start(m_aurHelper, {
             QStringLiteral("-Qua")
         });
     }
 
     if (!flatpakPath.isEmpty()) {
+        ++m_pendingChecks;
         flatpakProcess.start(flatpakPath, {
             QStringLiteral("remote-ls"),
-            QStringLiteral("--updates")
+            QStringLiteral("--updates"),
+            QStringLiteral("--columns=application")
         });
     }
 }
 
-void UpdateService::install()
+void UpdateService::finishOfficialScan(bool success, const QString &message)
 {
-    if (process.state() != QProcess::NotRunning || m_installing)
+    if (!m_checking || m_pendingChecks <= 0)
+        return;
+
+    if (!success) {
+        m_scanErrors.append(
+            QStringLiteral("Official repository scan failed: %1")
+                .arg(message.isEmpty()
+                    ? QStringLiteral("Update D-Bus request failed.")
+                    : message));
+        m_failed = true;
+        m_updates.clear();
+        m_count = 0;
+        m_available = false;
+    } else {
+        const QVariantList pending = m_updateClient.pendingUpdates();
+        QVariantList normalized;
+        normalized.reserve(pending.size());
+
+        for (const QVariant &entry : pending) {
+            const QVariantMap source = entry.toMap();
+            QVariantMap update;
+            update.insert(QStringLiteral("name"),
+                          source.value(QStringLiteral("package_name")));
+            update.insert(QStringLiteral("currentVersion"),
+                          source.value(QStringLiteral("current_version")));
+            update.insert(QStringLiteral("newVersion"),
+                          source.value(QStringLiteral("new_version")));
+            update.insert(QStringLiteral("repository"),
+                          source.value(QStringLiteral("repository")));
+            update.insert(QStringLiteral("download_size"),
+                          source.value(QStringLiteral("download_size")));
+            update.insert(QStringLiteral("selected"), false);
+            normalized.append(update);
+        }
+
+        m_updates = normalized;
+        m_count = m_updates.size();
+        m_available = !m_updates.isEmpty();
+    }
+
+    --m_pendingChecks;
+    finishScanIfComplete();
+    emit stateChanged();
+}
+
+void UpdateService::handleScanStartFailure(
+    const QString &source, const QString &error)
+{
+    if (!m_checking || m_installing || m_pendingChecks <= 0)
+        return;
+
+    m_scanErrors.append(QStringLiteral("%1 could not start: %2")
+                            .arg(source, error));
+    m_failed = true;
+    --m_pendingChecks;
+    finishScanIfComplete();
+    emit stateChanged();
+}
+
+void UpdateService::finishScanIfComplete()
+{
+    if (!m_checking || m_pendingChecks != 0)
         return;
 
     m_checking = false;
-    m_installing = true;
-    m_failed = false;
-    m_status = QStringLiteral("Installing system updates...");
-    m_output.clear();
 
-    emit stateChanged();
-
-    process.setProgram(QStringLiteral("/usr/bin/pkexec"));
-    process.setArguments({
-        QStringLiteral("/usr/bin/pacman"),
-        QStringLiteral("-Syu"),
-        QStringLiteral("--noconfirm")
-    });
-    process.setProcessChannelMode(QProcess::MergedChannels);
-    process.start();
-}
-
-void UpdateService::readOutput()
-{
-    const QString output = QString::fromLocal8Bit(process.readAllStandardOutput());
-
-    if (m_installing) {
-        m_output = output;
-        m_checking = false;
-
-        if (process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0) {
-            m_failed = false;
-            m_available = false;
-            m_count = 0;
-            m_updates.clear();
-            m_status = QStringLiteral("Cleaning package cache...");
-
-            cleanupProcess.setProgram(QStringLiteral("/usr/bin/pkexec"));
-            cleanupProcess.setArguments({
-                QStringLiteral("/bin/sh"),
-                QStringLiteral("-c"),
-                QStringLiteral("/usr/bin/paccache -rk3 && /usr/bin/paccache -ruk0")
-            });
-            cleanupProcess.setProcessChannelMode(QProcess::MergedChannels);
-            cleanupProcess.start();
-        } else {
-            m_installing = false;
-            m_failed = true;
-
-            if (process.exitStatus() != QProcess::NormalExit) {
-                m_status = QStringLiteral("Update process failed: %1")
-                               .arg(process.errorString());
-            } else if (output.contains(QStringLiteral("Authentication cancelled"),
-                                       Qt::CaseInsensitive)) {
-                m_status = QStringLiteral("Authentication was cancelled.");
-            } else if (output.contains(QStringLiteral("Not authorized"),
-                                       Qt::CaseInsensitive)) {
-                m_status = QStringLiteral("Authentication was not authorized.");
-            } else {
-                const QStringList errorLines = output.split(
-                    QRegularExpression(QStringLiteral("[\r\n]+")),
-                    Qt::SkipEmptyParts);
-
-                if (!errorLines.isEmpty()) {
-                    m_status = errorLines.constLast().trimmed();
-                } else {
-                    m_status = QStringLiteral(
-                        "System update failed with exit code %1.")
-                        .arg(process.exitCode());
-                }
-            }
-        }
-
-        emit stateChanged();
-        return;
-    }
-
-    const QStringList lines = output.split(
-        QRegularExpression(QStringLiteral("[\r\n]+")),
-        Qt::SkipEmptyParts);
-
-    QVariantList updates;
-
-    for (const QString &line : lines) {
-        const QStringList fields = line.split(
-            QRegularExpression(QStringLiteral("[[:space:]]+")),
-            Qt::SkipEmptyParts);
-
-        if (fields.size() < 3)
-            continue;
-
-        QVariantMap update;
-        update.insert(QStringLiteral("name"), fields.at(0));
-        update.insert(QStringLiteral("currentVersion"), fields.at(1));
-        update.insert(QStringLiteral("newVersion"), fields.at(2));
-        updates.append(update);
-    }
-
-    m_updates = updates;
-    m_count = updates.size();
-    m_available = m_count > 0;
-
-    if (m_pendingChecks > 0)
-        --m_pendingChecks;
-
-    if (m_pendingChecks == 0) {
-        m_checking = false;
+    if (!m_scanErrors.isEmpty()) {
+        m_failed = true;
+        m_status = QStringLiteral("Update scan incomplete: %1")
+                       .arg(m_scanErrors.join(QStringLiteral("; ")));
+    } else {
         m_failed = false;
         m_status = (m_available || m_aurAvailable || m_flatpakAvailable)
             ? QStringLiteral("Updates are available.")
             : QStringLiteral("System is up to date.");
     }
 
-    emit stateChanged();
-}
+    if (!m_scanWarnings.isEmpty())
+        m_status += QStringLiteral(" Unavailable sources: %1.")
+                        .arg(m_scanWarnings.join(QStringLiteral(", ")));
 
+    if (!m_scanErrors.isEmpty()) {
+        emit operationError(QStringLiteral("Update scan failed"),
+                            m_scanErrors.join(QStringLiteral("\n")));
+    }
+}
 
 void UpdateService::finishOrphanScan()
 {
+    if (!m_checking || m_installing)
+        return;
+
     const QString output =
         QString::fromLocal8Bit(orphanProcess.readAllStandardOutput()).trimmed();
+    const QString error =
+        QString::fromLocal8Bit(orphanProcess.readAllStandardError()).trimmed();
+    const bool normalExit = orphanProcess.exitStatus() == QProcess::NormalExit;
+    const int exitCode = orphanProcess.exitCode();
 
-    m_orphanPackages = output.isEmpty()
-        ? QStringList()
-        : output.split(QRegularExpression(QStringLiteral("[\r\n]+")), Qt::SkipEmptyParts);
-
-    if (!m_installing) {
-        if (m_pendingChecks > 0)
-            --m_pendingChecks;
-
-        if (m_pendingChecks == 0) {
-            m_checking = false;
-            m_failed = false;
-            m_status = (m_available || m_aurAvailable || m_flatpakAvailable)
-                ? QStringLiteral("Updates are available.")
-                : QStringLiteral("System is up to date.");
-        }
-
-        emit stateChanged();
-        return;
-    }
-
-    if (!m_aurUpdates.isEmpty() && !m_aurHelper.isEmpty()) {
-        QStringList packages;
-
-        for (const QVariant &item : m_aurUpdates) {
-            const QVariantMap update = item.toMap();
-            const QString name = update.value(QStringLiteral("name")).toString();
-
-            if (!name.isEmpty())
-                packages.append(name);
-        }
-
-        if (!packages.isEmpty()) {
-            m_status = QStringLiteral("Installing AUR updates...");
-
-            QStringList arguments = {
-                QStringLiteral("-S"),
-                QStringLiteral("--noconfirm")
-            };
-            arguments.append(packages);
-
-            aurInstallProcess.setProgram(m_aurHelper);
-            aurInstallProcess.setArguments(arguments);
-            aurInstallProcess.setProcessChannelMode(QProcess::MergedChannels);
-            aurInstallProcess.start();
-
-            emit stateChanged();
-            return;
-        }
-    }
-
-    if (!m_flatpakUpdates.isEmpty()) {
-        m_status = QStringLiteral("Installing Flatpak updates...");
-
-        flatpakInstallProcess.setProgram(
-            QStandardPaths::findExecutable(QStringLiteral("flatpak")));
-        flatpakInstallProcess.setArguments({
-            QStringLiteral("update"),
-            QStringLiteral("-y")
-        });
-        flatpakInstallProcess.setProcessChannelMode(QProcess::MergedChannels);
-        flatpakInstallProcess.start();
-
-        emit stateChanged();
-        return;
-    }
-
-    m_installing = false;
-    m_status = m_orphanPackages.isEmpty()
-        ? QStringLiteral("All updates installed successfully.")
-        : QStringLiteral("Updates installed. Orphan packages found.");
-
-    emit stateChanged();
-}
-
-void UpdateService::removeOrphans()
-{
-    if (m_removingOrphans || m_orphanPackages.isEmpty())
-        return;
-
-    m_removingOrphans = true;
-    m_status = QStringLiteral("Removing orphan packages...");
-    emit stateChanged();
-
-    auto *process = new QProcess(this);
-
-    connect(process, &QProcess::errorOccurred, this,
-            [this, process](QProcess::ProcessError error) {
-        Q_UNUSED(error);
-        m_removingOrphans = false;
-        m_status = QStringLiteral("Orphan package removal failed.");
-        process->deleteLater();
-        emit stateChanged();
-    });
-
-    connect(process, &QProcess::finished, this,
-            [this, process](int exitCode, QProcess::ExitStatus exitStatus) {
-        if (exitStatus == QProcess::NormalExit && exitCode == 0) {
-            m_orphanPackages.clear();
-            m_status = QStringLiteral("Orphan packages removed successfully.");
-        } else {
-            const QString output =
-                QString::fromLocal8Bit(process->readAllStandardOutput()).trimmed();
-            m_status = !output.isEmpty()
-                ? output
-                : QStringLiteral("Orphan package removal failed.");
-        }
-
-        m_removingOrphans = false;
-        process->deleteLater();
-        emit stateChanged();
-    });
-
-    QStringList arguments = {
-        QStringLiteral("/usr/bin/pacman"),
-        QStringLiteral("-Rns"),
-        QStringLiteral("--noconfirm")
-    };
-    arguments.append(m_orphanPackages);
-
-    process->setProgram(QStringLiteral("/usr/bin/pkexec"));
-    process->setArguments(arguments);
-    process->setProcessChannelMode(QProcess::MergedChannels);
-    process->start();
-}
-
-void UpdateService::finishCleanup()
-{
-    const bool success =
-        cleanupProcess.exitStatus() == QProcess::NormalExit &&
-        cleanupProcess.exitCode() == 0;
-
-    const QString output =
-        QString::fromLocal8Bit(cleanupProcess.readAllStandardOutput()).trimmed();
-
-    if (success) {
-        m_status = QStringLiteral("Checking for orphan packages...");
-
-        if (orphanProcess.state() == QProcess::NotRunning)
-            orphanProcess.start(QStringLiteral("/usr/bin/pacman"), {
-                QStringLiteral("-Qtdq")
-            });
+    // pacman -Qtdq exits with code 1 when no orphan packages match.
+    if (normalExit && (exitCode == 0 || (exitCode == 1 && output.isEmpty()))) {
+        m_orphanPackages = output.isEmpty()
+            ? QStringList()
+            : output.split(QRegularExpression(QStringLiteral("[\r\n]+")),
+                           Qt::SkipEmptyParts);
     } else {
-        m_installing = false;
-
-        if (!output.isEmpty()) {
-            m_status = output;
-        } else {
-            m_status =
-                QStringLiteral("System updates installed, but package cache cleanup failed.");
-        }
+        m_orphanPackages.clear();
+        m_scanErrors.append(QStringLiteral("Orphan package scan failed: %1")
+            .arg(error.isEmpty()
+                ? QStringLiteral("Process exited with code %1.").arg(exitCode)
+                : error));
+        m_failed = true;
     }
 
+    if (m_pendingChecks > 0)
+        --m_pendingChecks;
+
+    finishScanIfComplete();
     emit stateChanged();
 }
 
@@ -486,6 +442,24 @@ void UpdateService::finishAurScan()
 {
     const QString output =
         QString::fromLocal8Bit(aurProcess.readAllStandardOutput()).trimmed();
+
+    if (aurProcess.exitStatus() != QProcess::NormalExit ||
+        aurProcess.exitCode() != 0) {
+        const QString error =
+            QString::fromLocal8Bit(aurProcess.readAllStandardError()).trimmed();
+        m_aurUpdates.clear();
+        m_aurAvailable = false;
+        m_scanErrors.append(QStringLiteral("AUR scan failed: %1")
+            .arg(error.isEmpty()
+                ? QStringLiteral("Process exited with code %1.").arg(aurProcess.exitCode())
+                : error));
+        m_failed = true;
+        if (m_pendingChecks > 0)
+            --m_pendingChecks;
+        finishScanIfComplete();
+        emit stateChanged();
+        return;
+    }
 
     QVariantList updates;
 
@@ -505,6 +479,7 @@ void UpdateService::finishAurScan()
         update.insert(QStringLiteral("name"), fields.at(0));
         update.insert(QStringLiteral("currentVersion"), fields.at(1));
         update.insert(QStringLiteral("newVersion"), fields.at(3));
+        update.insert(QStringLiteral("selected"), false);
         updates.append(update);
     }
 
@@ -514,13 +489,7 @@ void UpdateService::finishAurScan()
     if (m_pendingChecks > 0)
         --m_pendingChecks;
 
-    if (m_pendingChecks == 0) {
-        m_checking = false;
-        m_failed = false;
-        m_status = (m_available || m_aurAvailable || m_flatpakAvailable)
-            ? QStringLiteral("Updates are available.")
-            : QStringLiteral("System is up to date.");
-    }
+    finishScanIfComplete();
 
     emit stateChanged();
 }
@@ -529,6 +498,24 @@ void UpdateService::finishFlatpakScan()
 {
     const QString output =
         QString::fromLocal8Bit(flatpakProcess.readAllStandardOutput()).trimmed();
+
+    if (flatpakProcess.exitStatus() != QProcess::NormalExit ||
+        flatpakProcess.exitCode() != 0) {
+        const QString error =
+            QString::fromLocal8Bit(flatpakProcess.readAllStandardError()).trimmed();
+        m_flatpakUpdates.clear();
+        m_flatpakAvailable = false;
+        m_scanErrors.append(QStringLiteral("Flatpak scan failed: %1")
+            .arg(error.isEmpty()
+                ? QStringLiteral("Process exited with code %1.").arg(flatpakProcess.exitCode())
+                : error));
+        m_failed = true;
+        if (m_pendingChecks > 0)
+            --m_pendingChecks;
+        finishScanIfComplete();
+        emit stateChanged();
+        return;
+    }
 
     QVariantList updates;
 
@@ -539,6 +526,7 @@ void UpdateService::finishFlatpakScan()
     for (const QString &line : lines) {
         QVariantMap update;
         update.insert(QStringLiteral("name"), line.trimmed());
+        update.insert(QStringLiteral("selected"), false);
         updates.append(update);
     }
 
@@ -548,85 +536,7 @@ void UpdateService::finishFlatpakScan()
     if (m_pendingChecks > 0)
         --m_pendingChecks;
 
-    if (m_pendingChecks == 0) {
-        m_checking = false;
-        m_failed = false;
-        m_status = (m_available || m_aurAvailable || m_flatpakAvailable)
-            ? QStringLiteral("Updates are available.")
-            : QStringLiteral("System is up to date.");
-    }
-
-    emit stateChanged();
-}
-
-void UpdateService::finishAurInstall()
-{
-    const bool success =
-        aurInstallProcess.exitStatus() == QProcess::NormalExit &&
-        aurInstallProcess.exitCode() == 0;
-
-    const QString output =
-        QString::fromLocal8Bit(aurInstallProcess.readAllStandardOutput()).trimmed();
-
-    if (!success) {
-        m_installing = false;
-        m_failed = true;
-        m_output = output;
-        m_status = !output.isEmpty()
-            ? QStringLiteral("AUR update failed: %1").arg(output)
-            : QStringLiteral("AUR update failed.");
-        emit stateChanged();
-        return;
-    }
-
-    m_aurAvailable = false;
-    m_aurUpdates.clear();
-
-    if (!m_flatpakUpdates.isEmpty()) {
-        m_status = QStringLiteral("Installing Flatpak updates...");
-
-        flatpakInstallProcess.setProgram(
-            QStandardPaths::findExecutable(QStringLiteral("flatpak")));
-        flatpakInstallProcess.setArguments({
-            QStringLiteral("update"),
-            QStringLiteral("-y")
-        });
-        flatpakInstallProcess.setProcessChannelMode(QProcess::MergedChannels);
-        flatpakInstallProcess.start();
-    } else {
-        m_installing = false;
-        m_status = m_orphanPackages.isEmpty()
-            ? QStringLiteral("All updates installed successfully.")
-            : QStringLiteral("Updates installed. Orphan packages found.");
-    }
-
-    emit stateChanged();
-}
-
-void UpdateService::finishFlatpakInstall()
-{
-    const bool success =
-        flatpakInstallProcess.exitStatus() == QProcess::NormalExit &&
-        flatpakInstallProcess.exitCode() == 0;
-
-    const QString output =
-        QString::fromLocal8Bit(flatpakInstallProcess.readAllStandardOutput()).trimmed();
-
-    m_installing = false;
-
-    if (success) {
-        m_flatpakAvailable = false;
-        m_flatpakUpdates.clear();
-        m_status = m_orphanPackages.isEmpty()
-            ? QStringLiteral("All updates installed successfully.")
-            : QStringLiteral("Updates installed. Orphan packages found.");
-    } else {
-        m_failed = true;
-        m_output = output;
-        m_status = !output.isEmpty()
-            ? QStringLiteral("Flatpak update failed: %1").arg(output)
-            : QStringLiteral("Flatpak update failed.");
-    }
+    finishScanIfComplete();
 
     emit stateChanged();
 }

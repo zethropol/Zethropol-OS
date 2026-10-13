@@ -5,6 +5,7 @@ import QtQuick.Controls.Material
 import Zethropol.ControlCenter
 
 ApplicationWindow {
+    id: rootWindow
     QtObject {
         id: notificationState
 
@@ -94,6 +95,52 @@ ApplicationWindow {
                 )
             }
             notificationState.previousFailedServices = current
+        }
+    }
+
+    Connections {
+        target: UpdateBridge
+
+        function onOperationError(title, details) {
+            updateErrorDialog.title = title
+            updateErrorDetails.text = details
+            updateErrorDialog.open()
+        }
+    }
+
+    Dialog {
+        id: updateErrorDialog
+        title: "Update Error"
+        modal: true
+        standardButtons: Dialog.Close
+        width: Math.min(760, rootWindow.width - 48)
+        height: Math.min(620, rootWindow.height - 48)
+
+        contentItem: ColumnLayout {
+            spacing: 10
+
+            Label {
+                text: "The update scan could not complete. Review the error source and details below."
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+
+            ScrollView {
+                id: updateErrorScroll
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+
+                TextArea {
+                    id: updateErrorDetails
+                    width: updateErrorScroll.availableWidth
+                    readOnly: true
+                    selectByMouse: true
+                    wrapMode: TextEdit.Wrap
+                    textFormat: TextEdit.PlainText
+                    implicitHeight: Math.max(220, contentHeight + 24)
+                }
+            }
         }
     }
 
@@ -1420,6 +1467,11 @@ ApplicationWindow {
                                     font.pixelSize: 28
                                 }
 
+                                Label {
+                                    text: UpdateBridge.selectedCount + " package(s) selected"
+                                    opacity: 0.75
+                                }
+
                                 Item {
                                     Layout.fillWidth: true
                                 }
@@ -1431,9 +1483,31 @@ ApplicationWindow {
                                 }
 
                                 Button {
-                                    text: UpdateBridge.installing ? "Installing..." : "Install Updates"
-                                    enabled: UpdateBridge.available && !UpdateBridge.checking && !UpdateBridge.installing
+                                    text: "Install Updates (preflight required)"
+                                    enabled: false
                                     onClicked: UpdateBridge.install()
+                                }
+
+                                Button {
+                                    text: "Preview Plan"
+                                    enabled: !UpdateBridge.checking && !UpdateBridge.installing
+                                    onClicked: updatePlanDialog.open()
+                                }
+
+                                Dialog {
+                                    id: updatePlanDialog
+                                    title: "Update Transaction Plan"
+                                    modal: true
+                                    standardButtons: Dialog.Close
+                                    width: Math.min(680, 640)
+
+                                    contentItem: TextArea {
+                                        readOnly: true
+                                        wrapMode: TextEdit.Wrap
+                                        text: UpdateBridge.planPreview
+                                        implicitWidth: 600
+                                        implicitHeight: 340
+                                    }
                                 }
                             }
 
@@ -1515,9 +1589,11 @@ ApplicationWindow {
                                         model: UpdateBridge.aurUpdates
                                         interactive: false
 
-                                        delegate: Label {
+                                        delegate: CheckBox {
+                                            checked: modelData.selected
                                             text: modelData.name + "  " + modelData.currentVersion
                                                   + " → " + modelData.newVersion
+                                            onToggled: UpdateBridge.setPackageSelected("aur", modelData.name, checked)
                                             opacity: 0.8
                                         }
                                     }
@@ -1561,8 +1637,10 @@ ApplicationWindow {
                                         model: UpdateBridge.flatpakUpdates
                                         interactive: false
 
-                                        delegate: Label {
+                                        delegate: CheckBox {
+                                            checked: modelData.selected
                                             text: modelData.name
+                                            onToggled: UpdateBridge.setPackageSelected("flatpak", modelData.name, checked)
                                             opacity: 0.8
                                         }
                                     }
@@ -1632,9 +1710,11 @@ ApplicationWindow {
                                             Layout.fillWidth: true
                                             spacing: 3
 
-                                            Label {
+                                            CheckBox {
+                                                checked: modelData.selected
                                                 text: modelData.name
                                                 font.bold: true
+                                                onToggled: UpdateBridge.setPackageSelected("official", modelData.name, checked)
                                             }
 
                                             Label {
@@ -1655,9 +1735,6 @@ ApplicationWindow {
                                 }
                             }
 
-                            Item {
-                                Layout.fillHeight: true
-                            }
                         }
                     }
 

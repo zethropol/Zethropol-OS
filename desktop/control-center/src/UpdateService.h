@@ -5,6 +5,7 @@
 #include <QVariantList>
 #include <QStringList>
 #include <QString>
+#include "core/zethropol_update_client.h"
 
 class UpdateService : public QObject
 {
@@ -26,6 +27,8 @@ class UpdateService : public QObject
     Q_PROPERTY(int flatpakCount READ flatpakCount NOTIFY stateChanged)
     Q_PROPERTY(QVariantList aurUpdates READ aurUpdates NOTIFY stateChanged)
     Q_PROPERTY(QVariantList flatpakUpdates READ flatpakUpdates NOTIFY stateChanged)
+    Q_PROPERTY(int selectedCount READ selectedCount NOTIFY stateChanged)
+    Q_PROPERTY(QString planPreview READ planPreview NOTIFY stateChanged)
 
 public:
     explicit UpdateService(QObject *parent = nullptr);
@@ -47,6 +50,11 @@ public:
     int flatpakCount() const;
     QVariantList aurUpdates() const;
     QVariantList flatpakUpdates() const;
+    int selectedCount() const;
+    QString planPreview() const;
+
+    Q_INVOKABLE void setPackageSelected(
+        const QString &source, const QString &name, bool selected);
 
 public slots:
     void check();
@@ -55,24 +63,19 @@ public slots:
 
 signals:
     void stateChanged();
+    void operationError(const QString &title, const QString &details);
 
 private slots:
-    void readOutput();
-    void finishCleanup();
+    void finishOfficialScan(bool success, const QString &message);
     void finishOrphanScan();
     void finishAurScan();
     void finishFlatpakScan();
-    void finishAurInstall();
-    void finishFlatpakInstall();
 
 private:
-    QProcess process;
-    QProcess cleanupProcess;
+    ZethropolUpdateClient m_updateClient;
     QProcess orphanProcess;
     QProcess aurProcess;
     QProcess flatpakProcess;
-    QProcess aurInstallProcess;
-    QProcess flatpakInstallProcess;
     bool m_checking = false;
     bool m_installing = false;
     bool m_removingOrphans = false;
@@ -89,4 +92,8 @@ private:
     QVariantList m_flatpakUpdates;
     QString m_aurHelper;
     int m_pendingChecks = 0;
+    QStringList m_scanErrors;
+    QStringList m_scanWarnings;
+    void handleScanStartFailure(const QString &source, const QString &error);
+    void finishScanIfComplete();
 };

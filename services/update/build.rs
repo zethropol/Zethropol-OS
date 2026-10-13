@@ -3,7 +3,6 @@ fn main() {
 use std::collections::HashMap;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
-use tokio::time::{sleep, Duration};
 use zbus::interface;
 
 #[derive(Debug, Clone)]
@@ -79,44 +78,11 @@ impl UpdateManager {
     }
 
     async fn trigger_update(&self, #[zbus(header)] _header: zbus::message::Header<'_>) -> Result<OperationResult, zbus::fdo::Error> {
-        let operation_id = uuid::Uuid::new_v4().to_string();
-
-        {
-            let mut ops = self.operations.lock().unwrap();
-            ops.insert(operation_id.clone(), OpState {
-                status: "running".to_string(),
-                message: "System upgrade sequence initiated (pacman -Syu)...".to_string(),
-            });
-        }
-
-        let ops_clone = Arc::clone(&self.operations);
-        let op_id_clone = operation_id.clone();
-
-        tokio::spawn(async move {
-            let status = Command::new("pacman")
-                .args(&["-Syu", "--noconfirm"])
-                .status();
-
-            let mut ops = ops_clone.lock().unwrap();
-            if let Some(state) = ops.get_mut(&op_id_clone) {
-                match status {
-                    Ok(s) if s.success() => {
-                        state.status = "ok".to_string();
-                        state.message = "System successfully updated to latest packages.".to_string();
-                    },
-                    _ => {
-                        state.status = "failed".to_string();
-                        state.message = "Pacman update execution failed or lock encountered.".to_string();
-                    }
-                }
-            }
-        });
-
         Ok(OperationResult {
-            success: true,
-            code: "ok".to_string(),
-            message: "System update execution started successfully.".to_string(),
-            operation_id,
+            success: false,
+            code: "preflight_required".to_string(),
+            message: "System updates are disabled until transaction planning, dependency/conflict validation, and authorization are implemented.".to_string(),
+            operation_id: String::new(),
             data: HashMap::new(),
         })
     }
