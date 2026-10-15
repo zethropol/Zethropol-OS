@@ -1,0 +1,22 @@
+[Unit]
+Description=Zethropol OS Update D-Bus Service
+After=dbus.socket network-online.target
+BindsTo=dbus.socket
+
+[Service]
+Type=dbus
+BusName=org.zethropol.Update
+ExecStart=/usr/lib/zethropol/zethropol-update
+Restart=on-failure
+RestartSec=2s
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+NoNewPrivileges=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6

@@ -1,0 +1,5 @@
+[D-BUS Service]
+Name=org.zethropol.Update
+Exec=/usr/lib/zethropol/zethropol-update
+User=root
+SystemdService=zethropol-update.service
