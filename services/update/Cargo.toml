@@ -8,3 +8,4 @@ zbus = { version = "5", features = ["tokio"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 uuid = { version = "1", features = ["v4"] }
+alpm = "5.0.2"

@@ -1,6 +1,6 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use zbus::zvariant::{Type, OwnedValue};
+use zbus::zvariant::{OwnedValue, Type};
 
 #[derive(Serialize, Deserialize, Type, Debug, Clone)]
 pub struct UpdatePackageInfo {
