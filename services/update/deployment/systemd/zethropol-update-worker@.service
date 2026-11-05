@@ -1,0 +1,35 @@
+[Unit]
+Description=Zethropol OS update worker for operation %i
+After=network-online.target
+
+[Service]
+Type=exec
+User=root
+Group=root
+ExecStart=/usr/lib/zethropol/zethropol-update --worker %i
+ExecStopPost=/usr/lib/zethropol/zethropol-update --worker-stopped %i
+Restart=no
+KillMode=control-group
+TimeoutStopSec=30s
+StandardInput=null
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=yes
+PrivateTmp=yes
+# Trusted package payloads and hooks are a privileged system transaction.
+# A finite path allowlist cannot cover general Arch/CachyOS upgrades.
+ProtectSystem=no
+ReadWritePaths=
+# Only this worker suppresses the supported root-only snap-pac chain, after
+# verifying its policy. Zethropol's mandatory pre/post snapshots remain enabled.
+Environment=SNAP_PAC_SKIP=1
+ProtectHome=yes
+# sysctl/binfmt and EFI hooks require their normal kernel interfaces.
+ProtectKernelTunables=no
+ProtectControlGroups=yes
+PrivateDevices=no
+ProtectKernelModules=no
+RestrictSUIDSGID=no
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+TimeoutStartSec=infinity
