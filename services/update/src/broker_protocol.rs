@@ -2938,6 +2938,29 @@ mod tests {
 
     #[test]
     fn duplicate_worker_lease_cannot_publish_failure_or_touch_plan() {
+        // Concurrent tests spawn processes. fork briefly inherits other
+        // threads' open descriptions before CLOEXEC, so dropping a File in
+        // this process alone need not release its flock immediately. Exercise
+        // the exact same assertions in a single-test process; do not add
+        // retries, sleeps or weaker production lease semantics.
+        if std::env::var_os("ZETHROPOL_LEASE_ISOLATED_CHILD").is_none() {
+            let result = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "broker_protocol::tests::duplicate_worker_lease_cannot_publish_failure_or_touch_plan",
+                    "--test-threads=1",
+                ])
+                .env("ZETHROPOL_LEASE_ISOLATED_CHILD", "1")
+                .output()
+                .unwrap();
+            assert!(
+                result.status.success(),
+                "{} {}",
+                String::from_utf8_lossy(&result.stdout),
+                String::from_utf8_lossy(&result.stderr)
+            );
+            return;
+        }
         let (_temp, store) = TempStore::new();
         let owner = identity(1000, "session-a");
         make_preview(&store, &owner);

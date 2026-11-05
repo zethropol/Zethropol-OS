@@ -297,6 +297,61 @@ fn aur_native_locked_fixture_plan_keeps_lock_and_detects_archive_drift() {
     assert!(!env.db.join("db.lck").exists());
 }
 #[test]
+fn aur_native_downgrade_including_epoch_is_rejected_before_claim() {
+    for installed in ["3-1", "1:1-1"] {
+        let f = Fixture::new();
+        let env = AlpmFixture::new(&f, "", "any");
+        let local = env.db.join(format!("local/aur-fixture-{installed}"));
+        fs::create_dir(&local).unwrap();
+        fs::write(
+            local.join("desc"),
+            format!("%NAME%\naur-fixture\n\n%VERSION%\n{installed}\n\n%ARCH%\nany\n"),
+        )
+        .unwrap();
+        fs::write(local.join("files"), "%FILES%\n").unwrap();
+        let before = aur_database_state_fingerprint(&env.db, "fixture").unwrap();
+        let mut handle = env.handle();
+        let error = prepare_aur_locked_internal(&mut handle, &[env.archive], &"c".repeat(64), true)
+            .err()
+            .unwrap();
+        assert!(error.contains("downgrade refused"), "{error}");
+        assert!(!env.db.join("db.lck").exists());
+        assert_eq!(
+            before,
+            aur_database_state_fingerprint(&env.db, "fixture").unwrap()
+        );
+    }
+}
+
+#[test]
+fn aur_installed_version_readback_reopens_database_and_rejects_drift() {
+    let f = Fixture::new();
+    let env = AlpmFixture::new(&f, "", "any");
+    let handle = env.handle();
+    let expected = plan();
+    assert!(verify_aur_installed_versions(&handle, &expected).is_err());
+    let local = env.db.join("local/aur-fixture-2-1");
+    fs::create_dir(&local).unwrap();
+    let desc = local.join("desc");
+    fs::write(
+        &desc,
+        "%NAME%\naur-fixture\n\n%VERSION%\n2-1\n\n%ARCH%\nany\n",
+    )
+    .unwrap();
+    fs::write(local.join("files"), "%FILES%\n").unwrap();
+    verify_aur_installed_versions(&handle, &expected).unwrap();
+    let changed = env.db.join("local/aur-fixture-3-1");
+    fs::rename(&local, &changed).unwrap();
+    fs::write(
+        changed.join("desc"),
+        "%NAME%\naur-fixture\n\n%VERSION%\n3-1\n\n%ARCH%\nany\n",
+    )
+    .unwrap();
+    assert!(verify_aur_installed_versions(&handle, &expected)
+        .unwrap_err()
+        .contains("version mismatch"));
+}
+#[test]
 fn aur_native_dependency_architecture_lock_and_official_partial_upgrade_are_rejected() {
     for (extra, arch) in [("depend = absent>=1\n", "any"), ("", "aarch64")] {
         let f = Fixture::new();
@@ -769,6 +824,7 @@ fn signed_native_chain(post_fails: bool) {
         b"signed isolated payload\n"
     );
     assert_eq!(view.status, OperationStatus::CompletedWithWarnings);
+    assert!(view.message.contains("installed versions Ok(())"));
     assert!(view.message.contains("No automatic retry"));
     let installed = handle.localdb().pkg("aur-fixture").unwrap();
     assert_eq!(installed.version().as_str(), "2-1");

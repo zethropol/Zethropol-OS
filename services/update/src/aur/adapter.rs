@@ -163,6 +163,21 @@ where
                 &archive.path,
                 &archive.identity,
             )?;
+            match handle.localdb().pkg(pkg.name()) {
+                Ok(installed)
+                    if alpm::vercmp(pkg.version().as_str(), installed.version().as_str())
+                        .is_lt() =>
+                {
+                    return Err(format!(
+                        "AUR downgrade refused: {} {} -> {}",
+                        pkg.name(),
+                        installed.version(),
+                        pkg.version()
+                    ));
+                }
+                Ok(_) | Err(AlpmError::PkgNotFound) => {}
+                Err(error) => return Err(format!("installed AUR metadata unavailable: {error}")),
+            }
             handle
                 .trans_add_pkg(pkg)
                 .map_err(|e| format!("add archive: {e}"))?;
@@ -404,6 +419,13 @@ fn aur_commit_started_with_post(
     store
         .record_execution_evidence(operation, &evidence)
         .map_err(|e| format!("native outcome persistence failed: {e:?}; no retry"))?;
+    // Reopen the local DB rather than trusting a potentially cached package
+    // view or interpreting a native return value as installed-version proof.
+    let installed_versions = if commit_error.is_none() {
+        verify_aur_installed_versions(locked.handle, &locked.plan)
+    } else {
+        Err("version verification unavailable after failed native commit".into())
+    };
     evidence.boot = crate::boot_verifier::verify(locked.handle, locked.plan.packages());
     evidence.boot_preparation = crate::boot_verifier::preparation_state(&evidence.boot);
     let release_error = locked.handle.trans_release().err().map(|e| e.to_string());
@@ -415,12 +437,12 @@ fn aur_commit_started_with_post(
     store
         .record_execution_evidence(operation, &evidence)
         .map_err(|e| format!("post-commit persistence failed: {e:?}; no retry"))?;
-    let status = if commit_error.is_some() {
+    let status = if commit_error.is_some() || installed_versions.is_err() {
         OperationStatus::Failed
     } else {
         OperationStatus::CompletedWithWarnings
     };
-    let message = format!("AUR native outcome {:?}; pre-snapshot {pre}; post-snapshot {post:?}; error {commit_error:?}; lock release {release_error:?}. Hook success and boot recovery remain unverified. No automatic retry.", evidence.package_commit);
+    let message = format!("AUR native outcome {:?}; installed versions {installed_versions:?}; pre-snapshot {pre}; post-snapshot {post:?}; error {commit_error:?}; lock release {release_error:?}. Hook success and boot recovery remain unverified. No automatic retry.", evidence.package_commit);
     store
         .finish_worker_result(
             operation,
@@ -431,6 +453,32 @@ fn aur_commit_started_with_post(
         .map_err(|e| format!("terminal result persistence failed: {e:?}; no retry"))?;
     if let Some(error) = commit_error {
         return Err(error);
+    }
+    installed_versions?;
+    Ok(())
+}
+
+fn verify_aur_installed_versions(handle: &Alpm, plan: &CanonicalPlan) -> Result<(), String> {
+    let fresh = Alpm::new(handle.root(), handle.dbpath())
+        .map_err(|e| format!("installed AUR database unavailable: {e}"))?;
+    for expected in plan.packages() {
+        let installed = fresh
+            .localdb()
+            .pkg(expected.package_name.as_str())
+            .map_err(|e| {
+                format!(
+                    "installed AUR package missing: {}: {e}",
+                    expected.package_name
+                )
+            })?;
+        if installed.version().as_str() != expected.new_version {
+            return Err(format!(
+                "installed AUR version mismatch: {} expected {}, observed {}",
+                expected.package_name,
+                expected.new_version,
+                installed.version()
+            ));
+        }
     }
     Ok(())
 }
