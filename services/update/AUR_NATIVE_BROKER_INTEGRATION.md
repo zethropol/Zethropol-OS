@@ -2,6 +2,10 @@
 
 **Source integration and isolated regression: PASS. Production admission: CLOSED.**
 
+Current infrastructure/public-input observations and preparation are recorded in
+[AUR_ACCEPTANCE_INFRASTRUCTURE_STATUS.md](AUR_ACCEPTANCE_INFRASTRUCTURE_STATUS.md).
+The validation below preserves the broker integration checkpoint.
+
 ## Implemented boundary
 
 The official broker no longer loads AUR archives into its official ALPM handle.

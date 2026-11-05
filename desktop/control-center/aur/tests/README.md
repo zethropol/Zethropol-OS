@@ -56,3 +56,11 @@ private `--aur-native` transport accepts no client-selected trust domain.
 Production admission remains closed pending approved PUBLIC trust/artifact
 inputs and actual deployed root/guest acceptance. See
 [the integration report](../../../../services/update/AUR_NATIVE_BROKER_INTEGRATION.md).
+
+`test_acceptance_inventory.py` verifies passive infrastructure inventory boundaries:
+inaccessible is not absent, scans are bounded, symlink targets are refused,
+no device/helper is invoked and no metadata result can grant acceptance. With
+these five additional cases the portable suite discovers 546 tests: 486 pass
+and 60 historical capture cases remain explicitly skipped. The inventory is
+source-only and the operator contract is
+[release/ACCEPTANCE_INPUTS.md](../release/ACCEPTANCE_INPUTS.md).

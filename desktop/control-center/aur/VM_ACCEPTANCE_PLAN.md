@@ -20,13 +20,23 @@ must provide an approved VM runner elsewhere or separately provision the host
 under another task. Also missing: an authorized disposable image, its expected
 SHA256, guest disk/layout manifest, and actual approved signed production inputs.
 
-The integration crate is a non-installed library, with no service binary or
-installer. A reviewed VM-only broker/worker harness/package assembly is still
-needed to execute the real system-bus methods. The production gate has no enable
-flag: the positive-acceptance driver must be a separately reviewed guest-only
-build/capability, with recorded source/binary hashes and an explicit disposable
-VM identity. It must not weaken or replace the shipping gate/source/config.
-No positive case is executable merely by running this document against the host.
+The canonical broker now has the fixed-domain native self-exec integration;
+the candidate crate also reuses that source. See
+[the integration report](../../../services/update/AUR_NATIVE_BROKER_INTEGRATION.md).
+The shipping production gate remains unconditional: positive acceptance still
+requires a separately reviewed guest-only capability, with source/binary hashes,
+explicit VM/boot/image identity and operation scope. Existing Rust test fixture
+hooks must not be deployed as that capability. No gate removal or production
+enable flag is authorized by this plan.
+
+The 2026-11-06 outside-sandbox passive recheck confirms KVM device metadata/access
+but no QEMU/qemu-img/libvirt/VirtualBox tools in PATH. No device was opened and
+acceleration remains untested. Public input storage was empty, native Archive
+trust and provider configuration absent. `/var/lib/machines` was inaccessible,
+not proven empty. No repository guest image or supplied guest identity was found.
+The historical ignored inventory is not current acceptance evidence. Reproduce
+observations with `release/acceptance_inventory.py`; see
+[exact public inputs and preparation](release/ACCEPTANCE_INPUTS.md).
 
 ## Required guest and authority manifest
 
