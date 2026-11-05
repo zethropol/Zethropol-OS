@@ -40,7 +40,7 @@ fn main() {
     receipt.push_str(&format!("\ninclude!({:?});\n", capacity));
     fs::write(out.join("aur_receipt.rs"), receipt).unwrap();
     // Includes remain canonical. Only the candidate authority seam differs.
-    for name in ["receipt.rs", "intake.rs", "tests.rs"] {
+    for name in ["receipt.rs", "intake.rs", "tests.rs", "native.rs"] {
         adapter = adapter.replace(
             &format!("include!(\"{name}\");"),
             &format!(

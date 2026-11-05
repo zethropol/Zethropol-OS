@@ -365,14 +365,13 @@ impl UpdateManager {
             use std::os::fd::AsFd;
             let parent = Path::new("/run/zethropol-update/aur-artifacts");
             verify_aur_staging_parent(parent)?;
-            let mut handle = configured_alpm(None).map_err(|e| e.to_string())?;
-            let db = PathBuf::from(handle.dbpath());
             let fds: Vec<_> = archives
                 .iter()
                 .zip(&signatures)
                 .map(|(a, s)| (a.as_fd(), s.as_fd()))
                 .collect();
-            let verified = verify_aur_receipt(
+            let verified = verify_aur_receipt_isolated(
+                &store,
                 &context,
                 ReceiptFds {
                     receipt: receipt.as_fd(),
@@ -383,9 +382,6 @@ impl UpdateManager {
                 },
                 &trust,
                 parent,
-                &mut handle,
-                receipt_unix_now()?,
-                || aur_host_state_fingerprint(&db),
             )?;
             let plan = store
                 .admit_aur_receipt(
@@ -1622,6 +1618,13 @@ impl Drop for TemporaryPlanDatabase {
 }
 
 fn configured_alpm(db_path_override: Option<&str>) -> Result<Alpm, zbus::fdo::Error> {
+    configured_alpm_domain(db_path_override, false)
+}
+
+fn configured_alpm_domain(
+    db_path_override: Option<&str>,
+    archive_domain: bool,
+) -> Result<Alpm, zbus::fdo::Error> {
     let root_dirs = pacman_conf_values(&["RootDir"])?;
     let db_paths = pacman_conf_values(&["DBPath"])?;
     let gpg_dirs = pacman_conf_values(&["GPGDir"])?;
@@ -1672,11 +1675,17 @@ fn configured_alpm(db_path_override: Option<&str>) -> Result<Alpm, zbus::fdo::Er
             ))
         })?;
 
-    handle.set_gpgdir(gpg_dirs[0].clone()).map_err(|error| {
-        zbus::fdo::Error::Failed(format!(
-            "Unable to configure libalpm GPG directory: {error}"
-        ))
-    })?;
+    handle
+        .set_gpgdir(if archive_domain {
+            AUR_NATIVE_DOMAIN.to_string()
+        } else {
+            gpg_dirs[0].clone()
+        })
+        .map_err(|error| {
+            zbus::fdo::Error::Failed(format!(
+                "Unable to configure libalpm GPG directory: {error}"
+            ))
+        })?;
 
     let default_siglevel = parse_pacman_siglevel(
         &pacman_conf_values(&["SigLevel"])?,
@@ -1786,6 +1795,15 @@ fn configured_alpm(db_path_override: Option<&str>) -> Result<Alpm, zbus::fdo::Er
         })?;
     }
 
+    if archive_domain {
+        handle
+            .set_default_siglevel(SigLevel::PACKAGE)
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+        handle
+            .set_local_file_siglevel(SigLevel::PACKAGE)
+            .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+        return Ok(handle); // No official repositories in the Archive native domain.
+    }
     for repository in repositories {
         let servers = pacman_conf_values(&["--repo", repository.as_str(), "Server"])?;
         if servers.is_empty() {

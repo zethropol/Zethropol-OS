@@ -64,11 +64,10 @@ fn aur_required_signatures(handle: &Alpm) -> SigLevel {
     policy
 }
 
-fn receive_aur_fds(
+fn receive_aur_bytes(
     parent: &Path,
     approved: &CanonicalPlan,
     fds: &[(BorrowedFd<'_>, BorrowedFd<'_>)],
-    handle: &Alpm,
 ) -> Result<AurIntake, String> {
     if approved.packages().is_empty()
         || approved.packages().len() > 64
@@ -128,6 +127,27 @@ fn receive_aur_fds(
             s,
         )?;
         verify_archive(&path, &identity.sha256)?;
+        intake.archives.push(AurArchive {
+            path,
+            identity: identity.clone(),
+        });
+    }
+    fs::File::open(&intake.directory)
+        .and_then(|f| f.sync_all())
+        .map_err(|e| e.to_string())?;
+    Ok(intake)
+}
+
+fn receive_aur_fds(
+    parent: &Path,
+    approved: &CanonicalPlan,
+    fds: &[(BorrowedFd<'_>, BorrowedFd<'_>)],
+    handle: &Alpm,
+) -> Result<AurIntake, String> {
+    let intake = receive_aur_bytes(parent, approved, fds)?;
+    for archive in &intake.archives {
+        let path = &archive.path;
+        let identity = &archive.identity;
         let package = handle
             .pkg_load(
                 path.as_os_str().as_encoded_bytes().to_vec(),
@@ -139,16 +159,9 @@ fn receive_aur_fds(
             package.name(),
             package.version().as_str(),
             package.filename(),
-            &path,
+            path,
             identity,
         )?;
-        intake.archives.push(AurArchive {
-            path,
-            identity: identity.clone(),
-        });
     }
-    fs::File::open(&intake.directory)
-        .and_then(|f| f.sync_all())
-        .map_err(|e| e.to_string())?;
     Ok(intake)
 }

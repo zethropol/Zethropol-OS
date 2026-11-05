@@ -199,6 +199,14 @@ pub(crate) struct AurReceiptBinding {
     pub(crate) signatures: Vec<(String, String)>,
     review: ReviewedBuild,
 }
+impl AurReceiptBinding {
+    pub(crate) fn native_deadline(&self) -> u64 {
+        self.deadline
+    }
+    pub(crate) fn native_review(&self) -> &ReviewedBuild {
+        &self.review
+    }
+}
 impl BrokerStore {
     pub(crate) fn reserve_aur_build(
         &self,

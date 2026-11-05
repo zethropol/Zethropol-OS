@@ -28,8 +28,8 @@ class ReleasePreflight(unittest.TestCase):
         def policy(path, role=None):
             return SimpleNamespace(signers=frozenset([keys[role or 'distribution']]), keyring=SimpleNamespace(close=Mock()))
         def metadata(path):
-            mode = 0o755 if str(path).endswith('aur-build-roots') else 0o700
-            return SimpleNamespace(st_mode=stat.S_IFDIR | mode, st_uid=0)
+            mode = 0o755 if str(path).endswith(('aur-build-roots','aur-native-trust')) else 0o700
+            return SimpleNamespace(st_mode=(stat.S_IFREG | 0o644) if path.name in ('pubring.kbx','trustdb.gpg','gpg.conf') else stat.S_IFDIR | mode, st_uid=0, st_nlink=1)
         config = {role:{'signer':keys[role]} for role in ('archive','receipt')}
         with patch.object(preflight.TrustPolicy, 'load', side_effect=policy), \
              patch('provider.configuration', return_value=(config, {})), \

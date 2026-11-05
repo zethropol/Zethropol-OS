@@ -1,6 +1,10 @@
 // This entire include is cfg(test). It grants NO production authority.
 pub(crate) mod aur_fixture {
     use super::*;
+    pub(crate) fn reopen_native(path: PathBuf) -> Result<BrokerStore, BrokerError> {
+        BrokerStore::open_with(path, unsafe { libc::geteuid() }, Arc::new(UuidTokenSource))
+    }
+
     pub(crate) struct Fixture {
         pub store: Arc<BrokerStore>,
         pub owner: VerifiedIdentity,

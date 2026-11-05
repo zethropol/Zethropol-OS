@@ -11,6 +11,9 @@ mod update_service;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
+    if args.len() == 2 && args[1] == "--aur-native" {
+        return update_service::run_aur_native_process().map_err(Into::into);
+    }
     if args.len() == 3 && args[1] == "--worker" {
         return update_service::run_worker(&args[2]).map_err(Into::into);
     }

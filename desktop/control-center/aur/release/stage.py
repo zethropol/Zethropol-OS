@@ -53,6 +53,7 @@ def stage(output, broker, control_build, quota_helper, root_stage_helper):
     for name in ('zethropol-aur-provider@.service','zethropol-aur-sign@.service','zethropol-aur-attest@.service'):
         put('/usr/lib/systemd/system/'+name,(AUR/'release/providers'/name).read_bytes())
     put('/usr/lib/sysusers.d/zethropol-aur-providers.conf',(AUR/'release/providers/zethropol-aur-providers.sysusers').read_bytes())
+    put('/usr/share/doc/zethropol-update/native-gpg.conf.example',(UPDATE/'deployment/aur/native-gpg.conf.example').read_bytes())
     put('/usr/share/doc/zethropol-update/aur-providers.json.example',(AUR/'release/providers/aur-providers.json.example').read_bytes())
     put('/usr/share/doc/zethropol-update/aur-manifest-signer.json.example',(AUR/'release/providers/aur-manifest-signer.json.example').read_bytes())
     for name in ('policy.json.template','distribution.json.template'):
@@ -98,7 +99,8 @@ d /var/lib/zethropol-aur-attestor/gnupg 0700 zethropol-aur-attestor zethropol-au
                 'configuration_required_not_in_payload': ['/etc/zethropol-update/aur-providers.json',
                     '/etc/zethropol-update/aur-trust/policy.json','/etc/zethropol-update/aur-trust/distribution.json',
                     '/etc/zethropol-update/aur-trust/manifest.gpg','/etc/zethropol-update/aur-trust/archive.gpg',
-                    '/etc/zethropol-update/aur-trust/receipt.gpg','/etc/zethropol-update/aur-trust/distribution.gpg'],
+                    '/etc/zethropol-update/aur-trust/receipt.gpg','/etc/zethropol-update/aur-trust/distribution.gpg',
+                    '/etc/zethropol-update/aur-native-trust'],
 
                 'files': sorted(rows, key=lambda row: row['target']),
                 'approval_required_actions': ['provide durable transaction-journal storage outside root snapshot rollback', 'create the two declared provider accounts and group with sysusers',

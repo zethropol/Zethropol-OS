@@ -383,6 +383,7 @@ struct ReceiptFds<'a> {
     manifest_signature: BorrowedFd<'a>,
     packages: &'a [(BorrowedFd<'a>, BorrowedFd<'a>)],
 }
+#[cfg(test)]
 fn verify_aur_receipt(
     context: &ReceiptContext,
     inputs: ReceiptFds<'_>,
@@ -391,6 +392,35 @@ fn verify_aur_receipt(
     handle: &mut Alpm,
     now: u64,
     policy_snapshot: impl FnMut() -> Result<String, String>,
+) -> Result<VerifiedAurReceipt, String> {
+    verify_aur_receipt_with_native(context, inputs, trust, staging, now, |intake, receipt| {
+        for (identity, staged) in receipt.packages.iter().zip(&intake.archives) {
+            let pkg = handle
+                .pkg_load(
+                    staged.path.as_os_str().as_encoded_bytes().to_vec(),
+                    true,
+                    aur_required_signatures(handle),
+                )
+                .map_err(|e| e.to_string())?;
+            if pkg.arch() != Some(identity.architecture.as_str())
+                || pkg.base() != Some(context.review.source_package.as_str())
+            {
+                return Err("native archive architecture/pkgbase differs from receipt".into());
+            }
+        }
+        let locked =
+            prepare_aur_locked_with_policy(handle, &intake.archives, policy_snapshot, false)?;
+        Ok(locked.plan.clone())
+    })
+}
+
+fn verify_aur_receipt_with_native(
+    context: &ReceiptContext,
+    inputs: ReceiptFds<'_>,
+    trust: &ReceiptTrust,
+    staging: &Path,
+    now: u64,
+    native: impl FnOnce(&AurIntake, &BuildReceipt) -> Result<CanonicalPlan, String>,
 ) -> Result<VerifiedAurReceipt, String> {
     context.review.validate()?;
     let bytes = read_receipt_fd(inputs.receipt, 1024 * 1024)?;
@@ -467,7 +497,7 @@ fn verify_aur_receipt(
         });
     }
     let seed = CanonicalPlan::from_packages(packages).map_err(|e| format!("{e:?}"))?;
-    let intake = receive_aur_fds(staging, &seed, inputs.packages, handle)?;
+    let intake = receive_aur_bytes(staging, &seed, inputs.packages)?;
     // The server-selected intake directory is private and cleaned on failure.
     trust
         .receipt
@@ -477,30 +507,12 @@ fn verify_aur_receipt(
         inputs.manifest_signature,
         &intake.directory,
     )?;
-    for ((archive, signature), (identity, staged)) in inputs
-        .packages
-        .iter()
-        .zip(receipt.packages.iter().zip(&intake.archives))
-    {
+    for (archive, signature) in inputs.packages {
         trust
             .archive
             .verify(*archive, *signature, &intake.directory)?;
-        let pkg = handle
-            .pkg_load(
-                staged.path.as_os_str().as_encoded_bytes().to_vec(),
-                true,
-                aur_required_signatures(handle),
-            )
-            .map_err(|e| e.to_string())?;
-        if pkg.arch() != Some(identity.architecture.as_str())
-            || pkg.base() != Some(r.source_package.as_str())
-        {
-            return Err("native archive architecture/pkgbase differs from receipt".into());
-        }
     }
-    let locked = prepare_aur_locked_with_policy(handle, &intake.archives, policy_snapshot, false)?;
-    let plan = locked.plan.clone();
-    drop(locked);
+    let plan = native(&intake, &receipt)?;
     Ok(VerifiedAurReceipt {
         context: context.clone(),
         receipt_sha256: digest,
@@ -559,6 +571,15 @@ fn aur_trust_readiness() -> HashMap<String, String> {
     let mut report = HashMap::new();
     report.insert("installation".into(), "closed".into());
     report.insert("system_acceptance".into(), "not-complete".into());
+    report.insert(
+        "native_transport".into(),
+        "fixed-domain-self-exec-v1".into(),
+    );
+    report.insert("native_domain".into(), AUR_NATIVE_DOMAIN.into());
+    report.insert(
+        "native_runtime_acceptance".into(),
+        "not-certified-by-this-query".into(),
+    );
     report.insert(
         "signed_artifacts".into(),
         "not-verified-by-this-query".into(),

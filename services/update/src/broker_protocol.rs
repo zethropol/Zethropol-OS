@@ -633,6 +633,44 @@ impl BrokerStore {
         Ok(file)
     }
 
+    /// Validate the inherited open description; never reopen or unlock the
+    /// parent's lease during the broker-to-native exec handoff.
+    pub(crate) fn verify_native_lease(
+        &self,
+        operation_id: &str,
+        fd: std::os::fd::BorrowedFd<'_>,
+    ) -> Result<(), BrokerError> {
+        use std::os::fd::AsRawFd;
+        let id = valid_uuid(operation_id.to_string())?;
+        verify_directory(&self.root, self.expected_owner)?;
+        let file = File::from(fd.try_clone_to_owned().map_err(io_error)?);
+        let a = file.metadata().map_err(io_error)?;
+        let b =
+            fs::symlink_metadata(self.root.join(format!("worker-{id}.lock"))).map_err(io_error)?;
+        if !a.is_file()
+            || !b.is_file()
+            || a.uid() != self.expected_owner
+            || a.permissions().mode() & 0o777 != 0o600
+            || a.dev() != b.dev()
+            || a.ino() != b.ino()
+            || unsafe { libc::flock(fd.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0
+        {
+            return Err(BrokerError::OperationInProgress);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn native_cancelled_before_commit(
+        &self,
+        operation: &str,
+    ) -> Result<bool, BrokerError> {
+        self.with_lock(|| {
+            let record = self.read_record(&self.operation_path(operation)?)?;
+            Ok(record.status == OperationStatus::Failed
+                && record.evidence.package_commit == CommitState::NotStarted)
+        })
+    }
+
     pub(crate) fn require_queued(&self, operation_id: &str) -> Result<(), BrokerError> {
         self.with_lock(|| {
             let record = self.read_record(&self.operation_path(operation_id)?)?;
@@ -1843,6 +1881,32 @@ fn hex_nibble(value: u8) -> Option<u8> {
 
 fn io_error(error: std::io::Error) -> BrokerError {
     BrokerError::Io(error.to_string())
+}
+
+// Shared with the isolated native worker; unchanged uncertain-outcome gate.
+impl BrokerStore {
+    pub(crate) fn require_no_uncertain_commit(&self) -> Result<(), BrokerError> {
+        self.with_lock(|| {
+            for entry in fs::read_dir(&self.root).map_err(io_error)? {
+                let entry = entry.map_err(io_error)?;
+                if !entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("operation-")
+                {
+                    continue;
+                }
+                let record = self.read_record(&entry.path())?;
+                if matches!(
+                    record.evidence.package_commit,
+                    CommitState::Unknown | CommitState::InProgress | CommitState::Failed
+                ) {
+                    return Err(BrokerError::OperationInProgress);
+                }
+            }
+            Ok(())
+        })
+    }
 }
 
 #[cfg(test)]

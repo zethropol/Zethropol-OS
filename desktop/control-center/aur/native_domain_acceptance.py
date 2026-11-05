@@ -95,15 +95,15 @@ def gate(identifier, passed, reason):
 def default_contract():
     return {
         'schema':1, 'purpose':'zethropol-native-domain-offline-contract',
-        'scope':'design-only', 'architecture_mode':'existing-single-domain',
+        'scope':'design-only', 'architecture_mode':'fixed-separate-domain-source',
         'official_gpgdir':'/etc/pacman.d/gnupg',
-        'aur_gpgdir':'/etc/pacman.d/gnupg',
+        'aur_gpgdir':'/etc/zethropol-update/aur-native-trust',
         'required_package_signatures':True, 'allow_optional':False,
         'allow_marginal':False, 'allow_unknown':False,
         'allow_client_gpgdir':False, 'allow_process_domain_switch':False,
         'archive_may_authorize_official_packages':False,
         'official_domain_independently_authorizes_dependencies':True,
-        'separate_worker_from_process_start':False,
+        'separate_worker_from_process_start':True,
         'negative_cases':sorted(NEGATIVES),
     }
 
@@ -127,11 +127,11 @@ def validate_contract(contract):
     mode = contract['architecture_mode']
     if mode=='existing-single-domain':
         process = contract['official_gpgdir']=='/etc/pacman.d/gnupg' and contract['aur_gpgdir']=='/etc/pacman.d/gnupg' and contract['separate_worker_from_process_start'] is False
-    elif mode=='proposed-fixed-separate-domain':
+    elif mode in ('proposed-fixed-separate-domain','fixed-separate-domain-source'):
         process = contract['official_gpgdir']=='/etc/pacman.d/gnupg' and contract['aur_gpgdir']=='/etc/zethropol-update/aur-native-trust' and contract['separate_worker_from_process_start'] is True
     else:
         process = False
-    checks.append(gate('fixed-process-contract',process,'Only current fixed domain or explicit design-only separate-process proposal is representable'))
+    checks.append(gate('fixed-process-contract',process,'Source fixed-domain process contract or historical design is representable; contract PASS is not runtime acceptance'))
     negative = isinstance(contract['negative_cases'],list) and all(isinstance(x,str) for x in contract['negative_cases']) and len(contract['negative_cases'])==len(NEGATIVES) and set(contract['negative_cases'])==NEGATIVES
     checks.append(gate('negative-matrix-complete',negative,'Missing/tampered/unknown/revoked/expired/trust/domain/official-authority/snapshot drift rejections required'))
     return {'status':'PASS' if all(c['status']=='PASS' for c in checks) else 'BLOCKED','scope':'offline contract only','production_authorized':False,'checks':checks}
@@ -257,11 +257,11 @@ def report(repo=REPO):
     except (OSError,ValueError,KeyError,json.JSONDecodeError) as error:
         checks.append(gate('native-public-evidence',False,str(error)))
         checks.append(gate('archive-native-trust',False,'No current verified public native evidence; unknown blocks'))
-    for rel in ('services/update/src/aur/adapter.rs','services/update/src/aur/intake.rs','services/update/src/update_service.rs'):
+    for rel in ('services/update/src/aur/adapter.rs','services/update/src/aur/intake.rs','services/update/src/aur/native.rs','services/update/src/update_service.rs'):
         try:sources[rel]=sha(read_public(repo/rel,64*1024**2))
         except (OSError,ValueError) as error:sources[rel]={'error':str(error)}
     checks.extend([
-        gate('native-production-integration',False,'Current AUR preparation reuses the official Alpm handle; no separately integrated AUR domain/process. Shared native trust changes require separate trust/official-authority review; a separate-domain decision and integration remain unaccepted. No native domain or trust change is authorized by this inventory'),
+        gate('native-production-integration',False,'Source broker preview/install use the fixed Archive self-exec process and an official full-upgrade proof rechecked under the native lock. Actual production public domain provisioning, signed artifact set and guest/runtime acceptance remain missing. This offline inventory cannot certify deployment or grant installation'),
         gate('runtime-polkit-recovery-acceptance',False,'Canonical and candidate production installation gates remain closed. Public prerequisites are not runtime acceptance. Real system-bus PolicyKit/session, worker, persistent journal, snapshots, boot/recovery and failure acceptance evidence is missing; unit/private-root success cannot replace it'),
         gate('disposable-system-acceptance-infrastructure',False,'Approved disposable VM/image/guest identity and reviewed guest-only capability/harness remain required; no host installation or gate bypass is authorized'),
     ])

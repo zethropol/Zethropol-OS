@@ -41,6 +41,7 @@ def inspect():
         ('/var/lib/zethropol/aur-deliveries', 0o700),
         ('/var/lib/zethropol/aur-build-roots', 0o755),
         ('/run/zethropol-update/aur-artifacts', 0o700),
+        ('/etc/zethropol-update/aur-native-trust', 0o755),
     ):
         try:
             info = Path(directory).lstat()
@@ -49,6 +50,15 @@ def inspect():
             checks.append({'check': directory, 'ok': ok})
         except OSError as error:
             checks.append({'check': directory, 'ok': False, 'reason': str(error)})
+    for name in ('pubring.kbx','trustdb.gpg','gpg.conf'):
+        path=Path('/etc/zethropol-update/aur-native-trust')/name
+        try:
+            import stat
+            info=path.lstat()
+            ok=stat.S_ISREG(info.st_mode) and info.st_uid==0 and not info.st_mode&0o022 and info.st_nlink==1
+            checks.append({'check':str(path),'ok':ok})
+        except OSError as error:
+            checks.append({'check':str(path),'ok':False,'reason':str(error)})
     for command in ('gpg', 'gpgv', 'bwrap', 'systemd-run', 'systemctl', 'python3', 'timeout'):
         checks.append({'check': command, 'ok': shutil.which(command, path='/usr/bin') is not None})
     for helper in ('/usr/lib/zethropol/aur-root-stage','/usr/lib/zethropol/aur-quota-mount'):

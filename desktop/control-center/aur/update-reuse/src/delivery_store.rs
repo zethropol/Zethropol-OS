@@ -32,28 +32,3 @@ impl BrokerStore {
         })
     }
 }
-
-impl BrokerStore {
-    pub(crate) fn require_no_uncertain_commit(&self) -> Result<(), BrokerError> {
-        self.with_lock(|| {
-            for entry in fs::read_dir(&self.root).map_err(io_error)? {
-                let entry = entry.map_err(io_error)?;
-                if !entry
-                    .file_name()
-                    .to_string_lossy()
-                    .starts_with("operation-")
-                {
-                    continue;
-                }
-                let record = self.read_record(&entry.path())?;
-                if matches!(
-                    record.evidence.package_commit,
-                    CommitState::Unknown | CommitState::InProgress | CommitState::Failed
-                ) {
-                    return Err(BrokerError::OperationInProgress);
-                }
-            }
-            Ok(())
-        })
-    }
-}

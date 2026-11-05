@@ -81,6 +81,7 @@ impl LockedAur<'_> {
     }
 }
 
+#[cfg(test)]
 fn prepare_aur_locked<'a>(
     handle: &'a mut Alpm,
     archives: &[AurArchive],
@@ -88,6 +89,7 @@ fn prepare_aur_locked<'a>(
 ) -> Result<LockedAur<'a>, String> {
     prepare_aur_locked_internal(handle, archives, fingerprint, false)
 }
+#[cfg(test)]
 fn prepare_aur_locked_internal<'a>(
     handle: &'a mut Alpm,
     archives: &[AurArchive],
@@ -101,6 +103,7 @@ fn prepare_aur_locked_internal<'a>(
         fixture_unsigned,
     )
 }
+#[cfg(test)]
 fn prepare_aur_locked_with_policy<'a, F>(
     handle: &'a mut Alpm,
     archives: &[AurArchive],
@@ -128,6 +131,26 @@ where
             return Err(format!("official preflight: {error:?}"));
         }
     };
+    finish_aur_locked_transaction(
+        handle,
+        archives,
+        official,
+        policy_snapshot,
+        fixture_unsigned,
+    )
+}
+
+fn finish_aur_locked_transaction<'a>(
+    handle: &'a mut Alpm,
+    archives: &[AurArchive],
+    official: CanonicalPlan,
+    mut policy_snapshot: impl FnMut() -> Result<String, String>,
+    fixture_unsigned: bool,
+) -> Result<LockedAur<'a>, String> {
+    #[cfg(not(test))]
+    if fixture_unsigned {
+        return Err("fixture authority unavailable".into());
+    }
     let result = (|| {
         if !official.packages().is_empty() || !official.removals().is_empty() {
             return Err("official full upgrade required first; no partial upgrade".into());
@@ -290,34 +313,6 @@ mod aur_integration_tests {
     include!("tests.rs");
 }
 
-// Keeps the actual host lock alive through comparison and the server callback.
-// Never invoked by the fixture runner; no host lock/transaction is created by tests.
-fn with_final_host_aur_plan<T>(
-    archives: &[AurArchive],
-    approved: &CanonicalPlan,
-    action: impl FnOnce(LockedAur<'_>) -> Result<T, String>,
-) -> Result<T, String> {
-    if unsafe { libc::geteuid() } != 0 {
-        return Err("host final resolver requires trusted root broker".into());
-    }
-    let mut handle = configured_alpm(None).map_err(|e| e.to_string())?;
-    let db = PathBuf::from(handle.dbpath());
-    let locked = prepare_aur_locked_with_policy(
-        &mut handle,
-        archives,
-        || aur_host_state_fingerprint(&db),
-        false,
-    )?;
-    if locked.plan != *approved {
-        return Err("plan_changed under actual host lock; no retry".into());
-    }
-    if aur_host_state_fingerprint(&db)? != locked.plan.policy_fingerprint() {
-        return Err("host policy changed under lock; no retry".into());
-    }
-    locked.verify_recovery()?;
-    action(locked)
-}
-
 fn aur_begin_after_real_snapshot(
     locked: &LockedAur<'_>,
     store: &BrokerStore,
@@ -368,9 +363,7 @@ fn aur_database_state_fingerprint(db: &Path, policy: &str) -> Result<String, Str
     policy_fingerprint_with_values(&[db.join("local"), db.join("sync")], values.as_bytes())
 }
 fn aur_host_state_fingerprint(db: &Path) -> Result<String, String> {
-    let policy = current_policy_fingerprint().map_err(|e| format!("{e:?}"))?;
-    let trust = ReceiptTrust::load()?;
-    aur_database_state_fingerprint(db, &format!("{policy}:aur-trust:{}", trust.digest))
+    NativePaths::production()?.state_stamp(db)
 }
 
 include!("intake.rs");
@@ -385,6 +378,11 @@ fn aur_commit_started(
     operation: &str,
 ) -> Result<(), String> {
     let trust = ReceiptTrust::load()?;
+    if aur_host_state_fingerprint(Path::new(locked.handle.dbpath()))?
+        != locked.plan.policy_fingerprint()
+    {
+        return Err("official/native policy changed before commit; no retry".into());
+    }
     store
         .aur_receipt_binding(
             operation,
@@ -502,52 +500,29 @@ fn aur_execute_received(
     signatures: Vec<zbus::zvariant::OwnedFd>,
 ) -> Result<(), String> {
     use std::os::fd::AsFd;
-    require_aur_production_authority()?;
-    let _lease = store
+    let lease = store
         .worker_lease(&consumed.operation_id)
-        .map_err(|e| format!("worker lease: {e:?}"))?;
+        .map_err(|e| format!("native dispatch lease: {e:?}"))?;
     let result = (|| {
-        store
-            .require_queued(&consumed.operation_id)
-            .map_err(|e| format!("queued operation: {e:?}"))?;
-        if unsafe { libc::geteuid() } != 0 {
-            return Err("root broker required".into());
-        }
-        let parent = Path::new("/run/zethropol-update/aur-artifacts");
-        verify_aur_staging_parent(parent)?;
-        let handle = configured_alpm(None).map_err(|e| e.to_string())?;
+        require_aur_production_authority()?;
         let fds: Vec<_> = archives
             .iter()
             .zip(&signatures)
             .map(|(a, s)| (a.as_fd(), s.as_fd()))
             .collect();
-        let trust = ReceiptTrust::load()?;
-        let binding = store
-            .aur_receipt_binding(
-                &consumed.operation_id,
-                &consumed.plan,
-                boottime_seconds().map_err(|e| e.to_string())?,
-                receipt_unix_now()?,
-                &trust.digest,
-            )
-            .map_err(|e| format!("receipt binding: {e:?}"))?;
-        verify_receipt_signature_delivery(&consumed.plan, &binding.signatures, &fds)?;
-        let intake = receive_aur_fds(parent, &consumed.plan, &fds, &handle)?;
-        drop(handle);
-        with_final_host_aur_plan(&intake.archives, &consumed.plan, |locked| {
-            aur_begin_after_real_snapshot(&locked, store, &consumed.operation_id)?;
-            aur_commit_started(locked, store, &consumed.operation_id)
-        })
+        install_aur_isolated(store, consumed, &fds, lease.as_fd())
     })();
     if let Err(error) = &result {
+        // The child transition preserves Committed/Unknown evidence if it died
+        // after commit-start. A failed launch remains NotStarted and terminal.
         store
             .finish_worker_result(
                 &consumed.operation_id,
                 OperationStatus::Failed,
                 &format!("{error}; no automatic retry"),
-                boottime_seconds().map_err(|e| e.to_string())?,
+                aur_boottime()?,
             )
-            .map_err(|e| format!("{error}; failure persistence: {e:?}; no retry"))?;
+            .map_err(|e| format!("{error}; failed to persist native outcome: {e:?}"))?;
     }
     result
 }
@@ -579,3 +554,5 @@ fn persistent_aur_broker() -> Result<Arc<BrokerStore>, BrokerError> {
         .get_or_init(|| BrokerStore::open_aur_persistent().map(Arc::new))
         .clone()
 }
+
+include!("native.rs");
