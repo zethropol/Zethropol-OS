@@ -1,11 +1,50 @@
+import Zethropol.ControlCenter
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Controls.Material
-import Zethropol.ControlCenter
 
 ApplicationWindow {
     id: rootWindow
+    Connections {
+        target: UpdateBridge
+        function onLocalAurCancellationConfirmationRequested(execution) {
+            localAurCancelConsent.executionId = execution
+            localAurCancelConsent.open()
+        }
+        function onAurInstallConfirmationRequested(hash, details) {
+            aurInstallConsent.receiptHash = hash
+            aurInstallConsent.previewDetails = details
+            aurInstallConsent.open()
+        }
+        function onAurCancellationConfirmationRequested(operationId) {
+            aurCancelConsent.operationId = operationId
+            aurCancelConsent.open()
+        }
+    }
+
+    AurInstallConfirmation {
+        id: aurInstallConsent
+        updateBridge: UpdateBridge
+        anchors.centerIn: parent
+        width: Math.min(rootWindow.width - 40, 760)
+        height: Math.min(rootWindow.height - 40, 520)
+    }
+
+    LocalAurCancellationConfirmation {
+        id: localAurCancelConsent
+        updateBridge: UpdateBridge
+        anchors.centerIn: parent
+        width: Math.min(rootWindow.width - 40, 680)
+    }
+
+    AurCancellationConfirmation {
+        id: aurCancelConsent
+        updateBridge: UpdateBridge
+        anchors.centerIn: parent
+        width: Math.min(rootWindow.width - 40, 680)
+    }
+
     QtObject {
         id: notificationState
 
@@ -108,6 +147,16 @@ ApplicationWindow {
         }
     }
 
+    Connections {
+        target: PostUpdateBridge
+        function onOperationError(title, details) {
+            updateErrorDialog.title = title
+            updateErrorDetails.text = details
+            updateErrorDialog.open()
+        }
+    }
+    PostUpdateWindows { flow: PostUpdateBridge; updateBusy: UpdateBridge.installing }
+
     Dialog {
         id: updateErrorDialog
         title: "Update Error"
@@ -120,13 +169,15 @@ ApplicationWindow {
             spacing: 10
 
             Label {
-                text: "The update scan could not complete. Review the error source and details below."
+                text: "Review the operation status and technical details below. No automatic retry was made."
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
             }
 
             ScrollView {
                 id: updateErrorScroll
+                contentWidth: availableWidth
+                ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 clip: true
@@ -1455,20 +1506,33 @@ ApplicationWindow {
                     }
 
                     Item {
-                        ColumnLayout {
+                        clip: true
+
+                        Flickable {
+                            id: updatesFlickable
                             anchors.fill: parent
-                            spacing: 16
+                            contentWidth: width
+                            contentHeight: updatesColumn.implicitHeight
+                            flickableDirection: Flickable.VerticalFlick
+                            boundsBehavior: Flickable.StopAtBounds
+                            clip: true
+                            ScrollBar.vertical: ScrollBar {}
 
-                            RowLayout {
-                                Layout.fillWidth: true
+                            ColumnLayout {
+                                id: updatesColumn
+                                width: updatesFlickable.width
+                                spacing: 16
 
-                                Label {
-                                    text: "Updates"
+                                RowLayout {
+                                    Layout.fillWidth: true
+
+                                    Label {
+                                        text: "Updates"
                                     font.pixelSize: 28
                                 }
 
                                 Label {
-                                    text: UpdateBridge.selectedCount + " package(s) selected"
+                                    text: UpdateBridge.count + " official package update(s) found"
                                     opacity: 0.75
                                 }
 
@@ -1478,48 +1542,79 @@ ApplicationWindow {
 
                                 Button {
                                     text: UpdateBridge.checking ? "Checking..." : "Check for Updates"
-                                    enabled: !UpdateBridge.checking && !UpdateBridge.installing
+                                    enabled: !UpdateBridge.checking && !UpdateBridge.installing && !UpdateBridge.previewing
                                     onClicked: UpdateBridge.check()
                                 }
 
                                 Button {
-                                    text: "Install Updates (preflight required)"
-                                    enabled: false
-                                    onClicked: UpdateBridge.install()
+                                    text: UpdateBridge.installing
+                                          ? "Updating Selected Sources..."
+                                          : "Apply Selected Sources"
+                                    enabled: UpdateBridge.previewReady
+                                             && !UpdateBridge.previewing
+                                             && !UpdateBridge.checking
+                                             && !UpdateBridge.installing
+                                             && PostUpdateBridge.phase !== "reboot"
+                                    onClicked: updateConfirmationDialog.open()
                                 }
 
-                                Button {
-                                    text: "Preview Plan"
-                                    enabled: !UpdateBridge.checking && !UpdateBridge.installing
-                                    onClicked: updatePlanDialog.open()
+                                UpdateTransactionConfirmation {
+                                    id: updateConfirmationDialog
+                                    updateBridge: UpdateBridge
+                                    width: Math.min(760, rootWindow.width - 48)
+                                    height: Math.min(620, rootWindow.height - 48)
                                 }
 
-                                Dialog {
-                                    id: updatePlanDialog
-                                    title: "Update Transaction Plan"
-                                    modal: true
-                                    standardButtons: Dialog.Close
-                                    width: Math.min(680, 640)
-
-                                    contentItem: TextArea {
-                                        readOnly: true
-                                        wrapMode: TextEdit.Wrap
-                                        text: UpdateBridge.planPreview
-                                        implicitWidth: 600
-                                        implicitHeight: 340
-                                    }
+                                UpdatePlanPreview {
+                                    updateBridge: UpdateBridge
                                 }
                             }
 
+                            CheckBox {
+                                text: "Include the complete official-repository upgrade (no partial upgrades)"
+                                checked: UpdateBridge.officialSelected
+                                enabled: !UpdateBridge.installing && !UpdateBridge.previewing && !UpdateBridge.checking
+                                onToggled: UpdateBridge.selectOfficialSource(checked)
+                            }
+                            Label {
+                                text: UpdateBridge.sourceReport
+                                textFormat: Text.PlainText
+                                wrapMode: Text.WrapAnywhere
+                                Layout.fillWidth: true
+                                visible: text.length > 0
+                            }
                             Rectangle {
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 125
+                                Layout.preferredHeight: updateStatusColumn.implicitHeight + 36
                                 radius: 12
 
                                 ColumnLayout {
+                                    id: updateStatusColumn
                                     anchors.fill: parent
                                     anchors.margins: 18
                                     spacing: 6
+
+                                    Label {
+                                        text: PostUpdateBridge.statusText
+                                        visible: text.length > 0
+                                        wrapMode: Text.WordWrap
+                                        Layout.fillWidth: true
+                                    }
+                                    TextArea {
+                                        objectName: "uncertainPostUpdateResult"
+                                        visible: PostUpdateBridge.phase === "uncertain"
+                                        text: visible ? PostUpdateBridge.details : ""
+                                        textFormat: TextEdit.PlainText
+                                        readOnly: true
+                                        selectByMouse: true
+                                        wrapMode: TextEdit.Wrap
+                                        Layout.fillWidth: true
+                                    }
+                                    Button {
+                                        text: "Yeniden başlatmayı gözden geçir"
+                                        visible: PostUpdateBridge.canReviewReboot && PostUpdateBridge.phase === "deferred"
+                                        onClicked: PostUpdateBridge.reviewReboot()
+                                    }
 
                                     Label {
                                         text: UpdateBridge.checking
@@ -1536,10 +1631,48 @@ ApplicationWindow {
                                               ? "The system package manager is applying the available updates."
                                               : UpdateBridge.failed
                                                 ? "The update process could not be completed."
-                                                : "Package updates detected through the system package manager"
+                                                : UpdateBridge.verificationRequired
+                                                  ? "Package scripts and boot preparation require verification."
+                                                  : "Package updates detected through the system package manager"
                                         opacity: 0.7
                                         wrapMode: Text.WordWrap
                                         Layout.fillWidth: true
+                                    }
+
+                                    Label {
+                                        visible: UpdateBridge.output !== ""
+                                        text: UpdateBridge.output
+                                        opacity: 0.9
+                                        wrapMode: Text.WordWrap
+                                        Layout.fillWidth: true
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                visible: UpdateBridge.aurScanWarning !== ""
+                                Layout.fillWidth: true
+                                implicitHeight: aurWarningColumn.implicitHeight + 28
+                                radius: 10
+                                color: "#332b1c"
+                                border.color: "#a77b32"
+
+                                ColumnLayout {
+                                    id: aurWarningColumn
+                                    anchors.fill: parent
+                                    anchors.margins: 14
+                                    spacing: 4
+
+                                    Label {
+                                        text: "AUR updates unavailable"
+                                        font.bold: true
+                                    }
+
+                                    Label {
+                                        text: UpdateBridge.aurScanWarning
+                                        wrapMode: Text.WordWrap
+                                        Layout.fillWidth: true
+                                        opacity: 0.85
                                     }
                                 }
                             }
@@ -1555,7 +1688,7 @@ ApplicationWindow {
                             Rectangle {
                                 visible: UpdateBridge.aurAvailable
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 92
+                                Layout.preferredHeight: 100 + UpdateBridge.aurUpdates.length * 44
                                 radius: 12
 
                                 ColumnLayout {
@@ -1571,7 +1704,7 @@ ApplicationWindow {
                                             spacing: 2
 
                                             Label {
-                                                text: "AUR Updates"
+                                                text: "AUR Updates · recipe review / explicit blockers"
                                                 font.pixelSize: 18
                                                 font.bold: true
                                             }
@@ -1585,25 +1718,66 @@ ApplicationWindow {
 
                                     ListView {
                                         Layout.fillWidth: true
-                                        Layout.preferredHeight: Math.min(120, UpdateBridge.aurUpdates.length * 28)
+                                        Layout.preferredHeight: UpdateBridge.aurUpdates.length * 44
                                         model: UpdateBridge.aurUpdates
                                         interactive: false
 
                                         delegate: CheckBox {
+                                            width: ListView.view.width
                                             checked: modelData.selected
-                                            text: modelData.name + "  " + modelData.currentVersion
-                                                  + " → " + modelData.newVersion
+                                            enabled: !UpdateBridge.installing && !UpdateBridge.previewing && !UpdateBridge.checking
+                                            text: "[AUR] " + modelData.name + "  " + modelData.currentVersion + " → " + modelData.newVersion
                                             onToggled: UpdateBridge.setPackageSelected("aur", modelData.name, checked)
-                                            opacity: 0.8
                                         }
                                     }
+                                }
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Label { text: "AUR broker / persistent operation status"; font.bold: true }
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: UpdateBridge.aurStatus
+                                    textFormat: Text.PlainText
+                                    wrapMode: Text.WordWrap
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    TextField {
+                                        id: aurOperationLookup
+                                        Layout.fillWidth: true
+                                        placeholderText: "AUR operation UUID (read-only status)"
+                                    }
+                                    Button {
+                                        text: "Read AUR status"
+                                        enabled: aurOperationLookup.text.length > 0
+                                        onClicked: UpdateBridge.inspectAurOperation(aurOperationLookup.text.trim())
+                                    }
+                                }
+                                RowLayout {
+                                    Button { text: "Build reviewed AUR selection"; enabled: !UpdateBridge.installing && !UpdateBridge.previewing && !UpdateBridge.checking; onClicked: UpdateBridge.startAurBuild() }
+                                    Button { text: "Check independent attestation"; enabled: !UpdateBridge.installing && !UpdateBridge.previewing; onClicked: UpdateBridge.refreshAurAttestation() }
+                                }
+                                RowLayout {
+                                    BusyIndicator { running: UpdateBridge.batchStatus === "aur-build"; visible: running }
+                                    Button { text: "Cancel local build…"; enabled: UpdateBridge.batchStatus === "aur-build"; onClicked: UpdateBridge.requestLocalAurCancellation() }
+                                }
+                                RowLayout {
+                                    Button { text: "Confirm AUR request…"; enabled: UpdateBridge.aurInstallReady && !UpdateBridge.installing && !UpdateBridge.previewing; onClicked: UpdateBridge.requestAurInstallConfirmation() }
+                                    Button { text: "Cancel broker operation…"; enabled: !UpdateBridge.previewing; onClicked: UpdateBridge.requestAurCancellation() }
+                                }
+                                Label {
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.Wrap
+                                    text: "AUR installation requires a verified independent receipt, separate confirmation and broker authorization. Build and preview do not grant installation consent."
                                 }
                             }
 
                             Rectangle {
                                 visible: UpdateBridge.flatpakAvailable
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 92
+                                Layout.preferredHeight: visible ? 104 + UpdateBridge.flatpakUpdates.length * 40 : 0
                                 radius: 12
 
                                 ColumnLayout {
@@ -1619,7 +1793,7 @@ ApplicationWindow {
                                             spacing: 2
 
                                             Label {
-                                                text: "Flatpak Updates"
+                                                text: "Flatpak Updates · native scoped transactions"
                                                 font.pixelSize: 18
                                                 font.bold: true
                                             }
@@ -1633,15 +1807,16 @@ ApplicationWindow {
 
                                     ListView {
                                         Layout.fillWidth: true
-                                        Layout.preferredHeight: Math.min(120, UpdateBridge.flatpakUpdates.length * 28)
+                                        Layout.preferredHeight: UpdateBridge.flatpakUpdates.length * 40
                                         model: UpdateBridge.flatpakUpdates
                                         interactive: false
 
                                         delegate: CheckBox {
+                                            width: ListView.view.width
                                             checked: modelData.selected
-                                            text: modelData.name
-                                            onToggled: UpdateBridge.setPackageSelected("flatpak", modelData.name, checked)
-                                            opacity: 0.8
+                                            enabled: !UpdateBridge.installing && !UpdateBridge.previewing && !UpdateBridge.checking
+                                            text: "[Flatpak / " + modelData.scope + "] " + modelData.ref + " · " + modelData.origin
+                                            onToggled: UpdateBridge.setPackageSelected("flatpak", modelData.selectionId, checked)
                                         }
                                     }
                                 }
@@ -1650,7 +1825,7 @@ ApplicationWindow {
                             Rectangle {
                                 visible: UpdateBridge.orphanCount > 0
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 92
+                                Layout.preferredHeight: 100 + UpdateBridge.aurUpdates.length * 44
                                 radius: 12
 
                                 ColumnLayout {
@@ -1681,24 +1856,29 @@ ApplicationWindow {
                                             text: UpdateBridge.removingOrphans
                                                 ? "Removing..."
                                                 : "Remove Orphans"
-                                            enabled: !UpdateBridge.removingOrphans
-                                                && !UpdateBridge.installing
+                                            enabled: false
                                             onClicked: UpdateBridge.removeOrphans()
                                         }
                                     }
                                 }
                             }
 
+                            Label {
+                                text: "System Package Updates"
+                                font.pixelSize: 18
+                                font.bold: true
+                            }
+
                             ListView {
                                 Layout.fillWidth: true
-                                Layout.fillHeight: true
+                                Layout.preferredHeight: contentHeight
                                 clip: true
                                 spacing: 8
                                 model: UpdateBridge.updates
 
                                 delegate: Rectangle {
                                     width: ListView.view.width
-                                    height: 72
+                                    height: Math.max(72, versionLabel.implicitHeight + 48)
                                     radius: 10
 
                                     RowLayout {
@@ -1710,15 +1890,16 @@ ApplicationWindow {
                                             Layout.fillWidth: true
                                             spacing: 3
 
-                                            CheckBox {
-                                                checked: modelData.selected
+                                            Label {
                                                 text: modelData.name
                                                 font.bold: true
-                                                onToggled: UpdateBridge.setPackageSelected("official", modelData.name, checked)
                                             }
 
                                             Label {
+                                                id: versionLabel
+                                                Layout.fillWidth: true
                                                 text: modelData.currentVersion + " → " + modelData.newVersion
+                                                wrapMode: Text.Wrap
                                                 opacity: 0.7
                                             }
                                         }
@@ -1735,6 +1916,7 @@ ApplicationWindow {
                                 }
                             }
 
+                        }
                         }
                     }
 

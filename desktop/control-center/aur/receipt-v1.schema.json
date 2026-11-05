@@ -1,0 +1,139 @@
+{
+  "$id": "urn:zethropol:aur:receipt:1",
+  "title": "Zethropol AUR build receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": 1
+    },
+    "purpose": {
+      "const": "zethropol-aur-build-receipt"
+    },
+    "operation_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "uid": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "bus_name": {
+      "type": "string",
+      "pattern": "^:"
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_package": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9@._+:~\\-]*$"
+    },
+    "source_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[A-Za-z0-9@._+:~\\-]+$"
+    },
+    "architecture": {
+      "enum": [
+        "x86_64",
+        "aarch64"
+      ]
+    },
+    "build_root_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "source_plan_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "issued_at": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 18446744073709551615
+    },
+    "expires_at": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 18446744073709551615
+    },
+    "packages": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9@._+:~\\-]*$"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[A-Za-z0-9@._+:~\\-]+$"
+          },
+          "architecture": {
+            "enum": [
+              "any",
+              "x86_64",
+              "aarch64"
+            ]
+          },
+          "filename": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9@._+:~\\-]*$",
+            "not": {
+              "pattern": "\\.sig$"
+            }
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "signature_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "name",
+          "version",
+          "architecture",
+          "filename",
+          "sha256",
+          "signature_sha256"
+        ]
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "purpose",
+    "operation_id",
+    "uid",
+    "bus_name",
+    "session_id",
+    "source_package",
+    "source_version",
+    "architecture",
+    "build_root_sha256",
+    "source_plan_sha256",
+    "issued_at",
+    "expires_at",
+    "packages"
+  ],
+  "$comment": "Broker additionally rejects duplicate JSON fields and enforces server context, ordering, native metadata, signature, lifetime and one-use constraints. See RECEIPT_PROTOCOL.md."
+}

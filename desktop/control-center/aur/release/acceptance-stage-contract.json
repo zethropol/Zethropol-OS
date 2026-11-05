@@ -1,0 +1,474 @@
+{
+  "document_kind": "planned-acceptance-stage-contract",
+  "schema": 1,
+  "scope": "workspace planning sidecar; not executable collector, validator capture, admission or authority",
+  "source_sha256": {
+    "desktop/control-center/aur/native_domain_acceptance.py": "e0351fe21196330d71f58473cb966372db455888d3e5ebc5e6052e2b0ff51e2f",
+    "desktop/control-center/aur/rebuild_acceptance.py": "ae87a9396c1832cbfa58ae884154f83f7242c8b3ae0912e7ea734c6718155ae6",
+    "desktop/control-center/aur/runtime_acceptance.py": "2550466f34c1f8852384674010e7d942318486e9e8a8b14e1d5cec1dbfa551d1",
+    "desktop/control-center/aur/release/acceptance-collector-map.json": "edee58b57bc5ff8e649793885233ecc6bb46d9ae84597527a5f2cd991070e989"
+  },
+  "stage_status": "NOT_EXECUTED",
+  "gate_status": {
+    "native_domain_trust": "BLOCKED",
+    "complete_300_second_path": "BLOCKED",
+    "independent_rebuild_receipt": "BLOCKED",
+    "runtime_acceptance": "BLOCKED"
+  },
+  "lifecycle_relation": {
+    "files_only_deployment_is_not_acceptance": true,
+    "uid949_socket_evidence_substitutes_for_role_evidence": false,
+    "activation_or_quarantine_authority": false
+  },
+  "capture_prerequisites": [
+    {
+      "id": "guest-context",
+      "requires": [],
+      "artifacts": [
+        "context/vm-boot-source-pins.raw",
+        "context/collector-provenance.raw"
+      ],
+      "requirements": [
+        "separately approved disposable guest",
+        "exact current source pins and VM/boot identity",
+        "protected collector origin and bounded immutable raw artifacts"
+      ]
+    },
+    {
+      "id": "native-domain",
+      "requires": [
+        "guest-context"
+      ],
+      "consumer": "native_domain_acceptance.validate_admission_capture",
+      "artifacts": [
+        "native/domain-start.raw",
+        "native/negative/archive-signs-official-package.raw",
+        "native/negative/client-gpgdir.raw",
+        "native/negative/expired-primary.raw",
+        "native/negative/marginal-trust.raw",
+        "native/negative/missing-signature.raw",
+        "native/negative/official-domain-changed.raw",
+        "native/negative/revoked-primary.raw",
+        "native/negative/same-process-domain-switch.raw",
+        "native/negative/tampered-signature.raw",
+        "native/negative/trust-snapshot-changed-under-lock.raw",
+        "native/negative/unknown-primary.raw",
+        "native/negative/unknown-trust.raw"
+      ],
+      "requirements": [
+        "AUR domain fixed from process start",
+        "distinct pinned AUR and official dependency trust snapshots",
+        "PackageRequired/TrustedOnly",
+        "no ALPM transaction in native negative harness",
+        "all negative outcomes independently reviewed"
+      ]
+    },
+    {
+      "id": "original-reservation",
+      "requires": [
+        "guest-context"
+      ],
+      "consumer": "rebuild_acceptance.RuntimeBudget",
+      "artifacts": [
+        "budget/original-reservation-and-boundaries.raw"
+      ],
+      "requirements": [
+        "authenticated original root broker frame",
+        "same boot_id, CLOCK_BOOTTIME and CLOCK_REALTIME",
+        "exact original 300-second server reservation",
+        "no TTL renewal across lifecycle wait, retry or role transition"
+      ]
+    },
+    {
+      "id": "role-context",
+      "requires": [
+        "guest-context"
+      ],
+      "artifacts": [
+        "roles/archive/process-context.raw",
+        "roles/archive/output-metadata.raw",
+        "roles/archive/cleanup.raw",
+        "roles/attestor/process-context.raw",
+        "roles/attestor/output-metadata.raw",
+        "roles/attestor/cleanup.raw"
+      ],
+      "requirements": [
+        "Archive UID951 and Receipt/Attestor UID950 independently measured",
+        "real/effective/saved/fs UID/GID, Groups, uid_map/gid_map, PID/starttime",
+        "fresh separate work/cache dev/inode and signed root provenance",
+        "full pipeline.run/makepkg-package, matching package outputs and verified cleanup",
+        "extra kernel identity fields remain protected sidecar evidence; strict capture schema is unchanged"
+      ]
+    }
+  ],
+  "timed_pipeline": {
+    "requires": [
+      "native-domain",
+      "original-reservation",
+      "role-context"
+    ],
+    "consumer": "rebuild_acceptance.validate_budget",
+    "clock_source": "CLOCK_BOOTTIME even where existing capture field names say monotonic_ns",
+    "maximum_original_reservation_seconds": 300,
+    "rebase_or_extend": false,
+    "phase_order": [
+      "archive_rebuild",
+      "archive_sign_and_attach",
+      "attestor_rebuild",
+      "receipt_sign_and_publish",
+      "broker_admission"
+    ],
+    "phase_artifacts": [
+      {
+        "phase": "archive_rebuild",
+        "planned_path": "budget/phases/archive_rebuild.raw",
+        "requires_previous_phase": false
+      },
+      {
+        "phase": "archive_sign_and_attach",
+        "planned_path": "budget/phases/archive_sign_and_attach.raw",
+        "requires_previous_phase": true
+      },
+      {
+        "phase": "attestor_rebuild",
+        "planned_path": "budget/phases/attestor_rebuild.raw",
+        "requires_previous_phase": true
+      },
+      {
+        "phase": "receipt_sign_and_publish",
+        "planned_path": "budget/phases/receipt_sign_and_publish.raw",
+        "requires_previous_phase": true
+      },
+      {
+        "phase": "broker_admission",
+        "planned_path": "budget/phases/broker_admission.raw",
+        "requires_previous_phase": true
+      }
+    ],
+    "additional_boundaries": [
+      "prepare entry before archive_rebuild",
+      "receipt issue inside receipt_sign_and_publish",
+      "broker admission before original deadline and receipt/manifest expiry"
+    ],
+    "execution_authorized_by_this_contract": false,
+    "signing_phases": "future separately authorized only; this sidecar runs none"
+  },
+  "runtime_cases": [
+    {
+      "case": "ELIGIBILITY-REFUSAL",
+      "requires": [
+        "guest-context"
+      ],
+      "planned_evidence_roles": {
+        "eligibility-prerequisites": "runtime/eligibility-refusal/eligibility-prerequisites.raw",
+        "package-db-before-after": "runtime/eligibility-refusal/package-db-before-after.raw"
+      },
+      "expected_package_mutation": false,
+      "execution": "future separately approved disposable guest only"
+    },
+    {
+      "case": "POLKIT-ALLOW",
+      "requires": [
+        "guest-context"
+      ],
+      "planned_evidence_roles": {
+        "polkit-decisions": "runtime/polkit-allow/polkit-decisions.raw",
+        "peer-session": "runtime/polkit-allow/peer-session.raw",
+        "consent-nonce": "runtime/polkit-allow/consent-nonce.raw"
+      },
+      "expected_package_mutation": "case-specific; independently reviewed",
+      "execution": "future separately approved disposable guest only"
+    },
+    {
+      "case": "POLKIT-DENY",
+      "requires": [
+        "guest-context"
+      ],
+      "planned_evidence_roles": {
+        "polkit-decisions": "runtime/polkit-deny/polkit-decisions.raw",
+        "peer-session": "runtime/polkit-deny/peer-session.raw",
+        "package-db-before-after": "runtime/polkit-deny/package-db-before-after.raw"
+      },
+      "expected_package_mutation": false,
+      "execution": "future separately approved disposable guest only"
+    },
+    {
+      "case": "POLKIT-FOREIGN-PEER",
+      "requires": [
+        "guest-context"
+      ],
+      "planned_evidence_roles": {
+        "peer-session": "runtime/polkit-foreign-peer/peer-session.raw",
+        "package-db-before-after": "runtime/polkit-foreign-peer/package-db-before-after.raw"
+      },
+      "expected_package_mutation": false,
+      "execution": "future separately approved disposable guest only"
+    },
+    {
+      "case": "POLKIT-REMOTE-INACTIVE",
+      "requires": [
+        "guest-context"
+      ],
+      "planned_evidence_roles": {
+        "peer-session": "runtime/polkit-remote-inactive/peer-session.raw",
+        "package-db-before-after": "runtime/polkit-remote-inactive/package-db-before-after.raw"
+      },
+      "expected_package_mutation": false,
+      "execution": "future separately approved disposable guest only"
+    },
+    {
+      "case": "JOURNAL-ISOLATION",
+      "requires": [
+        "guest-context"
+      ],
+      "planned_evidence_roles": {
+        "mount-layout": "runtime/journal-isolation/mount-layout.raw",
+        "worker-namespace": "runtime/journal-isolation/worker-namespace.raw",
+        "journal-fsync": "runtime/journal-isolation/journal-fsync.raw"
+      },
+      "expected_package_mutation": "case-specific; independently reviewed",
+      "execution": "future separately approved disposable guest only"
+    },
+    {
+      "case": "COMMIT-SUCCESS",
+      "requires": [
+        "guest-context"
+      ],
+      "planned_evidence_roles": {
+        "native-outcome": "runtime/commit-success/native-outcome.raw",
+        "snapshot-results": "runtime/commit-success/snapshot-results.raw",
+        "package-db-before-after": "runtime/commit-success/package-db-before-after.raw"
+      },
+      "expected_package_mutation": "case-specific; independently reviewed",
+      "execution": "future separately approved disposable guest only"
+    },
+    {
+      "case": "TRUST-DRIFT",
+      "requires": [
+        "guest-context"
+      ],
+      "planned_evidence_roles": {
+        "signed-context": "runtime/trust-drift/signed-context.raw",
+        "package-db-before-after": "runtime/trust-drift/package-db-before-after.raw"
+      },
+      "expected_package_mutation": false,
+      "execution": "future separately approved disposable guest only"
+    },
+    {
+      "case": "PLAN-DRIFT",
+      "requires": [
+        "guest-context"
+      ],
+      "planned_evidence_roles": {
+        "locked-native-plan": "runtime/plan-drift/locked-native-plan.raw",
+        "package-db-before-after": "runtime/plan-drift/package-db-before-after.raw"
+      },
+      "expected_package_mutation": false,
+      "execution": "future separately approved disposable guest only"
+    },
+    {
+      "case": "WORKER-CANCEL-TIMEOUT",
+      "requires": [
+        "guest-context"
+      ],
+      "planned_evidence_roles": {
+        "cgroup-processes": "runtime/worker-cancel-timeout/cgroup-processes.raw",
+        "journal-cleanup": "runtime/worker-cancel-timeout/journal-cleanup.raw"
+      },
+      "expected_package_mutation": "case-specific; independently reviewed",
+      "execution": "future separately approved disposable guest only"
+    },
+    {
+      "case": "CANCEL-BEFORE",
+      "requires": [
+        "guest-context"
+      ],
+      "planned_evidence_roles": {
+        "commit-checkpoint": "runtime/cancel-before/commit-checkpoint.raw",
+        "snapshot-results": "runtime/cancel-before/snapshot-results.raw",
+        "package-db-before-after": "runtime/cancel-before/package-db-before-after.raw"
+      },
+      "expected_package_mutation": false,
+      "execution": "future separately approved disposable guest only"
+    },
+    {
+      "case": "CANCEL-AFTER",
+      "requires": [
+        "guest-context"
+      ],
+      "planned_evidence_roles": {
+        "commit-checkpoint": "runtime/cancel-after/commit-checkpoint.raw",
+        "cancel-refused": "runtime/cancel-after/cancel-refused.raw",
+        "native-outcome": "runtime/cancel-after/native-outcome.raw"
+      },
+      "expected_package_mutation": "case-specific; independently reviewed",
+      "execution": "future separately approved disposable guest only"
+    },
+    {
+      "case": "SNAPSHOT-FAIL",
+      "requires": [
+        "guest-context"
+      ],
+      "planned_evidence_roles": {
+        "snapshot-results": "runtime/snapshot-fail/snapshot-results.raw",
+        "package-db-before-after": "runtime/snapshot-fail/package-db-before-after.raw"
+      },
+      "expected_package_mutation": false,
+      "execution": "future separately approved disposable guest only"
+    },
+    {
+      "case": "BOOT-BLOCK",
+      "requires": [
+        "guest-context"
+      ],
+      "planned_evidence_roles": {
+        "boot-verifier": "runtime/boot-block/boot-verifier.raw",
+        "package-db-before-after": "runtime/boot-block/package-db-before-after.raw"
+      },
+      "expected_package_mutation": false,
+      "execution": "future separately approved disposable guest only"
+    },
+    {
+      "case": "CRASH-ADMISSION",
+      "requires": [
+        "guest-context"
+      ],
+      "planned_evidence_roles": {
+        "receipt-tombstone": "runtime/crash-admission/receipt-tombstone.raw",
+        "restart-replay-denial": "runtime/crash-admission/restart-replay-denial.raw"
+      },
+      "expected_package_mutation": "case-specific; independently reviewed",
+      "execution": "future separately approved disposable guest only"
+    },
+    {
+      "case": "CRASH-BEFORE-COMMIT",
+      "requires": [
+        "guest-context"
+      ],
+      "planned_evidence_roles": {
+        "commit-checkpoint": "runtime/crash-before-commit/commit-checkpoint.raw",
+        "restart-replay-denial": "runtime/crash-before-commit/restart-replay-denial.raw",
+        "package-db-before-after": "runtime/crash-before-commit/package-db-before-after.raw"
+      },
+      "expected_package_mutation": false,
+      "execution": "future separately approved disposable guest only"
+    },
+    {
+      "case": "PARTIAL-KILL",
+      "requires": [
+        "guest-context"
+      ],
+      "planned_evidence_roles": {
+        "commit-checkpoint": "runtime/partial-kill/commit-checkpoint.raw",
+        "partial-extraction": "runtime/partial-kill/partial-extraction.raw",
+        "unknown-outcome": "runtime/partial-kill/unknown-outcome.raw"
+      },
+      "expected_package_mutation": "case-specific; independently reviewed",
+      "execution": "future separately approved disposable guest only"
+    },
+    {
+      "case": "POWER-LOSS",
+      "requires": [
+        "guest-context"
+      ],
+      "planned_evidence_roles": {
+        "commit-checkpoint": "runtime/power-loss/commit-checkpoint.raw",
+        "partial-extraction": "runtime/power-loss/partial-extraction.raw",
+        "serial-power-cycle": "runtime/power-loss/serial-power-cycle.raw",
+        "unknown-outcome": "runtime/power-loss/unknown-outcome.raw"
+      },
+      "expected_package_mutation": "case-specific; independently reviewed",
+      "execution": "future separately approved disposable guest only"
+    },
+    {
+      "case": "CLOCK-REPLAY",
+      "requires": [
+        "guest-context"
+      ],
+      "planned_evidence_roles": {
+        "boot-epoch": "runtime/clock-replay/boot-epoch.raw",
+        "receipt-tombstone": "runtime/clock-replay/receipt-tombstone.raw",
+        "restart-replay-denial": "runtime/clock-replay/restart-replay-denial.raw"
+      },
+      "expected_package_mutation": "case-specific; independently reviewed",
+      "execution": "future separately approved disposable guest only"
+    },
+    {
+      "case": "POST-SNAPSHOT-FAIL",
+      "requires": [
+        "guest-context"
+      ],
+      "planned_evidence_roles": {
+        "native-outcome": "runtime/post-snapshot-fail/native-outcome.raw",
+        "snapshot-results": "runtime/post-snapshot-fail/snapshot-results.raw"
+      },
+      "expected_package_mutation": "case-specific; independently reviewed",
+      "execution": "future separately approved disposable guest only"
+    },
+    {
+      "case": "POST-BOOT",
+      "requires": [
+        "guest-context"
+      ],
+      "planned_evidence_roles": {
+        "native-outcome": "runtime/post-boot/native-outcome.raw",
+        "boot-verifier": "runtime/post-boot/boot-verifier.raw",
+        "serial-power-cycle": "runtime/post-boot/serial-power-cycle.raw"
+      },
+      "expected_package_mutation": "case-specific; independently reviewed",
+      "execution": "future separately approved disposable guest only"
+    },
+    {
+      "case": "JOURNAL-DAMAGE-SPACE",
+      "requires": [
+        "guest-context"
+      ],
+      "planned_evidence_roles": {
+        "journal-fsync": "runtime/journal-damage-space/journal-fsync.raw",
+        "corruption-space-denial": "runtime/journal-damage-space/corruption-space-denial.raw"
+      },
+      "expected_package_mutation": "case-specific; independently reviewed",
+      "execution": "future separately approved disposable guest only"
+    },
+    {
+      "case": "ROOT-RECOVERY",
+      "requires": [
+        "guest-context"
+      ],
+      "planned_evidence_roles": {
+        "operator-recovery": "runtime/root-recovery/operator-recovery.raw",
+        "journal-survives-rollback": "runtime/root-recovery/journal-survives-rollback.raw",
+        "boot-verifier": "runtime/root-recovery/boot-verifier.raw"
+      },
+      "expected_package_mutation": "case-specific; independently reviewed",
+      "execution": "future separately approved disposable guest only"
+    },
+    {
+      "case": "OFFICIAL-REGRESSION",
+      "requires": [
+        "guest-context"
+      ],
+      "planned_evidence_roles": {
+        "official-update-regression": "runtime/official-regression/official-update-regression.raw",
+        "source-consent-separation": "runtime/official-regression/source-consent-separation.raw"
+      },
+      "expected_package_mutation": "case-specific; independently reviewed",
+      "execution": "future separately approved disposable guest only"
+    }
+  ],
+  "closure": {
+    "semantic_pass_is_production_authority": false,
+    "json_claims_authenticate_raw_evidence": false,
+    "production_authorized": false,
+    "requires": "reviewed real native trust, authenticated role/budget/broker evidence and complete guest runtime captures"
+  },
+  "safety": {
+    "host_execution_performed": false,
+    "guest_execution_performed": false,
+    "agent_start": false,
+    "signing": false,
+    "credential_probe": false,
+    "production_enable": false,
+    "historical_failed_manifest_retry": false
+  }
+}

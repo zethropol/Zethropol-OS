@@ -1,0 +1,21 @@
+[Unit]
+Description=Zethropol AUR independent isolated rebuild and receipt %i
+[Service]
+Type=oneshot
+User=zethropol-aur-attestor
+Group=zethropol-aur-attestor
+SupplementaryGroups=zethropol-aur-providers
+UMask=0077
+PAMName=login
+ExecStart=/usr/bin/python3 -I -B /usr/lib/zethropol/aur/provider.py attest %i
+ExecStopPost=/usr/bin/python3 -I -B /usr/lib/zethropol/aur/provider.py recover %i
+Restart=no
+TimeoutStartSec=1900
+TimeoutStopSec=45
+KillMode=mixed
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/zethropol-aur-attestor
+ReadWritePaths=-/run/user
+PrivateTmp=yes

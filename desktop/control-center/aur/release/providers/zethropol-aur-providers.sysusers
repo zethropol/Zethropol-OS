@@ -1,0 +1,5 @@
+g zethropol-aur-providers -
+u zethropol-aur-archive 951 "AUR developer output signer" /var/lib/zethropol-aur-archive /usr/bin/nologin
+u zethropol-aur-attestor 950 "AUR independent receipt signer" /var/lib/zethropol-aur-attestor /usr/bin/nologin
+m zethropol-aur-archive zethropol-aur-providers
+m zethropol-aur-attestor zethropol-aur-providers
