@@ -1,6 +1,6 @@
 # Zethropol OS
 
-**Basit kullan. İstediğinde kontrol sende olsun.**
+**Keep it simple. Stay in control whenever you want.**
 
 Zethropol OS is an independent Linux operating system project built on CachyOS and Arch Linux. It aims to combine the performance and flexibility of a modern Linux base with a carefully designed, practical, and distinctive desktop experience.
 
