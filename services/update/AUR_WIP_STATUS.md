@@ -1,4 +1,4 @@
-# AUR Update WIP status — 2026-11-05
+# AUR Update WIP status — 2026-11-06
 
 **INCOMPLETE / NOT PRODUCTION READY. Installation stays closed.**
 
@@ -39,11 +39,11 @@ inputs. Neither failure was represented as a production success.
 | Check | Result |
 | --- | --- |
 | Main Update cargo check, offline/locked | PASS with existing dead-code warnings |
-| Main Update Rust tests | 227 passed, 5 ignored; includes 50 SQLite fixture checks inside the adapter test |
-| AUR candidate cargo check/test, offline/locked | PASS; 166 passed, 5 ignored |
+| Main Update Rust tests | 239 passed, 6 ignored; includes 50 SQLite fixture checks inside the adapter test |
+| AUR candidate cargo check/test, offline/locked | PASS; 178 passed, 6 ignored |
 | AUR candidate Clippy all targets, -D warnings | PASS |
 | Main Update Clippy all targets, -D warnings | FAIL: inherited dead-code diagnostics listed below |
-| rustfmt on all 49 selected Rust files | PASS |
+| rustfmt on changed Rust files | PASS |
 | Qt/QML independent configure/build | PASS; existing optional Vulkan/Qt policy warnings |
 | CTest | 9/9 targets passed |
 | Portable Python AUR suite | 481 passed, 60 historical tests skipped; 541 discovered |
@@ -54,13 +54,9 @@ D-Bus/GPG socket restrictions were separated from code failures by running tests
 in an environment allowing private test sockets. Positive fixture authorization
 and private-root native commits are not real production authorization.
 
-Main Clippy inherited diagnostics: `VerifiedIdentity::bus_name`,
-`CanonicalPlan::matches`, broker methods `operation_for_message`,
-`retry_worker_start`, `claim_worker`, `update_worker_status`, persistent
-`sha256_hex`, `AurArchive::from_root_staging`, `prepare_aur_locked`,
-`prepare_aur_locked_internal`, and the retained receipt `intake` field.
-Some are test-only or reserved integration helpers; they were not deleted or
-blanket-suppressed merely to publish WIP. New AUR-target diagnostics are clear.
+Main Clippy inherited diagnostics are enumerated in
+[AUR_NATIVE_BROKER_INTEGRATION.md](AUR_NATIVE_BROKER_INTEGRATION.md).
+New AUR-target diagnostics are clear; no blanket suppression was added.
 
 ## Remaining production dependencies and acceptance
 
@@ -73,13 +69,12 @@ blanket-suppressed merely to publish WIP. New AUR-target diagnostics are clear.
    not establish a current approved artifact set. Private approval storage could
    not be inspected and is not claimed absent. No private-key search or signing
    operation was attempted.
-2. Actual Archive native trust-domain separation and full provider/broker/UI
-   acceptance with those approved artifacts. Existing code verifies sealed
-   bytes, package name/version/architecture/hash/signature and locked plan;
-   the final path still uses the official ALPM domain. The separate native
-   loader is mechanism-only and is not certified as integrated authority.
-   No key was silently enrolled in official trust and no signature policy was
-   relaxed to make installation succeed.
+2. Source integration of the fixed separate native Archive domain is now
+   implemented and exercised through real isolated LAB transactions. Actual
+   deployed root provider/broker/UI acceptance with approved public artifacts
+   and separately provisioned public native trust remains unavailable. See
+   [native broker integration](AUR_NATIVE_BROKER_INTEGRATION.md). No official
+   keyring was expanded or signature policy relaxed.
 3. An identified disposable bootable guest/image with reviewed Btrfs/root and
    independent journal layout. QEMU, qemu-img, libvirt/virsh and VirtualBox were
    unavailable; /dev/kvm was absent and no guest identity/image was supplied.
@@ -91,7 +86,7 @@ The release owner must approve the public artifact/role set and exact signing
 operation through the existing authorization mechanism, and identify/provide the
 disposable guest. Do not send private keys or passwords. Guest fault/install
 operations must retain their operation-bound authorization. Production gates
-may only be reconsidered after native-domain integration and all required real
+may only be reconsidered after all required real deployment and
 acceptance evidence have been independently reviewed; no runtime enable flag
 or LAB key opens them.
 
@@ -101,8 +96,10 @@ See [current follow-up](AUR_PRODUCTION_ACCEPTANCE_STATUS.md) for the new
 signature-status checks, downgrade refusal, fresh installed-version readback,
 and actual two-domain LAB native transactions. The source preflight entrypoint
 now works in both source and staged layouts and always reports installation
-closed, even if all public prerequisites pass. These changes do not complete
-production native-domain integration or replace missing guest acceptance.
+closed, even if all public prerequisites pass. The source integration is now
+implemented as detailed in
+[AUR_NATIVE_BROKER_INTEGRATION.md](AUR_NATIVE_BROKER_INTEGRATION.md); it does not
+replace missing root deployment and guest acceptance.
 
 ## Git integration
 

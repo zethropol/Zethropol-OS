@@ -26,3 +26,14 @@ Signed tests generate only ephemeral LAB keys and use private ALPM roots. Positi
 native commits in those fixtures are not host or production acceptance. Ignored
 live-session/host-scan tests are not counted as passed. See the
 [current status](../../../../services/update/AUR_WIP_STATUS.md).
+
+## Native broker integration (2026-11-06)
+
+The broker now uses a fresh fixed-domain native child for AUR preview/install;
+AUR archives never enter the official ALPM handle. Shared Rust tests execute
+real signed transactions only in private LAB roots, including foreign signature,
+state/plan drift, replay, cancellation and interrupted-commit refusal. The
+private `--aur-native` transport accepts no client-selected trust domain.
+Production admission remains closed pending approved PUBLIC trust/artifact
+inputs and actual deployed root/guest acceptance. See
+[the integration report](../../../../services/update/AUR_NATIVE_BROKER_INTEGRATION.md).

@@ -2,6 +2,10 @@
 
 **INCOMPLETE. Production installation remains CLOSED.**
 
+Current source integration and results are recorded in
+[AUR_NATIVE_BROKER_INTEGRATION.md](AUR_NATIVE_BROKER_INTEGRATION.md) (2026-11-06).
+The results below preserve the preceding 2026-11-05 checkpoint.
+
 ## Implemented and verified in this follow-up
 
 * The locked AUR resolver rejects package downgrades using native version
@@ -77,12 +81,12 @@ libvirt/virsh or VirtualBox tool, no /dev/kvm and no supplied/repository guest
 image or guest identity. nspawn/bubblewrap are available for mechanism tests;
 they cannot certify independent boot or power-loss/snapshot recovery.
 
-**Still not completed:** the actual production broker's AUR preparation reuses
-its official ALPM handle. The new separate-domain LAB transactions do not
-replace that path. A reviewed fixed-domain production process/worker integration
-with approved public trust/artifact inputs and guest validation is still needed.
-No official keyring was expanded, no native signature check disabled and no
-production gate opened to make this missing integration appear successful.
+**Updated 2026-11-06:** the mixed-handle source path has been replaced by the
+fixed-domain self-exec broker integration and isolated native tests. See the
+[current integration report](AUR_NATIVE_BROKER_INTEGRATION.md). Actual root
+deployment with approved public trust/artifact inputs and real guest acceptance
+remain incomplete. No official keyring was expanded, signature check disabled
+or production gate opened.
 
 ## Safe disposable-guest setup and acceptance plan
 

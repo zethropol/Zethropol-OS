@@ -37,3 +37,14 @@ historical capture is a production bootstrap.
 No installed Control Center, system unit, keyring or host package was changed by
 publishing these sources. Deployment, signing and a real native transaction
 retain their separate operation authorization boundaries.
+
+## Native broker integration (2026-11-06)
+
+The broker now uses a fresh fixed-domain native child for AUR preview/install;
+AUR archives never enter the official ALPM handle. Shared Rust tests execute
+real signed transactions only in private LAB roots, including foreign signature,
+state/plan drift, replay, cancellation and interrupted-commit refusal. The
+private `--aur-native` transport accepts no client-selected trust domain.
+Production admission remains closed pending approved PUBLIC trust/artifact
+inputs and actual deployed root/guest acceptance. See
+[the integration report](../../../services/update/AUR_NATIVE_BROKER_INTEGRATION.md).
