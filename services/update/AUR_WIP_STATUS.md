@@ -39,14 +39,14 @@ inputs. Neither failure was represented as a production success.
 | Check | Result |
 | --- | --- |
 | Main Update cargo check, offline/locked | PASS with existing dead-code warnings |
-| Main Update Rust tests | 223 passed, 5 ignored; includes 50 SQLite fixture checks inside the adapter test |
-| AUR candidate cargo check/test, offline/locked | PASS; 162 passed, 5 ignored |
+| Main Update Rust tests | 227 passed, 5 ignored; includes 50 SQLite fixture checks inside the adapter test |
+| AUR candidate cargo check/test, offline/locked | PASS; 166 passed, 5 ignored |
 | AUR candidate Clippy all targets, -D warnings | PASS |
 | Main Update Clippy all targets, -D warnings | FAIL: inherited dead-code diagnostics listed below |
 | rustfmt on all 49 selected Rust files | PASS |
 | Qt/QML independent configure/build | PASS; existing optional Vulkan/Qt policy warnings |
 | CTest | 9/9 targets passed |
-| Portable Python AUR suite | 472 passed, 60 historical tests skipped; 532 discovered |
+| Portable Python AUR suite | 481 passed, 60 historical tests skipped; 541 discovered |
 | Real LAB sandbox/signed-root build/cgroup lifecycle/PolicyKit denial | PASS; four separate live drivers, no host package installation |
 | Diff whitespace and credential-pattern/path scan | PASS; no private key block, GitHub/AWS token, credential URL, Hardware/backup/keyring/build-archive path in selected sources |
 
@@ -94,6 +94,15 @@ operations must retain their operation-bound authorization. Production gates
 may only be reconsidered after native-domain integration and all required real
 acceptance evidence have been independently reviewed; no runtime enable flag
 or LAB key opens them.
+
+## Production acceptance follow-up
+
+See [current follow-up](AUR_PRODUCTION_ACCEPTANCE_STATUS.md) for the new
+signature-status checks, downgrade refusal, fresh installed-version readback,
+and actual two-domain LAB native transactions. The source preflight entrypoint
+now works in both source and staged layouts and always reports installation
+closed, even if all public prerequisites pass. These changes do not complete
+production native-domain integration or replace missing guest acceptance.
 
 ## Git integration
 

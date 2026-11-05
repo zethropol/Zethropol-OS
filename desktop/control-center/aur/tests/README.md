@@ -24,8 +24,8 @@ ZETHROPOL_TEST_HISTORICAL_EVIDENCE=1 python3 -B -m unittest discover -s desktop/
 With the flag set, missing or changed pinned evidence must fail those tests.
 The portable suite's skipped count is part of the result, not production PASS.
 On the existing source workspace, before separating historical tests, all 532
-Python cases passed against its retained local evidence. The independently
-exported source tree reports 472 passed and 60 skipped.
+then-existing Python cases passed against its retained local evidence. The independently
+exported source tree reports 481 passed and 60 skipped (541 discovered after the new regression cases).
 
 `live_sandbox.py`, `live_signed_root.py`, `live_lifecycle.py` and `live_polkit.py`
 exercise actual namespaces, benign makepkg builds/signatures, user cgroups and
@@ -39,3 +39,9 @@ power-loss and boot verification still require the separately identified
 disposable environment in [VM_ACCEPTANCE_PLAN.md](../VM_ACCEPTANCE_PLAN.md).
 A namespace or container shares the host kernel and does not certify independent
 boot/power-loss recovery.
+
+`test_native_domain_transactions.py` additionally runs real libalpm transactions
+against two independent ephemeral PUBLIC trust domains in fresh processes. Its
+C probe compiles only with ZETHROPOL_LAB_ONLY, refuses root and is never a
+production helper. It neither certifies broker native-domain integration nor
+substitutes for guest PolicyKit/snapshot/boot/recovery acceptance.

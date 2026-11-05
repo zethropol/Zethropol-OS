@@ -53,7 +53,7 @@ class TrustPolicy:
             return result
         config = json.loads(raw, object_pairs_hook=unique)
         if role is not None:
-            if role not in ('manifest', 'receipt', 'archive') or set(config) != {'schema','purpose','manifest','receipt','archive'} or config['schema'] != 1 or config['purpose'] != 'zethropol-aur-trust':
+            if role not in ('manifest', 'receipt', 'archive') or not isinstance(config, dict) or set(config) != {'schema','purpose','manifest','receipt','archive'} or type(config['schema']) is not int or config['schema'] != 1 or config['purpose'] != 'zethropol-aur-trust':
                 raise Rejected('Explicit versioned project trust role required')
             config = config[role]
         if not isinstance(config, dict) or set(config) != {'keyring','keyring_sha256','signers'}:
@@ -89,15 +89,17 @@ class TrustPolicy:
                 f'/proc/self/fd/{signature.fd}', f'/proc/self/fd/{archive.fd}'],
                 pass_fds=(self.keyring.fd, signature.fd, archive.fd),
                 env={'PATH':'/usr/bin','LC_ALL':'C'}, capture_output=True, timeout=30)
-        if result.returncode:
+        if result.returncode or len(result.stdout) > 1024**2:
             raise Rejected('Detached signature verification failed')
         valid = []
         for line in result.stdout.decode('ascii',errors='strict').splitlines():
             fields = line.split()
             if fields[:2] == ['[GNUPG:]', 'VALIDSIG']:
+                if len(fields) not in (11, 12):
+                    raise Rejected('Malformed signature status')
                 # Permit signing subkeys only when their primary key is pinned.
                 valid.append(fields[11] if len(fields)>11 else fields[2])
-            if len(fields)>1 and fields[1] in ('BADSIG','ERRSIG','EXPSIG','EXPKEYSIG','REVKEYSIG'):
+            if len(fields)>1 and fields[1] in ('BADSIG','ERRSIG','EXPSIG','EXPKEYSIG','REVKEYSIG','KEYEXPIRED','SIGEXPIRED','KEYREVOKED','NO_PUBKEY','FAILURE','NODATA'):
                 raise Rejected('Invalid/expired/revoked signing key')
         if len(valid)!=1 or valid[0] not in self.signers:
             raise Rejected('Signature signer is not explicitly approved')

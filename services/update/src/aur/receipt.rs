@@ -233,6 +233,11 @@ impl ReceiptTrust {
                 || !receipt_digest(&r.keyring_sha256)
                 || r.signers.is_empty()
                 || r.signers.len() > 32
+                || r.signers
+                    .iter()
+                    .collect::<std::collections::HashSet<_>>()
+                    .len()
+                    != r.signers.len()
                 || r.signers.iter().any(|s| {
                     !matches!(s.len(), 40 | 64)
                         || !s
@@ -290,31 +295,52 @@ impl ReceiptRole {
             return Err("detached signature verification failed".into());
         }
         let status = std::str::from_utf8(&out.stdout).map_err(|e| e.to_string())?;
-        let mut signers = Vec::new();
-        for line in status.lines() {
-            let f: Vec<_> = line.split_whitespace().collect();
-            if f.first() != Some(&"[GNUPG:]") {
-                continue;
-            }
-            if f.get(1).is_some_and(|v| {
-                ["BADSIG", "ERRSIG", "EXPSIG", "EXPKEYSIG", "REVKEYSIG"].contains(v)
-            }) {
-                return Err("bad/expired/revoked role signature".into());
-            }
-            if f.get(1) == Some(&"VALIDSIG") {
-                signers.push(
-                    f.get(11)
-                        .or_else(|| f.get(2))
-                        .ok_or("missing signature fingerprint")?
-                        .to_string(),
-                );
-            }
-        }
-        if signers.len() != 1 || !self.signers.contains(&signers[0]) {
-            return Err("signer not approved for this role".into());
-        }
-        Ok(())
+        validate_aur_signature_status(status, &self.signers)
     }
+}
+
+// Called only after gpgv exited successfully; status text alone is not proof.
+fn validate_aur_signature_status(status: &str, approved: &[String]) -> Result<(), String> {
+    let mut signers = Vec::new();
+    for line in status.lines() {
+        let f: Vec<_> = line.split_whitespace().collect();
+        if f.first() != Some(&"[GNUPG:]") {
+            continue;
+        }
+        if f.get(1).is_some_and(|v| {
+            [
+                "BADSIG",
+                "ERRSIG",
+                "EXPSIG",
+                "EXPKEYSIG",
+                "REVKEYSIG",
+                "KEYEXPIRED",
+                "SIGEXPIRED",
+                "KEYREVOKED",
+                "NO_PUBKEY",
+                "FAILURE",
+                "NODATA",
+            ]
+            .contains(v)
+        }) {
+            return Err("bad/expired/revoked role signature".into());
+        }
+        if f.get(1) == Some(&"VALIDSIG") {
+            if !matches!(f.len(), 11 | 12) {
+                return Err("malformed signature status".into());
+            }
+            signers.push(
+                f.get(11)
+                    .or_else(|| f.get(2))
+                    .ok_or("missing signature fingerprint")?
+                    .to_string(),
+            );
+        }
+    }
+    if signers.len() != 1 || !approved.contains(&signers[0]) {
+        return Err("signer not approved for this role".into());
+    }
+    Ok(())
 }
 
 pub(crate) struct VerifiedAurReceipt {
@@ -619,4 +645,65 @@ fn load_approved_aur_review(digest: &str) -> Result<ReviewedBuild, String> {
     let review: ReviewedBuild = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
     review.validate()?;
     Ok(review)
+}
+
+#[cfg(test)]
+mod signature_status_tests {
+    use super::*;
+    fn valid() -> String {
+        format!(
+            "[GNUPG:] VALIDSIG {} 2026-11-05 1 0 4 0 22 8 00 {}\n",
+            "B".repeat(40),
+            "A".repeat(40)
+        )
+    }
+    #[test]
+    fn expiry_revocation_and_failure_status_override_validsig() {
+        let approved = vec!["A".repeat(40)];
+        validate_aur_signature_status(&valid(), &approved).unwrap();
+        for token in [
+            "BADSIG",
+            "ERRSIG",
+            "EXPSIG",
+            "EXPKEYSIG",
+            "REVKEYSIG",
+            "KEYEXPIRED",
+            "SIGEXPIRED",
+            "KEYREVOKED",
+            "NO_PUBKEY",
+            "FAILURE",
+            "NODATA",
+        ] {
+            let status = format!("{}[GNUPG:] {token} untrusted\n", valid());
+            assert!(
+                validate_aur_signature_status(&status, &approved).is_err(),
+                "{token}"
+            );
+        }
+        for status in ["[GNUPG:] VALIDSIG A".to_string(), valid().repeat(2)] {
+            assert!(validate_aur_signature_status(&status, &approved).is_err());
+        }
+        assert!(validate_aur_signature_status(&valid(), &["B".repeat(40)]).is_err());
+    }
+    #[test]
+    fn duplicate_role_allowlists_are_rejected_before_signature_use() {
+        let fixture = crate::broker_protocol::aur_fixture::Fixture::new();
+        let ring = b"synthetic public fixture bytes";
+        fs::write(fixture.path.join("public.gpg"), ring).unwrap();
+        let role = || ReceiptRoleConfig {
+            keyring: "public.gpg".into(),
+            keyring_sha256: receipt_hash(ring),
+            signers: vec!["A".repeat(40); 2],
+        };
+        let policy = ReceiptPolicyConfig {
+            schema: 1,
+            purpose: "zethropol-aur-trust".into(),
+            manifest: role(),
+            receipt: role(),
+            archive: role(),
+        };
+        let path = fixture.path.join("policy.json");
+        fs::write(&path, serde_json::to_vec(&policy).unwrap()).unwrap();
+        assert!(ReceiptTrust::load_owned(&path, unsafe { libc::geteuid() }, false).is_err());
+    }
 }

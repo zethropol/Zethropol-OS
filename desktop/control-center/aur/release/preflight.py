@@ -5,7 +5,10 @@ from pathlib import Path
 import shutil
 import sys
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+_here = Path(__file__).resolve().parent
+# Source layout keeps this read-only tool under release/; staged layout places
+# it next to trust.py. Neither layout may import modules from the caller's cwd.
+sys.path.insert(0, str(_here.parent if _here.name == 'release' else _here))
 from trust import TrustPolicy
 
 
@@ -55,8 +58,9 @@ def inspect():
             checks.append({'check':helper,'ok':path.is_file() and os.access(path,os.X_OK)})
         except (OSError,RuntimeError) as error:
             checks.append({'check':helper,'ok':False,'reason':str(error)})
-    return {'installation': 'blocked' if any(not item['ok'] for item in checks) else 'requires-transaction-authorization', 'ready_to_install': False,
-            'authority_gate': 'conditional candidate: original consent/PolicyKit/receipt/native/recovery checks are mandatory; inventory is not a grant',
+    return {'installation': 'closed', 'ready_to_install': False,
+            'public_prerequisites': 'blocked' if any(not item['ok'] for item in checks) else 'verified',
+            'authority_gate': 'closed pending real production native-domain/PolicyKit/snapshot/boot/recovery acceptance; inventory is not a grant',
             'physical_key_required': False,
             'independent_provider': 'executable independent rebuild provider packaged; real identities/keys and runtime deployment still required',
             'signed_artifacts': 'not-certified-by-this-inventory',
