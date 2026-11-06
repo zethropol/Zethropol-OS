@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "purpose": "unapproved-public-archive-snapshot-review",
+  "production_authorized": false,
+  "installed": false,
+  "primary_fingerprints": [
+    "2C0BE07D3A3C4E73B45186738840E6F9BC0AB7D1"
+  ],
+  "source_keyring_sha256": "241312b62914153bdbbeb01e7477949dd17e5f845b4118d489da7a7fd80a68bc",
+  "public_packet_tags": [
+    6,
+    13,
+    2
+  ],
+  "ownertrust_entries": [],
+  "native_TrustedOnly_positive_acceptance": false,
+  "required_owner_action": "Authenticate/approve Archive signing role and supply or explicitly authorize its reviewed public native trust certification. This unknown-trust snapshot is not production trust.",
+  "files": {
+    "gpg.conf": {
+      "sha256": "5d7b9b80d6bcd6f7598ee2be18d91cde5c12f600f565dbbee45e836ab528456d",
+      "bytes": 258,
+      "mode": "0o644"
+    },
+    "pubring.kbx": {
+      "sha256": "cc767b6c84114803675b0ee4a03385f605672a063486834e6c062210920cb970",
+      "bytes": 1340,
+      "mode": "0o644"
+    },
+    "trustdb.gpg": {
+      "sha256": "163aca927eac18ad5d84a62c4b0eedc0a7098886a9c64a298316c4efc8f822c9",
+      "bytes": 1200,
+      "mode": "0o644"
+    }
+  },
+  "public_key_listing": "tru::1:1793998653:0:3:1:5\npub:-:4096:1:8840E6F9BC0AB7D1:1793406776:1824942776::-:::scSC::::::23::0:\nfpr:::::::::2C0BE07D3A3C4E73B45186738840E6F9BC0AB7D1:\nuid:-::::1793406776::CDD4B0CD38A9EDC4D9382B6EE83C4E276B92C0C1::Zethropol AUR Archive Signing::::::::::0:\n",
+  "ownertrust_export": "# List of assigned trustvalues, created Fri Nov  6 23:57:45 2026 +03\n# (Use \"gpg --import-ownertrust\" to restore them)\n"
+}

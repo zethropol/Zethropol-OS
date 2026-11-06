@@ -9,6 +9,11 @@ in [guest/guest-evidence.json](guest/guest-evidence.json). It does not supply th
 missing release-owner approval, signed production set or approved native Archive
 snapshot. The positive production AUR cases remain unaccepted.
 
+Subsequent exact-hash owner authorization, the real UID949 signing failure and
+separately authorized public Archive certification are recorded in
+[trust-review-20261106/operation-result.json](trust-review-20261106/operation-result.json).
+The detached manifest signature is still absent and admission remains closed.
+
 ## Reproduce the passive inventory
 
 From the source checkout, run these read-only commands in the intended execution
@@ -58,22 +63,24 @@ and empty signers intentionally fail validation. Do not fill them with LAB keys,
 copy a test approval, extend expiry of a previously signed manifest or enable a
 service simply to make preflight pass.
 
-A broker-admissible root manifest is UTF-8 JSON with exactly:
+A root manifest is UTF-8 JSON with exactly:
 
-- `schema`: integer **1**; `purpose`: `zethropol-aur-build-root`.
+- `schema`: integer **1**, or **2** for the staged release candidate;
+  `purpose`: `zethropol-aur-build-root`.
 - `architecture`: `x86_64` or `aarch64`, matching the reviewed target.
 - `expires`: integer Unix seconds, later than verification time and at most
   86400 seconds ahead. Recheck at publication and receipt admission.
-- `packages`: 1–64 unique entries, each exactly `name`, `version`, `sha256`.
+- `packages`: 1–64 unique entries for schema 1; the staged candidate supports
+  1–256 for schema 2. Each entry is exactly `name`, `version`, `sha256`.
   Name/version must pass `trust.approved_manifest`; hash is lowercase SHA-256
   of the exact distribution package bytes, not a filename or extracted tree.
 
 **Do not confuse schema numbers:** the UID949 signer *configuration* is schema 2.
-The provider also understands schema-2 build roots (up to 256 entries), but the
-current broker receipt parser accepts schema-1 root manifests only. Such schema-2
-root inputs must remain blocked at broker admission; use a newly reviewed,
-freshly signed schema-1 set within the actual broker contract for acceptance.
-No parser or limit is changed by this infrastructure task.
+The canonical main broker parser accepts schema-1 roots only. The non-installed
+release candidate's existing `update-reuse/build.rs` and `src/root_capacity.rs`
+extend that parser to schema 2 with a separate 256-entry bound, matching the
+provider. The prepared 145-package manifest targets that candidate, not an
+unchanged canonical broker binary. No parser or limit is changed by this task.
 
 The detached OpenPGP signature authenticates exact raw manifest bytes. Whitespace
 changes require a new signature and raw-byte hash. The provenance manifest ID

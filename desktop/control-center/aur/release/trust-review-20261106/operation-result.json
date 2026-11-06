@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "owner_identity": "release owner explicitly confirmed by requesting user; no further identity request",
+  "owner_review_request_sha256": "257162cf8cde27ae8c89e268d7b8525fa6948a40956a21b23ee4cdae2050e993",
+  "manifest_owner_authorization": "created through pkexec and existing pinned clean transaction; exact protected audit included",
+  "uid949_signature": "BLOCKED: existing signer diagnostic gpg-signing/backend_returncode=2; no signature produced",
+  "signing_retry_permitted": false,
+  "signer_agent_start": "BLOCKED by installed root-owned-home-lifecycle-policy; activation_approved=false; activation/quarantine records absent",
+  "archive_public_native_certification": "completed through separate pkexec operation; exact primary, ownertrust=6 and root-protected evidence captured",
+  "archive_runtime_domain_activated": false,
+  "production_admission": "closed",
+  "vm_tests_repeated": false,
+  "private_key_exported_or_copied": false,
+  "remaining_action": "Supply/restore the approved protected activation/quarantine producer compatible with the installed lifecycle. The installed root-claim/run entrypoints only consume these records; none exists in protected state. Manual policy edits and fabricated activation IDs/receipts are forbidden. After backend readiness, signing needs an explicitly authorized non-replayed transaction.",
+  "manifest_detached_signature": null,
+  "aur_output_and_receipt_signatures": "not fabricated; require actual approved-root independent builds and original peer-bound reservation",
+  "activation_policy_sha256": "3b080ec729b0d03567f4a6139b3cd0675e97e97beaae3ace2b2dc7ab8201654b",
+  "activation_claims": [],
+  "quarantine_receipts": [],
+  "activation_state_unchanged": true,
+  "outcome_logged_to_existing_authpriv_journal": true
+}

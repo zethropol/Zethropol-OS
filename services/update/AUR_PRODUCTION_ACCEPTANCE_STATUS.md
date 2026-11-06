@@ -2,6 +2,16 @@
 
 **INCOMPLETE. Production installation remains CLOSED.**
 
+The subsequent real release-owner operation is recorded in
+[`release/trust-review-20261106/operation-result.json`](../../desktop/control-center/aur/release/trust-review-20261106/operation-result.json).
+The new manifest has a protected owner approval, but its one UID949 signing
+attempt failed at `gpg-signing` with backend return code 2 and produced no
+signature. Separate root-authorized Archive public native certification is
+prepared and inactive. The installed signer lifecycle still rejects its
+inactive policy; no activation ID/quarantine receipt was invented and no signing
+retry was performed. Earlier statements about absent owner approval and native
+snapshot below are historical, not this operation's result.
+
 2026-11-06 disposable guest execution is captured in
 [`release/guest/guest-evidence.json`](../../desktop/control-center/aur/release/guest/guest-evidence.json).
 Real KVM/UEFI boot, local PolicyKit preview/refusal, D-Bus, distribution ALPM,

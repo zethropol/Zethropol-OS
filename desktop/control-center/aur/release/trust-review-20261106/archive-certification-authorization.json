@@ -1,0 +1,20 @@
+{
+  "activated_runtime_domain": false,
+  "archive_primary": "2C0BE07D3A3C4E73B45186738840E6F9BC0AB7D1",
+  "files": {
+    "gpg.conf": "5d7b9b80d6bcd6f7598ee2be18d91cde5c12f600f565dbbee45e836ab528456d",
+    "pubring.kbx": "5f6ff531c9c0206c62b4dec093d1451febca97168d52fa603dc61f230976fce5",
+    "trustdb.gpg": "a11f98e062a75f37a947d58f062ee1bc2d5bfe2caf58c2e43f2968626e14de90"
+  },
+  "keyring_sha256": "241312b62914153bdbbeb01e7477949dd17e5f845b4118d489da7a7fd80a68bc",
+  "mechanism": "pkexec root authorization",
+  "operation_sha256": "44c70f844bc3e34e6e29e4d54ad3c96f2c1748473e992cd1b4b44508fcd2d825",
+  "operator_uid": 1000,
+  "ownertrust": 6,
+  "private_key_operation": false,
+  "production_admission": "closed",
+  "public_listing": "tru::1:1793999260:1824942776:3:1:5\npub:u:4096:1:8840E6F9BC0AB7D1:1793406776:1824942776::u:::scSC::::::23::0:\nfpr:::::::::2C0BE07D3A3C4E73B45186738840E6F9BC0AB7D1:\nuid:u::::1793406776::CDD4B0CD38A9EDC4D9382B6EE83C4E276B92C0C1::Zethropol AUR Archive Signing::::::::::0:\n",
+  "purpose": "protected-native-archive-public-certification-evidence",
+  "review_request_sha256": "257162cf8cde27ae8c89e268d7b8525fa6948a40956a21b23ee4cdae2050e993",
+  "schema": 1
+}

@@ -1,0 +1,14 @@
+{
+  "activate_runtime_domain": false,
+  "archive_primary": "2C0BE07D3A3C4E73B45186738840E6F9BC0AB7D1",
+  "destination": "/var/lib/zethropol/aur-native-trust-candidates/16c5b7c76a299de7-257162cf8cde",
+  "official_pacman_keyring_change": false,
+  "owner_review_request_sha256": "257162cf8cde27ae8c89e268d7b8525fa6948a40956a21b23ee4cdae2050e993",
+  "ownertrust": 6,
+  "private_key_operation": false,
+  "purpose": "archive-public-native-certification-operation",
+  "restricted_gpg_config_sha256": "5d7b9b80d6bcd6f7598ee2be18d91cde5c12f600f565dbbee45e836ab528456d",
+  "schema": 1,
+  "source_project_policy_sha256": "e9d6db4ebba297f70714ba8a61049fcc6b14e91620538dbfec93e6f802b02d12",
+  "source_public_keyring_sha256": "241312b62914153bdbbeb01e7477949dd17e5f845b4118d489da7a7fd80a68bc"
+}
