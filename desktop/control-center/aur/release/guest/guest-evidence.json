@@ -1,0 +1,1076 @@
+{
+  "boot_id": "4e76c40b-6f63-4f00-b8ec-4deb6ca7141e",
+  "broker": "ActiveState=active\nMainPID=691\nNRestarts=1\n",
+  "broker_journal": "Zethropol OS Update Manager başlatılıyor...\nStarted Zethropol OS Update D-Bus Service.\nUpdate D-Bus servisi aktif ve dinlemede.\nzethropol-update.service: Sent signal SIGKILL to main process 480 (zethropol-updat) on client request.\nzethropol-update.service: Killed unit cgroup '/system.slice/zethropol-update.service' with SIGKILL on client request.\nzethropol-update.service: Main process exited, code=killed, status=9/KILL\nzethropol-update.service: Failed with result 'signal'.\nzethropol-update.service: Scheduled restart job, restart counter is at 1.\nStarting Zethropol OS Update D-Bus Service...\nZethropol OS Update Manager başlatılıyor...\nStarted Zethropol OS Update D-Bus Service.\nUpdate D-Bus servisi aktif ve dinlemede.\n",
+  "files": {
+    "after-broker-crash-db.sha256": {
+      "sha256": "08b8101c4883251d08828b4fd700dcaebb869d5ea3722404f3e5da06c07047fb",
+      "utf8": "2f713c682ead5591932fedfbcdc20526f6f4f89e12cb81be73d173549ada63e6  -\n"
+    },
+    "after-partial-power-loss.json": {
+      "sha256": "9afb16ebc33754c8ec8b1ef54e43afb8fdad3b7746a0c6a1aa382acaa86e4f5c",
+      "utf8": "{\"automatic_retry_observed\": false, \"boot_id\": \"b9ff5f76-ae0c-4cdf-96c7-fe7aeeec37b1\", \"db_lock_present\": true, \"expected_first_size\": 11123744, \"first_size\": 0, \"last_missing\": true}"
+    },
+    "after-power-loss-recovery-db.sha256": {
+      "sha256": "08b8101c4883251d08828b4fd700dcaebb869d5ea3722404f3e5da06c07047fb",
+      "utf8": "2f713c682ead5591932fedfbcdc20526f6f4f89e12cb81be73d173549ada63e6  -\n"
+    },
+    "baseline-broker-epoch.json": {
+      "sha256": "2017cf0341cf1e86d882b87f6fe6678cde2b0ee73c3a4da4b3c4e79e66874f1f",
+      "utf8": "{\"schema\":1,\"clock_boot_id\":\"a47e3f67-1b3e-4e0b-ba49-ba0579338d77\",\"sha256\":\"e4249db0ad63664507c2a774c3ce5491fc9f76d79e748463a0b79739a0d905c1\",\"payload\":\"{\\\"schema\\\":1,\\\"boot_id\\\":\\\"a47e3f67-1b3e-4e0b-ba49-ba0579338d77\\\"}\"}"
+    },
+    "interrupted-native.json": {
+      "sha256": "f20be580bd1f2bbac8ae32fd8f6a5423b705610912927bd7a41e957813414a5a",
+      "utf8": "{\"boot_id\": \"a47e3f67-1b3e-4e0b-ba49-ba0579338d77\", \"db_lock_present\": false, \"live_pacman_process\": false, \"outcome\": \"transaction interrupted after reinstalled event; hooks not certified; no automatic retry\", \"partial_extraction_power_loss_acceptance\": \"NOT PROVEN; observer did not retain active transaction window\", \"payload\": {\"/usr/bin/ccmake\": \"e1bd22ded8f2cb25d80e2165f7b53fcf603f33cc7c68f25cccd4d13e5890b4f4\", \"/usr/bin/cmake\": \"15be54ab915af54478f956356ea0fa513bb86d7b3a5e80f34b8cbf4530abcfbb\"}, \"scope\": \"guest distribution ALPM mechanism only; production AUR blocked\"}"
+    },
+    "local-seat-policy.raw": {
+      "sha256": "5df3eee073470a28ba2b8e395670914588576189c42de5f5226e6e29469e9f51",
+      "utf8": "uid=1001(aur-acceptance) gid=1001(aur-acceptance) groups=1001(aur-acceptance)\nId=10\nUser=1001\nSeat=seat0\nRemote=no\nType=tty\nActive=yes\nPREVIEW_POLICY_RC=0\npolkit\\56result=auth_admin\nAuthorization requires authentication and -u wasn't passed.\nINSTALL_POLICY_RC=2\nCall failed: Update broker rejected the request: NotFound\nBUILD_CONTEXT_RC=1\nCall failed: AUR installation closed: required PolicyKit/native-domain/snapshot/boot/recovery security acceptance incomplete\nINSTALL_AUR_RC=1\nLOCAL_SEAT_FINISHED\n"
+    },
+    "native-tamper-denial.raw": {
+      "sha256": "97060933edc1e52923101e354acde861d4cbad1dc29d377bcbfac1742d5d7218",
+      "utf8": "warning: database file for 'cachyos' does not exist (use '-Sy' to download)\nwarning: database file for 'core' does not exist (use '-Sy' to download)\nwarning: database file for 'extra' does not exist (use '-Sy' to download)\nwarning: database file for 'multilib' does not exist (use '-Sy' to download)\nerror: '/run/aur-bad/cmake.pkg.tar.zst': invalid or corrupted package (PGP signature)\nloading packages...\n"
+    },
+    "power-loss-local-db.sha256": {
+      "sha256": "08b8101c4883251d08828b4fd700dcaebb869d5ea3722404f3e5da06c07047fb",
+      "utf8": "2f713c682ead5591932fedfbcdc20526f6f4f89e12cb81be73d173549ada63e6  -\n"
+    },
+    "power-loss-payload.sha256": {
+      "sha256": "d4156228ff01ab5e66d87d84abebed2f2737580f5d5e94da86ca4f8dc98e0219",
+      "utf8": "15be54ab915af54478f956356ea0fa513bb86d7b3a5e80f34b8cbf4530abcfbb  /usr/bin/cmake\ne1bd22ded8f2cb25d80e2165f7b53fcf603f33cc7c68f25cccd4d13e5890b4f4  /usr/bin/ccmake\n"
+    },
+    "power-loss-snapshot-id": {
+      "sha256": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3",
+      "utf8": "2\n"
+    },
+    "power-loss-window.json": {
+      "sha256": "d030988eef8a3fa9e69c90932cbf8ad5e752e255dacb4e9a2dc6d69ad788ef8f",
+      "utf8": "{\"boot_id\": \"eb4d7fe1-b9a4-49f5-9da2-d68492925116\", \"db_lock\": true, \"expected_first_size\": 11123744, \"first_payload\": \"/usr/bin/ccmake\", \"first_size\": 35840, \"last_missing\": true, \"last_payload\": \"/usr/share/vim/vimfiles/syntax/cmake.vim\", \"last_unchanged\": false, \"native_process_stopped\": true, \"observer_pid\": 1373, \"pacman_pid\": 1378, \"scope\": \"real guest distribution ALPM mechanism; not AUR authority\"}"
+    },
+    "pre-fault-snapshot-id": {
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+      "utf8": "1\n"
+    },
+    "ui-probe.raw": {
+      "sha256": "194ee65a9bab7d75e54d781621645f0bcec1f739a642297978948ba44da03461",
+      "utf8": "qt.dbus.integration: Could not connect \"org.zethropol.Update.v1\" to handleUpdateSignal(QVariant) : Type not registered with QtDBus in parameter list: QVariant\nAUR source unavailable: Process exited with code 1.\nAUR_GUEST_UI_RESULT {\"aur_count\":0,\"aur_scan_warning\":\"AUR updates could not be checked.\",\"aur_status\":\"AUR: select targets and Preview Plan; installation remains gated by the broker.\",\"install_confirmations\":0,\"install_ready_after\":false,\"install_ready_before\":false,\"qml_window_created\":true,\"scope\":\"real guest Qt/QML and system bus; closed-admission case\"}\n"
+    },
+    "wrong-role-denial.raw": {
+      "sha256": "f69cbea3961227574bf93432a1f18556a5c3fae29a9dc74c7989f6e54972790f",
+      "utf8": "gpgv: Signature made Wed Sep  2 18:31:51 2026 UTC\ngpgv:                using RSA key 882DCFE48E2051D48E2562ABF3B607488DB35A47\ngpgv: Can't check signature: No public key\n"
+    },
+    "cmake-before-denial.sha256": {
+      "sha256": "95eb990cc07167e9f3be3a5f25785c9731dad078afa5b643ddc7a221728aeb40",
+      "utf8": "15be54ab915af54478f956356ea0fa513bb86d7b3a5e80f34b8cbf4530abcfbb  /usr/bin/cmake\n"
+    },
+    "db-after-denial.sha256": {
+      "sha256": "08b8101c4883251d08828b4fd700dcaebb869d5ea3722404f3e5da06c07047fb",
+      "utf8": "2f713c682ead5591932fedfbcdc20526f6f4f89e12cb81be73d173549ada63e6  -\n"
+    },
+    "db-before-denial.sha256": {
+      "sha256": "08b8101c4883251d08828b4fd700dcaebb869d5ea3722404f3e5da06c07047fb",
+      "utf8": "2f713c682ead5591932fedfbcdc20526f6f4f89e12cb81be73d173549ada63e6  -\n"
+    }
+  },
+  "installation": "closed",
+  "journal": "/dev/vdb[/transactions]",
+  "kernel": "6.18.42-1-cachyos-lts",
+  "packages": "cmake 4.4.3-2.1\nsnapper 0.13.1-2.1\nlimine 12.9.0-1\njsoncpp 1.9.8-1.1\nninja 1.13.2-3.1\n",
+  "production_authorized": false,
+  "root": "/dev/vda2[/@power-recovered]",
+  "schema": 1,
+  "scope": "disposable guest mechanism acceptance; no production signing approval",
+  "vm_uuid": "c98f6c9a-a516-45f3-bfe9-ad78c712b54b",
+  "tested_source_commit": "2b38af29643aaf1cf8b5af505bc861340df1dd5e",
+  "binaries": {
+    "broker_sha256": "14c590ab399fcfba10324e9228bed5d709a262db5debd442b3a4398eba8bf030",
+    "guest_control_center_sha256": "ee331a95307dbd1e9e8d16606ed8bddde69b8368f64462059c67f10312dcc3e8"
+  },
+  "image": {
+    "filename": "cachyos-desktop-linux-260809.iso",
+    "sha256": "959f6577f45e25ee9fd8c220fd221b08e4ea79412c7315c0f922dd6d86d5e33c",
+    "source": "https://mirror.cachyos.org/ISO/desktop/260809/cachyos-desktop-linux-260809.iso",
+    "validsig_primary": "882DCFE48E2051D48E2562ABF3B607488DB35A47",
+    "signature_status": "[GNUPG:] NEWSIG\ngpgv: Signature made Sun Aug  9 19:30:06 2026 +03\ngpgv:                using RSA key 882DCFE48E2051D48E2562ABF3B607488DB35A47\n[GNUPG:] KEY_CONSIDERED 882DCFE48E2051D48E2562ABF3B607488DB35A47 0\n[GNUPG:] SIG_ID oDoe8OKDjS12bwUZjMF8q71/by8 2026-08-09 1786293006\n[GNUPG:] GOODSIG F3B607488DB35A47 CachyOS <admin@cachyos.org>\ngpgv: Good signature from \"CachyOS <admin@cachyos.org>\"\n[GNUPG:] VALIDSIG 882DCFE48E2051D48E2562ABF3B607488DB35A47 2026-08-09 1786293006 0 4 0 1 10 00 882DCFE48E2051D48E2562ABF3B607488DB35A47\n"
+  },
+  "qemu_distribution_packages": [
+    {
+      "url": "https://mirror.krfoss.org/cachyos/repo/x86_64_v3/cachyos-extra-v3/capstone-5.0.9-1.1-x86_64_v3.pkg.tar.zst",
+      "filename": "capstone-5.0.9-1.1-x86_64_v3.pkg.tar.zst",
+      "sha256": "18f5a688877f94a6bbd6f19b471e847679abecea83c1478eb81112e53529d05b",
+      "signature_sha256": "ec68f2f29a53c5661fbb4799fc6a24e8198b0b952f3b639df7824228f5d6bd9a",
+      "validsig": "882DCFE48E2051D48E2562ABF3B607488DB35A47 2026-06-06 1780704185 0 4 0 1 10 00 882DCFE48E2051D48E2562ABF3B607488DB35A47"
+    },
+    {
+      "url": "https://mirror.krfoss.org/cachyos/repo/x86_64_v3/cachyos-extra-v3/libslirp-4.9.7-1.1-x86_64_v3.pkg.tar.zst",
+      "filename": "libslirp-4.9.7-1.1-x86_64_v3.pkg.tar.zst",
+      "sha256": "9fddea5b46e886a796443339af9c4802ad8b8b3cfd1b4bd1529832c429f26676",
+      "signature_sha256": "c0f28a79798aa09630c9c221a730173a9f5a1d4629715146b5c870316b1c91dd",
+      "validsig": "882DCFE48E2051D48E2562ABF3B607488DB35A47 2026-10-30 1793373883 0 4 0 1 10 00 882DCFE48E2051D48E2562ABF3B607488DB35A47"
+    },
+    {
+      "url": "https://mirror.krfoss.org/cachyos/repo/x86_64_v3/cachyos-extra-v3/libxdp-1.6.3-2.1-x86_64_v3.pkg.tar.zst",
+      "filename": "libxdp-1.6.3-2.1-x86_64_v3.pkg.tar.zst",
+      "sha256": "84147cf8546f57085d7ec70f2a2e0d9fbf3d6fa8816cd7a8e27d5c210ee4d067",
+      "signature_sha256": "628c805a48b5ef3e246618b6db05207e908ba8b904a3d5331744fa1c9a7cbda3",
+      "validsig": "882DCFE48E2051D48E2562ABF3B607488DB35A47 2026-08-10 1786373162 0 4 0 1 10 00 882DCFE48E2051D48E2562ABF3B607488DB35A47"
+    },
+    {
+      "url": "https://mirror.krfoss.org/cachyos/repo/x86_64_v3/cachyos-extra-v3/iniparser-4.3.2-1.1-x86_64_v3.pkg.tar.zst",
+      "filename": "iniparser-4.3.2-1.1-x86_64_v3.pkg.tar.zst",
+      "sha256": "ab64145d96600a03b7b0e320bfc23a763718a63e79037a8c176af123bcff8ad2",
+      "signature_sha256": "b7343593a2de9e3aa8c8e9a13bc55a68b3ce1bd8020a3f9bbe7cf50683ac00a5",
+      "validsig": "882DCFE48E2051D48E2562ABF3B607488DB35A47 2026-10-05 1791182827 0 4 0 1 10 00 882DCFE48E2051D48E2562ABF3B607488DB35A47"
+    },
+    {
+      "url": "https://mirror.krfoss.org/cachyos/repo/x86_64_v3/cachyos-extra-v3/libtraceevent-1:1.9.1-1.1-x86_64_v3.pkg.tar.zst",
+      "filename": "libtraceevent-1:1.9.1-1.1-x86_64_v3.pkg.tar.zst",
+      "sha256": "e6867c4bd1a620c8e76ab94347cb0f4be612c3ad1c16eeb5503fc84ae7d37ee2",
+      "signature_sha256": "5b78a2682466f27d4ac78b6ee2248d811cfed3d29c5fadad6429ecf276fbf18b",
+      "validsig": "882DCFE48E2051D48E2562ABF3B607488DB35A47 2026-10-28 1793190810 0 4 0 1 10 00 882DCFE48E2051D48E2562ABF3B607488DB35A47"
+    },
+    {
+      "url": "https://mirror.krfoss.org/cachyos/repo/x86_64_v3/cachyos-extra-v3/libtracefs-1.8.4-1.1-x86_64_v3.pkg.tar.zst",
+      "filename": "libtracefs-1.8.4-1.1-x86_64_v3.pkg.tar.zst",
+      "sha256": "22ee708f120f49dcc5ad582605b337bfe16c1d73b49b35bbc47986c999317334",
+      "signature_sha256": "fa6f3777027584d33aee3c6f4333b7b8f4e345bc6fc11771290faa3c132f78e0",
+      "validsig": "882DCFE48E2051D48E2562ABF3B607488DB35A47 2026-10-28 1793193655 0 4 0 1 10 00 882DCFE48E2051D48E2562ABF3B607488DB35A47"
+    },
+    {
+      "url": "https://mirror.krfoss.org/cachyos/repo/x86_64_v3/cachyos-extra-v3/ndctl-85-1.1-x86_64_v3.pkg.tar.zst",
+      "filename": "ndctl-85-1.1-x86_64_v3.pkg.tar.zst",
+      "sha256": "199944bd00268e74707fb47ecad9d12e134971934cfaa9ba43db0099480d34aa",
+      "signature_sha256": "2207071360355176c3d8d33f5e32ef4fa9b02721b5ef8380a9268f2b3f26ba4b",
+      "validsig": "882DCFE48E2051D48E2562ABF3B607488DB35A47 2026-06-30 1782816463 0 4 0 1 10 00 882DCFE48E2051D48E2562ABF3B607488DB35A47"
+    },
+    {
+      "url": "https://archlinux.cachyos.org/repo/extra/os/x86_64/qemu-common-11.1.3-1-x86_64.pkg.tar.zst",
+      "filename": "qemu-common-11.1.3-1-x86_64.pkg.tar.zst",
+      "sha256": "719ea022c1db83636af1cf836107bac0d25e4558f1eb35c98d8169ca3dde7678",
+      "signature_sha256": "ec26c8a302412d437615d0f9c6e809f2dc0db184e5dfd64dac5badfe20fc7840",
+      "validsig": "62CC73F884E52957B2FDD8839B7A287D9A2EC608 2026-10-29 1793278234 0 4 0 22 10 00 991F6E3F0765CF6295888586139B09DA5BF0D338"
+    },
+    {
+      "url": "https://mirror.krfoss.org/cachyos/repo/x86_64_v3/cachyos-extra-v3/rdma-core-65.0-1.1-x86_64_v3.pkg.tar.zst",
+      "filename": "rdma-core-65.0-1.1-x86_64_v3.pkg.tar.zst",
+      "sha256": "bf22726985f4538b832738031f8df9c795642a58793179ea336674659ac83941",
+      "signature_sha256": "e79ff4d42f346ab2008290f8905a24c679ed8fab8db13d4735b78ea381858484",
+      "validsig": "882DCFE48E2051D48E2562ABF3B607488DB35A47 2026-09-11 1789159954 0 4 0 1 10 00 882DCFE48E2051D48E2562ABF3B607488DB35A47"
+    },
+    {
+      "url": "https://mirror.krfoss.org/cachyos/repo/x86_64_v3/cachyos-extra-v3/wolfssl-5.9.4-1.1-x86_64_v3.pkg.tar.zst",
+      "filename": "wolfssl-5.9.4-1.1-x86_64_v3.pkg.tar.zst",
+      "sha256": "26416824ef0d30e42ed70f122dd2b8cc28315171623ddd0504eeef737b1c3b30",
+      "signature_sha256": "32ee7a213676f468fdf15f34321d79b81f5f8a702fa558dea2c13f9dce3ee995",
+      "validsig": "882DCFE48E2051D48E2562ABF3B607488DB35A47 2026-09-29 1790716677 0 4 0 1 10 00 882DCFE48E2051D48E2562ABF3B607488DB35A47"
+    },
+    {
+      "url": "https://mirror.krfoss.org/cachyos/repo/x86_64_v3/cachyos-extra-v3/vde2-2.3.3-10.1-x86_64_v3.pkg.tar.zst",
+      "filename": "vde2-2.3.3-10.1-x86_64_v3.pkg.tar.zst",
+      "sha256": "54667c550e625d9c059a5a9e1e251e3b22aada48eeb3364145bc4bedadf40ff8",
+      "signature_sha256": "d6a4f4ff4e4f0519abce4439061ac3d079a6026dcb1804bd455b9eaaf9ce7f6a",
+      "validsig": "882DCFE48E2051D48E2562ABF3B607488DB35A47 2026-09-29 1790716648 0 4 0 1 10 00 882DCFE48E2051D48E2562ABF3B607488DB35A47"
+    },
+    {
+      "url": "https://mirror.krfoss.org/cachyos/repo/x86_64_v3/cachyos-extra-v3/libyaml-0.2.5-3.1-x86_64.pkg.tar.zst",
+      "filename": "libyaml-0.2.5-3.1-x86_64.pkg.tar.zst",
+      "sha256": "fafd58e4cc71921fc05de7c5c001b6e241ded66304552611fc02fe781d70f317",
+      "signature_sha256": "1cdc2bc8c641ab9dc778c7e42ac443cc16a401a7b770777759567720aa0e8f4c",
+      "validsig": "882DCFE48E2051D48E2562ABF3B607488DB35A47 2024-07-12 1720821111 0 4 0 1 8 00 882DCFE48E2051D48E2562ABF3B607488DB35A47"
+    },
+    {
+      "url": "https://mirror.krfoss.org/cachyos/repo/x86_64_v3/cachyos-extra-v3/dtc-1:1.8.1-1.1-x86_64_v3.pkg.tar.zst",
+      "filename": "dtc-1:1.8.1-1.1-x86_64_v3.pkg.tar.zst",
+      "sha256": "2fffa144b96cfe63c7b941330bf8a19296a28841248f0eda464a8ef8fe27389d",
+      "signature_sha256": "3cead4caa396527d9bf76c37fe248b19314552f1a1a86b2c088fb449e9301051",
+      "validsig": "882DCFE48E2051D48E2562ABF3B607488DB35A47 2026-07-05 1783288553 0 4 0 1 10 00 882DCFE48E2051D48E2562ABF3B607488DB35A47"
+    },
+    {
+      "url": "https://archlinux.cachyos.org/repo/extra/os/x86_64/edk2-ovmf-202608-1-any.pkg.tar.zst",
+      "filename": "edk2-ovmf-202608-1-any.pkg.tar.zst",
+      "sha256": "bee34c6036ebd0e96562b7330d2d3ddf75e240cfc44a6d506a5ccb6390eafb91",
+      "signature_sha256": "13e0ba4cc7310b06b7cfbfa8fef8d8b6c7240aad383919d07b00eb6b892a6136",
+      "validsig": "62CC73F884E52957B2FDD8839B7A287D9A2EC608 2026-08-25 1787693084 0 4 0 22 10 00 991F6E3F0765CF6295888586139B09DA5BF0D338"
+    },
+    {
+      "url": "https://mirror.krfoss.org/cachyos/repo/x86_64_v3/cachyos-extra-v3/libcbor-0.14.0-1.1-x86_64_v3.pkg.tar.zst",
+      "filename": "libcbor-0.14.0-1.1-x86_64_v3.pkg.tar.zst",
+      "sha256": "1873a894cf231ce8247ad598a72e05577954c1d78dcc693ac5c9170f9f0976a5",
+      "signature_sha256": "1c48cc1be7a4f282e3e1f7b744e803cb3a9a576a0fba2e5f9af4a4ac81722973",
+      "validsig": "882DCFE48E2051D48E2562ABF3B607488DB35A47 2026-04-09 1775768431 0 4 0 1 10 00 882DCFE48E2051D48E2562ABF3B607488DB35A47"
+    },
+    {
+      "url": "https://archlinux.cachyos.org/repo/extra/os/x86_64/qemu-system-x86-firmware-11.1.3-1-x86_64.pkg.tar.zst",
+      "filename": "qemu-system-x86-firmware-11.1.3-1-x86_64.pkg.tar.zst",
+      "sha256": "415990ddb279a77233be7537d0ae801514a1002dafca8bd78b025678ca0e39f4",
+      "signature_sha256": "e552ddae11b03f4c621d94321c0136df4347f26706733ca4afd2f1198086f57d",
+      "validsig": "62CC73F884E52957B2FDD8839B7A287D9A2EC608 2026-10-29 1793278302 0 4 0 22 10 00 991F6E3F0765CF6295888586139B09DA5BF0D338"
+    },
+    {
+      "url": "https://archlinux.cachyos.org/repo/extra/os/x86_64/seabios-1.17.0-2-any.pkg.tar.zst",
+      "filename": "seabios-1.17.0-2-any.pkg.tar.zst",
+      "sha256": "edf543abcff088f94779fa1ec81096867fe5bff06b835da8e45c9c5b0e4d5269",
+      "signature_sha256": "bd4d8bada62903b6d13d1afba9d6630257b25f68cd42a009aa3826bd7b0627b4",
+      "validsig": "62CC73F884E52957B2FDD8839B7A287D9A2EC608 2025-10-12 1760289009 0 4 0 22 10 00 991F6E3F0765CF6295888586139B09DA5BF0D338"
+    },
+    {
+      "url": "https://archlinux.cachyos.org/repo/extra/os/x86_64/qemu-system-x86-11.1.3-1-x86_64.pkg.tar.zst",
+      "filename": "qemu-system-x86-11.1.3-1-x86_64.pkg.tar.zst",
+      "sha256": "e8af5129dc126f7ea4773e7c8c0038af308018bef8b04d32eda10d4d8aba5091",
+      "signature_sha256": "e19d4c05f8cee23dfc8f23617ffb014214d591dfec3e16533e834cd2e7f79f12",
+      "validsig": "62CC73F884E52957B2FDD8839B7A287D9A2EC608 2026-10-29 1793278291 0 4 0 22 10 00 991F6E3F0765CF6295888586139B09DA5BF0D338"
+    },
+    {
+      "url": "https://archlinux.cachyos.org/repo/extra/os/x86_64/qemu-img-11.1.3-1-x86_64.pkg.tar.zst",
+      "filename": "qemu-img-11.1.3-1-x86_64.pkg.tar.zst",
+      "sha256": "6f42b8a886bfc1d44c7d68678309f6249cdc4fa2ccdaa8db6649062375ced794",
+      "signature_sha256": "f6c43d6335180b3462d4ba7e2946cc74f4142b44a3b852059744955cdef6be70",
+      "validsig": "62CC73F884E52957B2FDD8839B7A287D9A2EC608 2026-10-29 1793278269 0 4 0 22 10 00 991F6E3F0765CF6295888586139B09DA5BF0D338"
+    }
+  ],
+  "production_release_sources": {
+    "github_releases_api": "https://api.github.com/repos/zethropol/Zethropol-OS/releases",
+    "observed_date": "2026-11-06",
+    "http_status": 200,
+    "releases": [],
+    "remote_tags": [],
+    "repository_release_templates": "unapproved placeholders; no signing authority inferred",
+    "authorized_role_approval": "not supplied or established",
+    "current_signed_public_manifest_and_artifacts": "not supplied or established",
+    "approved_native_archive_snapshot": "not supplied or established"
+  },
+  "accepted_cases": [
+    "real KVM and independent UEFI/Limine disk boot",
+    "actual seat0 non-root PolicyKit preview grant and install auth_admin challenge/refusal",
+    "D-Bus caller/session resolution and closed InstallAur",
+    "distribution-signed guest ALPM package installation and version readback",
+    "native tampered-signature rejection with unchanged local DB/payload",
+    "distribution signer rejected by project Archive verification role (GPG negative only)",
+    "real Snapper snapshots 1 and 2",
+    "observed incomplete native extraction held across separate observation, QMP guest power cut, partial state after boot",
+    "operator Btrfs snapshot recovery, independent guest reboot, exact baseline local DB and payload restoration",
+    "separate ext4 journal/evidence retained across root recovery",
+    "idle broker SIGKILL and automatic service restart without package mutation",
+    "source Qt/QML real-bus closed-admission UI, no install confirmation"
+  ],
+  "not_accepted": [
+    "production trust approval or native Archive signer enrollment",
+    "positive native Archive-domain commit with the approved project artifact set",
+    "successful end-to-end signed AUR build/receipt/install through the broker",
+    "interactive install auth_admin success, worker cancel/timeout/crash, receipt replay and AUR transaction recovery with production inputs",
+    "positive AUR update discovery/selection; network remained disabled and the UI reported a scan warning"
+  ],
+  "earlier_fault_attempt": "interrupted-native.json is retained as an earlier unsuccessful partial-window observation; it is not counted as the later verified power-cut case",
+  "source_record_boundary": "partial-power-loss.py.executed records the source sent to the guest observer. Its file in the failed root was empty after power loss; no claim of durable guest source-file hash is made. The live stopped PID and incomplete payload were independently observed before QMP cut.",
+  "qmp_observations": [
+    [
+      {
+        "QMP": {
+          "version": {
+            "qemu": {
+              "micro": 3,
+              "minor": 1,
+              "major": 11
+            },
+            "package": ""
+          },
+          "capabilities": [
+            "oob"
+          ]
+        }
+      },
+      {
+        "command": "qmp_capabilities",
+        "reply": {
+          "return": {}
+        }
+      },
+      {
+        "command": "query-kvm",
+        "reply": {
+          "return": {
+            "enabled": true,
+            "present": true
+          }
+        }
+      },
+      {
+        "command": "query-status",
+        "reply": {
+          "return": {
+            "status": "running",
+            "running": true
+          }
+        }
+      },
+      {
+        "command": "query-uuid",
+        "reply": {
+          "return": {
+            "UUID": "c98f6c9a-a516-45f3-bfe9-ad78c712b54b"
+          }
+        }
+      },
+      {
+        "command": "query-block",
+        "reply": {
+          "return": [
+            {
+              "io-status": "ok",
+              "device": "disk-root",
+              "locked": false,
+              "removable": false,
+              "inserted": {
+                "iops_rd": 0,
+                "detect_zeroes": "off",
+                "active": true,
+                "image": {
+                  "limits": {
+                    "write-zeroes-alignment": 65536,
+                    "request-alignment": 1,
+                    "min-mem-alignment": 1,
+                    "discard-alignment": 65536,
+                    "opt-mem-alignment": 4096,
+                    "max-iov": 1024
+                  },
+                  "virtual-size": 34359738368,
+                  "filename": "<workspace>/.aur-vm-runtime/guest-root.qcow2",
+                  "cluster-size": 65536,
+                  "format": "qcow2",
+                  "actual-size": 200704,
+                  "format-specific": {
+                    "type": "qcow2",
+                    "data": {
+                      "compat": "1.1",
+                      "compression-type": "zlib",
+                      "lazy-refcounts": false,
+                      "refcount-bits": 16,
+                      "corrupt": false,
+                      "extended-l2": false
+                    }
+                  },
+                  "dirty-flag": false
+                },
+                "iops_wr": 0,
+                "ro": false,
+                "children": [
+                  {
+                    "node-name": "#block042",
+                    "child": "file"
+                  }
+                ],
+                "node-name": "#block110",
+                "backing_file_depth": 0,
+                "drv": "qcow2",
+                "iops": 0,
+                "bps_wr": 0,
+                "write_threshold": 0,
+                "encrypted": false,
+                "bps": 0,
+                "bps_rd": 0,
+                "cache": {
+                  "no-flush": false,
+                  "direct": false,
+                  "writeback": true
+                },
+                "file": "<workspace>/.aur-vm-runtime/guest-root.qcow2"
+              },
+              "qdev": "/machine/peripheral-anon/device[0]/virtio-backend",
+              "type": "unknown"
+            },
+            {
+              "io-status": "ok",
+              "device": "disk-journal",
+              "locked": false,
+              "removable": false,
+              "inserted": {
+                "iops_rd": 0,
+                "detect_zeroes": "off",
+                "active": true,
+                "image": {
+                  "limits": {
+                    "write-zeroes-alignment": 65536,
+                    "request-alignment": 1,
+                    "min-mem-alignment": 1,
+                    "discard-alignment": 65536,
+                    "opt-mem-alignment": 4096,
+                    "max-iov": 1024
+                  },
+                  "virtual-size": 1073741824,
+                  "filename": "<workspace>/.aur-vm-runtime/guest-journal.qcow2",
+                  "cluster-size": 65536,
+                  "format": "qcow2",
+                  "actual-size": 200704,
+                  "format-specific": {
+                    "type": "qcow2",
+                    "data": {
+                      "compat": "1.1",
+                      "compression-type": "zlib",
+                      "lazy-refcounts": false,
+                      "refcount-bits": 16,
+                      "corrupt": false,
+                      "extended-l2": false
+                    }
+                  },
+                  "dirty-flag": false
+                },
+                "iops_wr": 0,
+                "ro": false,
+                "children": [
+                  {
+                    "node-name": "#block270",
+                    "child": "file"
+                  }
+                ],
+                "node-name": "#block391",
+                "backing_file_depth": 0,
+                "drv": "qcow2",
+                "iops": 0,
+                "bps_wr": 0,
+                "write_threshold": 0,
+                "encrypted": false,
+                "bps": 0,
+                "bps_rd": 0,
+                "cache": {
+                  "no-flush": false,
+                  "direct": false,
+                  "writeback": true
+                },
+                "file": "<workspace>/.aur-vm-runtime/guest-journal.qcow2"
+              },
+              "qdev": "/machine/peripheral-anon/device[1]/virtio-backend",
+              "type": "unknown"
+            },
+            {
+              "io-status": "ok",
+              "device": "ide0-cd0",
+              "locked": true,
+              "removable": true,
+              "inserted": {
+                "iops_rd": 0,
+                "detect_zeroes": "off",
+                "active": true,
+                "image": {
+                  "limits": {
+                    "request-alignment": 1,
+                    "min-mem-alignment": 1,
+                    "opt-mem-alignment": 4096,
+                    "max-iov": 1024
+                  },
+                  "virtual-size": 3188850688,
+                  "filename": "<verified-iso-directory>/cachyos-desktop-linux-260809.iso",
+                  "format": "raw",
+                  "actual-size": 3188850688,
+                  "dirty-flag": false
+                },
+                "iops_wr": 0,
+                "ro": true,
+                "children": [
+                  {
+                    "node-name": "#block425",
+                    "child": "file"
+                  }
+                ],
+                "node-name": "#block572",
+                "backing_file_depth": 0,
+                "drv": "raw",
+                "iops": 0,
+                "bps_wr": 0,
+                "write_threshold": 0,
+                "encrypted": false,
+                "bps": 0,
+                "bps_rd": 0,
+                "cache": {
+                  "no-flush": false,
+                  "direct": false,
+                  "writeback": true
+                },
+                "file": "<verified-iso-directory>/cachyos-desktop-linux-260809.iso"
+              },
+              "qdev": "/machine/unattached/device[16]",
+              "tray_open": false,
+              "type": "unknown"
+            },
+            {
+              "io-status": "ok",
+              "device": "ide1-cd0",
+              "locked": true,
+              "removable": true,
+              "inserted": {
+                "iops_rd": 0,
+                "detect_zeroes": "off",
+                "active": true,
+                "image": {
+                  "limits": {
+                    "request-alignment": 1,
+                    "min-mem-alignment": 1,
+                    "opt-mem-alignment": 4096,
+                    "max-iov": 1024
+                  },
+                  "virtual-size": 99452928,
+                  "filename": "<workspace>/.aur-vm-runtime/payload.iso",
+                  "format": "raw",
+                  "actual-size": 99454976,
+                  "dirty-flag": false
+                },
+                "iops_wr": 0,
+                "ro": true,
+                "children": [
+                  {
+                    "node-name": "#block620",
+                    "child": "file"
+                  }
+                ],
+                "node-name": "#block777",
+                "backing_file_depth": 0,
+                "drv": "raw",
+                "iops": 0,
+                "bps_wr": 0,
+                "write_threshold": 0,
+                "encrypted": false,
+                "bps": 0,
+                "bps_rd": 0,
+                "cache": {
+                  "no-flush": false,
+                  "direct": false,
+                  "writeback": true
+                },
+                "file": "<workspace>/.aur-vm-runtime/payload.iso"
+              },
+              "qdev": "/machine/unattached/device[17]",
+              "tray_open": false,
+              "type": "unknown"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      {
+        "QMP": {
+          "version": {
+            "qemu": {
+              "micro": 3,
+              "minor": 1,
+              "major": 11
+            },
+            "package": ""
+          },
+          "capabilities": [
+            "oob"
+          ]
+        }
+      },
+      {
+        "command": "qmp_capabilities",
+        "reply": {
+          "return": {}
+        }
+      },
+      {
+        "command": "query-kvm",
+        "reply": {
+          "return": {
+            "enabled": true,
+            "present": true
+          }
+        }
+      },
+      {
+        "command": "query-status",
+        "reply": {
+          "return": {
+            "status": "running",
+            "running": true
+          }
+        }
+      },
+      {
+        "command": "query-uuid",
+        "reply": {
+          "return": {
+            "UUID": "c98f6c9a-a516-45f3-bfe9-ad78c712b54b"
+          }
+        }
+      },
+      {
+        "command": "query-block",
+        "reply": {
+          "return": [
+            {
+              "io-status": "ok",
+              "device": "disk-root",
+              "locked": false,
+              "removable": false,
+              "inserted": {
+                "iops_rd": 0,
+                "detect_zeroes": "off",
+                "active": true,
+                "image": {
+                  "limits": {
+                    "write-zeroes-alignment": 65536,
+                    "request-alignment": 1,
+                    "min-mem-alignment": 1,
+                    "discard-alignment": 65536,
+                    "opt-mem-alignment": 4096,
+                    "max-iov": 1024
+                  },
+                  "virtual-size": 34359738368,
+                  "filename": "<workspace>/.aur-vm-runtime/guest-root.qcow2",
+                  "cluster-size": 65536,
+                  "format": "qcow2",
+                  "actual-size": 4838264832,
+                  "format-specific": {
+                    "type": "qcow2",
+                    "data": {
+                      "compat": "1.1",
+                      "compression-type": "zlib",
+                      "lazy-refcounts": false,
+                      "refcount-bits": 16,
+                      "corrupt": false,
+                      "extended-l2": false
+                    }
+                  },
+                  "dirty-flag": false
+                },
+                "iops_wr": 0,
+                "ro": false,
+                "children": [
+                  {
+                    "node-name": "#block023",
+                    "child": "file"
+                  }
+                ],
+                "node-name": "#block161",
+                "backing_file_depth": 0,
+                "drv": "qcow2",
+                "iops": 0,
+                "bps_wr": 0,
+                "write_threshold": 0,
+                "encrypted": false,
+                "bps": 0,
+                "bps_rd": 0,
+                "cache": {
+                  "no-flush": false,
+                  "direct": false,
+                  "writeback": true
+                },
+                "file": "<workspace>/.aur-vm-runtime/guest-root.qcow2"
+              },
+              "qdev": "/machine/peripheral-anon/device[0]/virtio-backend",
+              "type": "unknown"
+            },
+            {
+              "io-status": "ok",
+              "device": "disk-journal",
+              "locked": false,
+              "removable": false,
+              "inserted": {
+                "iops_rd": 0,
+                "detect_zeroes": "off",
+                "active": true,
+                "image": {
+                  "limits": {
+                    "write-zeroes-alignment": 65536,
+                    "request-alignment": 1,
+                    "min-mem-alignment": 1,
+                    "discard-alignment": 65536,
+                    "opt-mem-alignment": 4096,
+                    "max-iov": 1024
+                  },
+                  "virtual-size": 1073741824,
+                  "filename": "<workspace>/.aur-vm-runtime/guest-journal.qcow2",
+                  "cluster-size": 65536,
+                  "format": "qcow2",
+                  "actual-size": 1642496,
+                  "format-specific": {
+                    "type": "qcow2",
+                    "data": {
+                      "compat": "1.1",
+                      "compression-type": "zlib",
+                      "lazy-refcounts": false,
+                      "refcount-bits": 16,
+                      "corrupt": false,
+                      "extended-l2": false
+                    }
+                  },
+                  "dirty-flag": false
+                },
+                "iops_wr": 0,
+                "ro": false,
+                "children": [
+                  {
+                    "node-name": "#block272",
+                    "child": "file"
+                  }
+                ],
+                "node-name": "#block316",
+                "backing_file_depth": 0,
+                "drv": "qcow2",
+                "iops": 0,
+                "bps_wr": 0,
+                "write_threshold": 0,
+                "encrypted": false,
+                "bps": 0,
+                "bps_rd": 0,
+                "cache": {
+                  "no-flush": false,
+                  "direct": false,
+                  "writeback": true
+                },
+                "file": "<workspace>/.aur-vm-runtime/guest-journal.qcow2"
+              },
+              "qdev": "/machine/peripheral-anon/device[1]/virtio-backend",
+              "type": "unknown"
+            },
+            {
+              "io-status": "ok",
+              "device": "disk-esp",
+              "locked": false,
+              "removable": false,
+              "inserted": {
+                "iops_rd": 0,
+                "detect_zeroes": "off",
+                "active": true,
+                "image": {
+                  "limits": {
+                    "write-zeroes-alignment": 65536,
+                    "request-alignment": 1,
+                    "min-mem-alignment": 1,
+                    "discard-alignment": 65536,
+                    "opt-mem-alignment": 4096,
+                    "max-iov": 1024
+                  },
+                  "virtual-size": 536870912,
+                  "filename": "<workspace>/.aur-vm-runtime/guest-esp.qcow2",
+                  "cluster-size": 65536,
+                  "format": "qcow2",
+                  "actual-size": 200704,
+                  "format-specific": {
+                    "type": "qcow2",
+                    "data": {
+                      "compat": "1.1",
+                      "compression-type": "zlib",
+                      "lazy-refcounts": false,
+                      "refcount-bits": 16,
+                      "corrupt": false,
+                      "extended-l2": false
+                    }
+                  },
+                  "dirty-flag": false
+                },
+                "iops_wr": 0,
+                "ro": false,
+                "children": [
+                  {
+                    "node-name": "#block406",
+                    "child": "file"
+                  }
+                ],
+                "node-name": "#block534",
+                "backing_file_depth": 0,
+                "drv": "qcow2",
+                "iops": 0,
+                "bps_wr": 0,
+                "write_threshold": 0,
+                "encrypted": false,
+                "bps": 0,
+                "bps_rd": 0,
+                "cache": {
+                  "no-flush": false,
+                  "direct": false,
+                  "writeback": true
+                },
+                "file": "<workspace>/.aur-vm-runtime/guest-esp.qcow2"
+              },
+              "qdev": "/machine/peripheral-anon/device[2]/virtio-backend",
+              "type": "unknown"
+            },
+            {
+              "io-status": "ok",
+              "device": "ide0-cd0",
+              "locked": true,
+              "removable": true,
+              "inserted": {
+                "iops_rd": 0,
+                "detect_zeroes": "off",
+                "active": true,
+                "image": {
+                  "limits": {
+                    "request-alignment": 1,
+                    "min-mem-alignment": 1,
+                    "opt-mem-alignment": 4096,
+                    "max-iov": 1024
+                  },
+                  "virtual-size": 3188850688,
+                  "filename": "<verified-iso-directory>/cachyos-desktop-linux-260809.iso",
+                  "format": "raw",
+                  "actual-size": 3188850688,
+                  "dirty-flag": false
+                },
+                "iops_wr": 0,
+                "ro": true,
+                "children": [
+                  {
+                    "node-name": "#block664",
+                    "child": "file"
+                  }
+                ],
+                "node-name": "#block721",
+                "backing_file_depth": 0,
+                "drv": "raw",
+                "iops": 0,
+                "bps_wr": 0,
+                "write_threshold": 0,
+                "encrypted": false,
+                "bps": 0,
+                "bps_rd": 0,
+                "cache": {
+                  "no-flush": false,
+                  "direct": false,
+                  "writeback": true
+                },
+                "file": "<verified-iso-directory>/cachyos-desktop-linux-260809.iso"
+              },
+              "qdev": "/machine/unattached/device[16]",
+              "tray_open": false,
+              "type": "unknown"
+            },
+            {
+              "io-status": "ok",
+              "device": "ide1-cd0",
+              "locked": true,
+              "removable": true,
+              "inserted": {
+                "iops_rd": 0,
+                "detect_zeroes": "off",
+                "active": true,
+                "image": {
+                  "limits": {
+                    "request-alignment": 1,
+                    "min-mem-alignment": 1,
+                    "opt-mem-alignment": 4096,
+                    "max-iov": 1024
+                  },
+                  "virtual-size": 21094400,
+                  "filename": "<workspace>/.aur-vm-runtime/payload-next.iso",
+                  "format": "raw",
+                  "actual-size": 21094400,
+                  "dirty-flag": false
+                },
+                "iops_wr": 0,
+                "ro": true,
+                "children": [
+                  {
+                    "node-name": "#block811",
+                    "child": "file"
+                  }
+                ],
+                "node-name": "#block947",
+                "backing_file_depth": 0,
+                "drv": "raw",
+                "iops": 0,
+                "bps_wr": 0,
+                "write_threshold": 0,
+                "encrypted": false,
+                "bps": 0,
+                "bps_rd": 0,
+                "cache": {
+                  "no-flush": false,
+                  "direct": false,
+                  "writeback": true
+                },
+                "file": "<workspace>/.aur-vm-runtime/payload-next.iso"
+              },
+              "qdev": "/machine/unattached/device[17]",
+              "tray_open": false,
+              "type": "unknown"
+            },
+            {
+              "device": "pflash0",
+              "locked": false,
+              "removable": false,
+              "inserted": {
+                "iops_rd": 0,
+                "detect_zeroes": "off",
+                "active": true,
+                "image": {
+                  "limits": {
+                    "request-alignment": 1,
+                    "min-mem-alignment": 1,
+                    "opt-mem-alignment": 4096,
+                    "max-iov": 1024
+                  },
+                  "virtual-size": 3653632,
+                  "filename": "<workspace>/.aur-vm-runtime/root/usr/share/edk2/x64/OVMF_CODE.4m.fd",
+                  "format": "raw",
+                  "actual-size": 3653632,
+                  "dirty-flag": false
+                },
+                "iops_wr": 0,
+                "ro": true,
+                "children": [
+                  {
+                    "node-name": "#block1053",
+                    "child": "file"
+                  }
+                ],
+                "node-name": "#block1131",
+                "backing_file_depth": 0,
+                "drv": "raw",
+                "iops": 0,
+                "bps_wr": 0,
+                "write_threshold": 0,
+                "encrypted": false,
+                "bps": 0,
+                "bps_rd": 0,
+                "cache": {
+                  "no-flush": false,
+                  "direct": false,
+                  "writeback": true
+                },
+                "file": "<workspace>/.aur-vm-runtime/root/usr/share/edk2/x64/OVMF_CODE.4m.fd"
+              },
+              "qdev": "/machine/system.flash0",
+              "type": "unknown"
+            },
+            {
+              "device": "pflash1",
+              "locked": false,
+              "removable": false,
+              "inserted": {
+                "iops_rd": 0,
+                "detect_zeroes": "off",
+                "active": true,
+                "image": {
+                  "limits": {
+                    "request-alignment": 1,
+                    "min-mem-alignment": 1,
+                    "opt-mem-alignment": 4096,
+                    "max-iov": 1024
+                  },
+                  "virtual-size": 540672,
+                  "filename": "<workspace>/.aur-vm-runtime/OVMF_VARS.fd",
+                  "format": "raw",
+                  "actual-size": 540672,
+                  "dirty-flag": false
+                },
+                "iops_wr": 0,
+                "ro": false,
+                "children": [
+                  {
+                    "node-name": "#block1256",
+                    "child": "file"
+                  }
+                ],
+                "node-name": "#block1345",
+                "backing_file_depth": 0,
+                "drv": "raw",
+                "iops": 0,
+                "bps_wr": 0,
+                "write_threshold": 0,
+                "encrypted": false,
+                "bps": 0,
+                "bps_rd": 0,
+                "cache": {
+                  "no-flush": false,
+                  "direct": false,
+                  "writeback": true
+                },
+                "file": "<workspace>/.aur-vm-runtime/OVMF_VARS.fd"
+              },
+              "qdev": "/machine/system.flash1",
+              "type": "unknown"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      {
+        "QMP": {
+          "version": {
+            "qemu": {
+              "micro": 3,
+              "minor": 1,
+              "major": 11
+            },
+            "package": ""
+          },
+          "capabilities": [
+            "oob"
+          ]
+        }
+      },
+      {
+        "command": "qmp_capabilities",
+        "reply": {
+          "return": {}
+        }
+      },
+      {
+        "command": "quit",
+        "reply": {
+          "timestamp": {
+            "seconds": 1793997389,
+            "microseconds": 418813
+          },
+          "event": "SHUTDOWN",
+          "data": {
+            "guest": false,
+            "reason": "host-qmp-quit"
+          }
+        }
+      },
+      {
+        "command": "quit",
+        "reply": {
+          "return": {}
+        }
+      }
+    ],
+    [
+      {
+        "QMP": {
+          "version": {
+            "qemu": {
+              "micro": 3,
+              "minor": 1,
+              "major": 11
+            },
+            "package": ""
+          },
+          "capabilities": [
+            "oob"
+          ]
+        }
+      },
+      {
+        "command": "qmp_capabilities",
+        "reply": {
+          "return": {}
+        }
+      },
+      {
+        "command": "quit",
+        "reply": {
+          "timestamp": {
+            "seconds": 1793997760,
+            "microseconds": 687496
+          },
+          "event": "SHUTDOWN",
+          "data": {
+            "guest": false,
+            "reason": "host-qmp-quit"
+          }
+        }
+      },
+      {
+        "command": "quit",
+        "reply": {
+          "return": {}
+        }
+      }
+    ]
+  ]
+}

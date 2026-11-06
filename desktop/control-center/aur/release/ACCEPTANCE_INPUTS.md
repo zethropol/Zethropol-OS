@@ -4,6 +4,11 @@
 not trust enrollment, signing consent or permission to mutate the host. Existing
 broker/ALPM code is unchanged. No sample below is an approved artifact.
 
+Actual disposable guest execution under subsequent user authorization is recorded
+in [guest/guest-evidence.json](guest/guest-evidence.json). It does not supply the
+missing release-owner approval, signed production set or approved native Archive
+snapshot. The positive production AUR cases remain unaccepted.
+
 ## Reproduce the passive inventory
 
 From the source checkout, run these read-only commands in the intended execution

@@ -2,6 +2,17 @@
 
 **INCOMPLETE. Production installation remains CLOSED.**
 
+2026-11-06 disposable guest execution is captured in
+[`release/guest/guest-evidence.json`](../../desktop/control-center/aur/release/guest/guest-evidence.json).
+Real KVM/UEFI boot, local PolicyKit preview/refusal, D-Bus, distribution ALPM,
+tamper denial, Snapper, observed partial-extraction power loss, snapshot recovery,
+version/hash readback, idle broker restart and closed-admission Qt/QML were exercised.
+These mechanism results do not certify the positive signed AUR workflow or
+Archive native trust. Authorized public release/role approval, a current signed
+manifest/artifact set and the separately approved Archive snapshot remain absent;
+the public GitHub Releases API returned an empty list. The historical checkpoints
+below are retained and are not the current VM execution status.
+
 Current source integration and results are recorded in
 [AUR_NATIVE_BROKER_INTEGRATION.md](AUR_NATIVE_BROKER_INTEGRATION.md) (2026-11-06).
 The results below preserve the preceding 2026-11-05 checkpoint.

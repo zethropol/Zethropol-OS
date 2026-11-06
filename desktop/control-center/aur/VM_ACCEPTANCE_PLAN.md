@@ -1,4 +1,10 @@
-# Disposable VM acceptance plan — NOT executed
+# Disposable VM acceptance matrix
+
+2026-11-06: the independent guest mechanism cases actually executed are recorded
+in [release/guest/guest-evidence.json](release/guest/guest-evidence.json).
+This is partial execution of this matrix, not production AUR acceptance. The
+original preparation checkpoint below is historical; production admission stays
+closed pending authorized public release/Archive inputs and dependent AUR cases.
 
 Status: plan and passive inventory prepared. No VM/image was created, booted or
 installed; no real package, snapshot or boot operation ran on this host.
