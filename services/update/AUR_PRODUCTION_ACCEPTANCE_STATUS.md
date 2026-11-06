@@ -7,9 +7,14 @@ The subsequent real release-owner operation is recorded in
 The new manifest has a protected owner approval, but its one UID949 signing
 attempt failed at `gpg-signing` with backend return code 2 and produced no
 signature. Separate root-authorized Archive public native certification is
-prepared and inactive. The installed signer lifecycle still rejects its
-inactive policy; no activation ID/quarantine receipt was invented and no signing
-retry was performed. Earlier statements about absent owner approval and native
+prepared and inactive. The protected lifecycle producer is now installed (helper SHA256
+`32196fec37fe1781ef772ea186ded8b545be824307e2889080ea1237b8e6b30e`).
+Its real pkexec invocation revalidated the existing owner approval and audit,
+then refused live execution at `exclusive-rescue-init-required`. It requires
+the trusted exclusive rescue init, initial PID1 and both exact-manifest boot
+selections; root authorization alone cannot replace that boundary. Policy and
+state entries stayed unchanged; no activation ID/quarantine receipt was invented
+and no signing retry was performed. Earlier statements about absent owner approval and native
 snapshot below are historical, not this operation's result.
 
 2026-11-06 disposable guest execution is captured in

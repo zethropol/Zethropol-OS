@@ -1,7 +1,7 @@
 """Home-route v2 lifecycle candidate. No cleanup, signing or automatic restart.
 
-Only future explicitly authorized systemd activation may use root-claim/run.
-Workspace policy is unapproved; the existing home socket always blocks start.
+The produce entrypoint requires exclusive rescue init and existing exact manifest
+approval. root-claim/run consume only its committed, boot-bound one-shot records.
 """
 import errno
 import ctypes
@@ -223,20 +223,40 @@ def load_policy():
     receipt=p['quarantine_receipt']
     require(isinstance(receipt,str) and re.fullmatch(re.escape(STATE)+r'/quarantine\.[0-9a-f]{32}\.json',receipt))
     p['_policy_sha256']=hashlib.sha256(raw).hexdigest()
+    verify_activation(p)
     return p
 
 def check_quarantine_receipt(policy,root=False):
     phase('separate-stale-quarantine-proof')
     receipt=json.loads(root_input(policy['quarantine_receipt']))
-    require(set(receipt)=={'schema','maintenance_id','before','after','destination','source_absent','directories_restored'})
+    require(set(receipt)=={'schema','maintenance_id','before','after','destination','source_absent','directories_restored',
+                           'activation_id','manifest_sha256','sockets'})
+    require(type(receipt['schema']) is int and receipt['schema']==2 and receipt['activation_id']==policy['activation_id'])
+    record=verify_activation(policy)
+    require(receipt['manifest_sha256']==record['manifest_sha256'])
+    require(set(receipt['sockets'])==set(SOCKET_NAMES))
     mid=receipt['maintenance_id'];require(isinstance(mid,str) and re.fullmatch('[0-9a-f]{32}',mid))
-    require(receipt['schema']==1 and receipt['before']==policy['old_socket'] and
+    require(policy['quarantine_receipt']==STATE+'/quarantine.'+mid+'.json')
+    require(receipt['before']==policy['old_socket'] and
             receipt['source_absent'] is True and receipt['directories_restored'] is True)
     destination=STATE+'/quarantine/'+mid+'/S.gpg-agent'
     require(receipt['destination']==destination)
     after=receipt['after'];require(isinstance(after,dict) and set(after)==set(policy['old_socket']))
     require(all(after[k]==policy['old_socket'][k] for k in after if k!='ctime_ns'))
     require(isinstance(after['ctime_ns'],str) and after['ctime_ns'].isdigit())
+    for name,pair in receipt['sockets'].items():
+        require(isinstance(pair,dict) and set(pair)=={'before','after'})
+        socket_absent(GNUPG+'/'+name)
+        if pair['before'] is None:
+            require(pair['after'] is None)
+            if root:socket_absent(STATE+'/quarantine/'+mid+'/'+name)
+            continue
+        validate_old_socket_binding(pair['before']);validate_old_socket_binding(pair['after'])
+        require(all(pair['before'][key]==pair['after'][key] for key in pair['before'] if key!='ctime_ns'))
+        if name==SOCKET_NAMES[0]:require(pair=={'before':receipt['before'],'after':receipt['after']})
+        if root:
+            archived=STATE+'/quarantine/'+mid+'/'+name
+            require(socket_snapshot(archived)==pair['after'] and no_listener(archived))
     socket_absent()
     if root:
         node(STATE+'/quarantine',0,0,0o700);node(STATE+'/quarantine/'+mid,0,0,0o700)
@@ -270,6 +290,7 @@ def root_host_identity():
 
 
 def root_claim(policy):
+    verify_activation(policy)
     phase('one-shot-root-activation-claim')
     node(STATE,0,0,0o755)
     parent=os.open(STATE,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW|os.O_CLOEXEC)
@@ -284,6 +305,7 @@ def root_claim(policy):
     finally:os.close(parent)
 
 def verify_claim(policy):
+    verify_activation(policy)
     phase('current-boot-one-shot-root-claim')
     record=json.loads(root_input(claim_path(policy)))
     require(record['event']=='root-activation-consumed' and record['policy_sha256']==policy['_policy_sha256'] and
@@ -549,7 +571,261 @@ def supervise(policy,configfd,popen=subprocess.Popen):
         if pidfd is not None:os.close(pidfd)
         os.close(af);os.close(parent)
 
-def main(mode):
+# This is an operation of the existing lifecycle, not a second approval service.
+# The existing root-protected manifest approval remains the sole owner authority.
+INACTIVE_POLICY_SHA='3b080ec729b0d03567f4a6139b3cd0675e97e97beaae3ace2b2dc7ab8201654b'
+MANIFEST_BUNDLE_SHA='3149c27c6c66a0c33a58a2e57f8279def163ebd3b9c99977ce112001c176e3f2'
+MANIFEST_BUNDLE='/usr/lib/zethropol/aur-manifest-diagnostics-'+MANIFEST_BUNDLE_SHA
+APPROVALS='/var/lib/zethropol/aur-manifest-approvals'
+SOCKET_NAMES=('S.gpg-agent','S.gpg-agent.ssh','S.gpg-agent.extra','S.gpg-agent.browser')
+
+
+def canonical(value):return json.dumps(value,sort_keys=True,separators=(',',':')).encode()
+def sha(raw):return hashlib.sha256(raw).hexdigest()
+
+
+def sync_directory(path):
+    fd=os.open(path,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW|os.O_CLOEXEC)
+    try:os.fsync(fd)
+    finally:os.close(fd)
+
+
+def durable_create(path,raw):
+    """An incomplete record is deliberately retained on failure; never replace it."""
+    parent=os.open(str(Path(path).parent),os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW|os.O_CLOEXEC)
+    try:
+        fd=os.open(Path(path).name,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW|os.O_CLOEXEC,0o644,dir_fd=parent)
+        try:
+            os.fchmod(fd,0o644)
+            view=memoryview(raw)
+            while view:
+                written=os.write(fd,view);require(written>0);view=view[written:]
+            os.fsync(fd)
+        finally:os.close(fd)
+        os.fsync(parent)
+    finally:os.close(parent)
+
+
+def owner_authorization(manifest_sha):
+    """Use the installed pinned signer's EXISTING validation, without signing."""
+    phase('existing-owner-manifest-authorization');require(digest_ok(manifest_sha))
+    raw=root_input(MANIFEST_BUNDLE+'/bundle.json');require(sha(raw)==MANIFEST_BUNDLE_SHA)
+    bundle=json.loads(raw)
+    for row in bundle['files']:
+        require(re.fullmatch(r'[a-z_]+\.py',row['name']) is not None)
+        require(sha(root_input(MANIFEST_BUNDLE+'/'+row['name'],1024**2))==row['sha256'])
+        module=sys.modules.get(row['name'][:-3])
+        require(module is None or getattr(module,'__file__',None)==MANIFEST_BUNDLE+'/'+row['name'])
+    launcher=types.ModuleType('protected_manifest_launcher')
+    launcher.__file__=MANIFEST_BUNDLE+'/manifest_bundle_launcher.py'
+    exec(compile(root_input(launcher.__file__),launcher.__file__,'exec'),launcher.__dict__)
+    launcher.verify_bundle(MANIFEST_BUNDLE)
+    import importlib
+    from contextlib import ExitStack
+    sys.path.insert(0,MANIFEST_BUNDLE)
+    try:workflow=importlib.import_module('manifest_workflow')
+    finally:sys.path.pop(0)
+    config,directory,approval=workflow.context(manifest_sha,actor=False)
+    require(config['uid']==949 and config['user']=='zethropol-aur-release' and config['gnupg_home']==GNUPG and
+            config['signer']=='F3F36BFA6D0FC60DA1CB34F2927519292F6F497B')
+    p=pwd.getpwnam(config['user'])
+    require((p.pw_uid,p.pw_gid,p.pw_dir,p.pw_shell)==(949,948,HOME,'/usr/bin/nologin'))
+    with ExitStack() as stack:
+        blob=workflow.manifest_blob(directory/'manifest.json',stack)
+        workflow.validate_authorization(blob,manifest_sha,approval)
+    approval_raw=root_input(APPROVALS+'/'+manifest_sha+'.json')
+    require(json.loads(approval_raw)==approval)
+    return {'manifest_sha256':manifest_sha,'approval_sha256':sha(approval_raw),'expires':approval['expires']}
+
+
+def boot_selection():
+    words=Path('/proc/cmdline').read_text().split()
+    selected=[]
+    for operation in ('activate','quarantine'):
+        prefix='zethropol.uid949.'+operation+'='
+        values=[word[len(prefix):] for word in words if word.startswith(prefix)]
+        require(len(values)==1 and digest_ok(values[0]));selected.append(values[0])
+    require(selected[0]==selected[1])
+    return selected[0]
+
+
+def exclusive_boot_window(manifest_sha):
+    """Only a trusted rescue init BEFORE other userspace, never a live-root scan.
+
+    PID 1 in the initial namespaces, no other userspace tasks/threads, two explicit
+    exact-manifest kernel selections. No daemon, pkexec, shell or systemd service
+    can satisfy this. The boot operator must arrange the trusted rescue init;
+    this program never edits boot configuration or reboots the host.
+    """
+    root_host_identity();phase('exclusive-rescue-init-required')
+    # Linux reserves these nsfs inode numbers for the initial PID/user
+    # namespaces. Comparing only with /proc/1 would accept a nested PID1.
+    require(os.stat('/proc/self/ns/pid').st_ino==0xEFFFFFFC and
+            os.stat('/proc/self/ns/user').st_ino==0xEFFFFFFD)
+    require(os.getpid()==1 and len(list(Path('/proc/1/task').iterdir()))==1)
+    require(boot_selection()==manifest_sha)
+    for entry in Path('/proc').iterdir():
+        if not entry.name.isdigit() or entry.name=='1':continue
+        # PID1 has not forked: any other userspace task invalidates exclusivity.
+        # Disappearing/unreadable tasks fail closed too.
+        status=dict(row.split(':',1) for row in (entry/'status').read_text().splitlines() if ':' in row)
+        require(status.get('Kthread','').strip()=='1')
+
+
+def rename_socket(source,destination):
+    # Linux renameat2(RENAME_NOREPLACE); no unlink, overwrite, connect or fallback.
+    libc=ctypes.CDLL(None,use_errno=True)
+    result=libc.renameat2(-100,os.fsencode(source),-100,os.fsencode(destination),1)
+    if result!=0:raise OSError(ctypes.get_errno(),'Quarantine rename refused')
+
+
+def pin_binary(path):
+    for parent in Path(path).parents:
+        s=parent.lstat();require(stat.S_ISDIR(s.st_mode) and (s.st_uid,s.st_gid)==(0,0) and
+                                not s.st_mode&0o022 and not ACL.intersection(os.listxattr(parent,follow_symlinks=False)))
+    before=node(path,0,0,0o755,False)
+    fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_CLOEXEC)
+    try:
+        require(stable_stat(before)==stable_stat(os.fstat(fd)))
+        with os.fdopen(os.dup(fd),'rb') as stream:value=hashlib.file_digest(stream,'sha256').hexdigest()
+        require(stable_stat(before)==stable_stat(os.fstat(fd))==stable_stat(os.lstat(path)))
+        return value
+    finally:os.close(fd)
+
+
+def verify_activation(policy):
+    phase('committed-producer-binding')
+    aid=policy['activation_id'];require(isinstance(aid,str) and re.fullmatch('[0-9a-f]{32}',aid))
+    record=json.loads(root_input(STATE+'/activation.'+aid+'.json'))
+    require(set(record)=={'schema','purpose','activation_id','policy_sha256','receipt_sha256','boot_id',
+                          'namespace_inodes','manifest_sha256','approval_sha256','expires'})
+    require(type(record['schema']) is int and record['schema']==1 and record['purpose']=='zethropol-lifecycle-activation' and
+            record['activation_id']==aid and record['policy_sha256']==policy['_policy_sha256'] and
+            record['boot_id']==boot_id() and record['namespace_inodes']==namespace_inodes())
+    require(type(record['expires']) is int and time.time()<record['expires'] and digest_ok(record['manifest_sha256']))
+    raw=root_input(APPROVALS+'/'+record['manifest_sha256']+'.json')
+    require(sha(raw)==record['approval_sha256'])
+    approval=json.loads(raw)
+    require(approval=={'schema':1,'purpose':'zethropol-approved-root-manifest',
+                       'manifest_sha256':record['manifest_sha256'],'expires':record['expires']})
+    require(sha(root_input(policy['quarantine_receipt']))==record['receipt_sha256'])
+    return record
+
+
+def produce_activation(manifest_sha):
+    """One-shot exclusive-maintenance producer. No start/sign/retry/rollback.
+
+    Consume the exact manifest intent before ANY socket mutation. An interrupted
+    operation keeps the intent, moved objects and journal; it cannot be replayed.
+    Publish approved policy last. Consumers also require its exact producer record.
+    """
+    exclusive_boot_window(manifest_sha)
+    authorization=owner_authorization(manifest_sha)
+    raw=root_input(POLICY);require(sha(raw)==INACTIVE_POLICY_SHA);policy=json.loads(raw)
+    require(policy['activation_approved'] is False and policy['activation_id'] is None and policy['quarantine_receipt'] is None)
+    require(policy['schema']==2 and policy['generation']==GENERATION and policy['uid']==949 and policy['gid']==948 and
+            policy['purpose']=='zethropol-agent-home-lifecycle-949' and policy['socket_path']==SOCKET and policy['gnupg_home']==GNUPG)
+    node(STATE,0,0,0o755);node(STATE+'/quarantine',0,0,0o700)
+    lock=actor_lock(root=True)
+    try:
+        # CSPRNG identifiers are never caller supplied; exact-manifest O_EXCL is
+        # the durable replay/race/crash barrier, even before a receipt exists.
+        import secrets
+        aid=secrets.token_hex(16);mid=secrets.token_hex(16)
+        require(aid!=mid and int(aid,16)!=0 and int(mid,16)!=0)
+        intent=STATE+'/production.'+manifest_sha+'.used'
+        durable_create(intent,canonical(dict(authorization,activation_id=aid,maintenance_id=mid,boot_id=boot_id())))
+        for path in (HOME,GNUPG):node(path,949,948,0o700)
+        node(GNUPG+'/private-keys-v1.d',949,948,0o700)  # Metadata only, never keys.
+        require(not(set(owner_configuration_presence())-{'owner-agent-config'}))
+        policy['agent_config_metadata']=config_metadata(os.lstat(CONFIG))
+        verified_config(policy)
+        policy['binary_sha256']={path:pin_binary(path) for path in ('/usr/bin/gpg-agent','/usr/bin/gpgconf')}
+        for key,path in (('helper_sha256',__file__),('route_reader_sha256',ROUTE_READER),('unit_sha256',UNIT_PATH)):
+            policy[key]=sha(root_input(path))
+        before={}
+        btime=int(next(row.split()[1] for row in Path('/proc/stat').read_text().splitlines() if row.startswith('btime ')))*10**9
+        for name in SOCKET_NAMES:
+            path=GNUPG+'/'+name
+            try:snapshot=socket_snapshot(path)
+            except FileNotFoundError:snapshot=None
+            if snapshot is not None:
+                validate_old_socket_binding(snapshot)
+                require(int(snapshot['ctime_ns'])<btime and no_listener(path))
+            before[name]=snapshot
+        require(before[SOCKET_NAMES[0]]==policy['old_socket'] and before[SOCKET_NAMES[0]] is not None)
+        require({p.name for p in Path(GNUPG).iterdir() if p.name.startswith('S.gpg-agent')}<=set(SOCKET_NAMES))
+        destination=STATE+'/quarantine/'+mid
+        os.mkdir(destination,0o700);node(destination,0,0,0o700)
+        journal=STATE+'/maintenance.'+mid+'.jsonl'
+        durable_create(journal,canonical({'event':'prepared','activation_id':aid,'authorization':authorization,'sockets':before})+b'\n')
+        sync_directory(destination);sync_directory(STATE+'/quarantine')
+        exclusive_boot_window(manifest_sha)
+        after={}
+        for name in SOCKET_NAMES:
+            source=GNUPG+'/'+name;target=destination+'/'+name
+            if before[name] is None:socket_absent(source);after[name]=None;continue
+            require(socket_snapshot(source)==before[name] and no_listener(source))
+            rename_socket(source,target)
+            sync_directory(GNUPG);sync_directory(destination)
+            after[name]=socket_snapshot(target)
+            require(all(after[name][key]==before[name][key] for key in before[name] if key!='ctime_ns'))
+            socket_absent(source);require(no_listener(target))
+        # Parent ownership/modes/ACLs never change. Rename changes only their
+        # timestamps; do not falsify ctime or restore historical timestamps.
+        for path in (HOME,GNUPG):node(path,949,948,0o700)
+        for path in (GNUPG,destination,STATE+'/quarantine'):
+            fd=os.open(path,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+            try:os.fsync(fd)
+            finally:os.close(fd)
+        common_checks(policy)
+        require(owner_authorization(manifest_sha)==authorization)
+        receipt={'schema':2,'maintenance_id':mid,'activation_id':aid,'manifest_sha256':manifest_sha,
+                 'before':before[SOCKET_NAMES[0]],'after':after[SOCKET_NAMES[0]],'destination':destination+'/'+SOCKET_NAMES[0],
+                 'source_absent':True,'directories_restored':True,
+                 'sockets':{name:{'before':before[name],'after':after[name]} for name in SOCKET_NAMES}}
+        receipt_path=STATE+'/quarantine.'+mid+'.json';receipt_raw=canonical(receipt)
+        durable_create(receipt_path,receipt_raw)
+        policy.update(activation_id=aid,activation_approved=True,quarantine_receipt=receipt_path)
+        policy_raw=canonical(policy)
+        record=dict(authorization,schema=1,purpose='zethropol-lifecycle-activation',activation_id=aid,
+                    policy_sha256=sha(policy_raw),receipt_sha256=sha(receipt_raw),boot_id=boot_id(),namespace_inodes=namespace_inodes())
+        durable_create(STATE+'/activation.'+aid+'.json',canonical(record))
+        staged=POLICY+'.'+aid+'.prepared';durable_create(staged,policy_raw)
+        require(root_input(POLICY)==raw)
+        require(owner_authorization(manifest_sha)==authorization)
+        os.replace(staged,POLICY)
+        fd=os.open(str(Path(POLICY).parent),os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+        try:os.fsync(fd)
+        finally:os.close(fd)
+        verified=load_policy();check_quarantine_receipt(verified,root=True)
+        # Append only to the real producer's exclusive journal, never old audit.
+        fd=os.open(journal,os.O_WRONLY|os.O_APPEND|os.O_NOFOLLOW|os.O_CLOEXEC)
+        try:audit_line(fd,'activation-produced',activation_id=aid,policy_sha256=sha(policy_raw),manifest_sha256=manifest_sha)
+        finally:os.close(fd)
+        return record
+    finally:os.close(lock)
+
+
+def rescue_init():
+    # This must be the boot operator's trusted /init, never a live-host service.
+    # Do not exit PID1 or leave a failed maintenance boot in a retry loop.
+    root_host_identity();require(os.getpid()==1)
+    pin_binary('/usr/lib/systemd/systemd')
+    try:
+        result=produce_activation(boot_selection())
+        print(json.dumps({'status':'ACTIVATION_PRODUCED','activation_id':result['activation_id'],
+                          'manifest_sha256':result['manifest_sha256'],'signing':False}),flush=True)
+    except Exception:
+        print(json.dumps({'status':'BLOCKED','phase':PHASE,'signing':False,'retry_permitted':False}),flush=True)
+    os.execve('/usr/lib/systemd/systemd',['/usr/lib/systemd/systemd'],ENV)
+
+
+def main(mode,manifest_sha=None):
+    if mode=='rescue-init':
+        require(manifest_sha is None);return rescue_init()
+    if mode=='produce':
+        return produce_activation(manifest_sha)
     if mode=='root-claim':
         root_host_identity()
         policy=load_policy();lock=actor_lock(root=True)
@@ -565,7 +841,7 @@ def main(mode):
         os.close(lock)
 
 if __name__=='__main__':
-    try:main(sys.argv[1] if len(sys.argv)==2 else '')
+    try:main(sys.argv[1] if len(sys.argv) in (2,3) else '',sys.argv[2] if len(sys.argv)==3 else None)
     except Exception as error:
         code=error.errno if isinstance(error,OSError) and type(error.errno) is int else None
         print(json.dumps({'status':'BLOCKED','phase':PHASE,'errno':code,'agent_started_by_review':False,'signing':False},separators=(',',':')),flush=True)

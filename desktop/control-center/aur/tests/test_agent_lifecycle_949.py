@@ -84,7 +84,7 @@ class Lifecycle(unittest.TestCase):
             with self.assertRaises(OSError):os.write(fd,b'changed')
         finally:os.close(fd)
     def test_root_activation_claim_is_exclusive_and_cannot_be_reused(self):
-        with tempfile.TemporaryDirectory() as d,patch.object(life,'STATE',d),patch.object(life,'node'),patch.object(life,'boot_id',return_value='fresh-boot'),patch.object(life,'boottime_ns',return_value=100):
+        with tempfile.TemporaryDirectory() as d,patch.object(life,'STATE',d),patch.object(life,'node'),patch.object(life,'verify_activation'),patch.object(life,'boot_id',return_value='fresh-boot'),patch.object(life,'boottime_ns',return_value=100):
             p={'activation_id':'a'*32,'_policy_sha256':'b'*64};life.root_claim(p)
             path=Path(life.claim_path(p));before=path.read_bytes()
             with self.assertRaises(FileExistsError):life.root_claim(p)
@@ -95,7 +95,7 @@ class Lifecycle(unittest.TestCase):
     def test_expired_claim_never_gets_new_budget(self):
         p={'activation_id':'a'*32,'_policy_sha256':'b'*64}
         record=dict(event='root-activation-consumed',activation_id=p['activation_id'],policy_sha256=p['_policy_sha256'],boot_id='boot',start_deadline_boottime_ns='99')
-        with patch.object(life,'root_input',return_value=json.dumps(record).encode()),patch.object(life,'boot_id',return_value='boot'),patch.object(life,'boottime_ns',return_value=100):
+        with patch.object(life,'verify_activation'),patch.object(life,'root_input',return_value=json.dumps(record).encode()),patch.object(life,'boot_id',return_value='boot'),patch.object(life,'boottime_ns',return_value=100):
             with self.assertRaises(life.Refused):life.verify_claim(p)
     def test_actor_used_marker_cannot_be_replaced(self):
         with tempfile.TemporaryDirectory() as d,patch.object(life,'AUDIT',d):
@@ -137,12 +137,13 @@ class Lifecycle(unittest.TestCase):
     def test_quarantine_receipt_must_bind_original_inode_and_preserve_acl(self):
         original={'device':'1','inode':'2','uid':949,'gid':948,'mode':'0o600','ctime_ns':'3','acl':{}}
         after=dict(original,ctime_ns='4');mid='a'*32
-        receipt={'schema':1,'maintenance_id':mid,'before':original,'after':after,'destination':life.STATE+'/quarantine/'+mid+'/S.gpg-agent','source_absent':True,'directories_restored':True}
-        policy={'quarantine_receipt':'unused','old_socket':original}
-        with patch.object(life,'root_input',return_value=json.dumps(receipt).encode()),patch.object(life,'socket_absent'),patch.object(life,'node'),patch.object(life,'socket_snapshot',return_value=after),patch.object(life,'no_listener',return_value=True):
+        receipt={'schema':2,'maintenance_id':mid,'activation_id':mid,'manifest_sha256':'f'*64,'before':original,'after':after,'destination':life.STATE+'/quarantine/'+mid+'/S.gpg-agent','source_absent':True,'directories_restored':True,
+                 'sockets':{name:{'before':original,'after':after} for name in life.SOCKET_NAMES}}
+        policy={'activation_id':mid,'quarantine_receipt':life.STATE+'/quarantine.'+mid+'.json','old_socket':original}
+        with patch.object(life,'verify_activation',return_value={'manifest_sha256':'f'*64}),patch.object(life,'root_input',return_value=json.dumps(receipt).encode()),patch.object(life,'socket_absent'),patch.object(life,'node'),patch.object(life,'socket_snapshot',return_value=after),patch.object(life,'no_listener',return_value=True):
             self.assertEqual(life.check_quarantine_receipt(policy,root=True)['after'],after)
         receipt['after']=dict(after,inode='99')
-        with patch.object(life,'root_input',return_value=json.dumps(receipt).encode()),patch.object(life,'socket_absent'):
+        with patch.object(life,'verify_activation',return_value={'manifest_sha256':'f'*64}),patch.object(life,'root_input',return_value=json.dumps(receipt).encode()),patch.object(life,'socket_absent'):
             with self.assertRaises(life.Refused):life.check_quarantine_receipt(policy)
     def test_root_host_namespace_mismatch_is_refused(self):
         with patch.object(life.os,'getresuid',return_value=(0,)*3),patch.object(Path,'read_text',return_value='0 0 4294967295'),patch.object(life,'namespace_inodes',return_value={'net':1}),patch.object(life.os,'stat',return_value=SimpleNamespace(st_ino=2)):
