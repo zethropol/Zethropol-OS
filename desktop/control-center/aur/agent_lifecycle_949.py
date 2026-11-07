@@ -807,6 +807,19 @@ def produce_activation(manifest_sha):
     finally:os.close(lock)
 
 
+def rescue_event(record):
+    """Keep PID1 outcomes in the kernel journal without forking a logger."""
+    print(json.dumps(record),flush=True)
+    try:
+        fd=os.open('/dev/kmsg',os.O_WRONLY|os.O_CLOEXEC|os.O_NOFOLLOW|os.O_NONBLOCK)
+        try:
+            info=os.fstat(fd)
+            if stat.S_ISCHR(info.st_mode) and os.major(info.st_rdev)==1 and os.minor(info.st_rdev)==11:
+                os.write(fd,b'<5>zethropol-uid949-rescue: '+canonical(record)+b'\n')
+        finally:os.close(fd)
+    except OSError:pass
+
+
 def rescue_init():
     # This must be the boot operator's trusted /init, never a live-host service.
     # Do not exit PID1 or leave a failed maintenance boot in a retry loop.
@@ -814,10 +827,25 @@ def rescue_init():
     pin_binary('/usr/lib/systemd/systemd')
     try:
         result=produce_activation(boot_selection())
-        print(json.dumps({'status':'ACTIVATION_PRODUCED','activation_id':result['activation_id'],
-                          'manifest_sha256':result['manifest_sha256'],'signing':False}),flush=True)
-    except Exception:
-        print(json.dumps({'status':'BLOCKED','phase':PHASE,'signing':False,'retry_permitted':False}),flush=True)
+        rescue_event({'status':'ACTIVATION_PRODUCED','activation_id':result['activation_id'],
+                      'manifest_sha256':result['manifest_sha256'],'signing':False})
+    except Exception as error:
+        record={'status':'BLOCKED','phase':PHASE,'signing':False,'retry_permitted':False,
+                'errno':error.errno if isinstance(error,OSError) else None,
+                'error_type':type(error).__name__,'pid':os.getpid()}
+        if PHASE=='exclusive-rescue-init-required':
+            record['namespace_inodes']=namespace_inodes()
+            record['task_count']=len(list(Path('/proc/1/task').iterdir()))
+            record['unexpected_userspace']=[]
+            for entry in Path('/proc').iterdir():
+                if not entry.name.isdigit() or entry.name=='1':continue
+                try:
+                    fields=dict(row.split(':',1) for row in (entry/'status').read_text().splitlines() if ':' in row)
+                    if fields.get('Kthread','').strip()!='1':
+                        record['unexpected_userspace'].append({'pid':int(entry.name),
+                            'name':fields.get('Name','').strip(),'state':fields.get('State','').strip()})
+                except OSError:pass
+        rescue_event(record)
     os.execve('/usr/lib/systemd/systemd',['/usr/lib/systemd/systemd'],ENV)
 
 
