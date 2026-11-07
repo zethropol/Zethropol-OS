@@ -1,0 +1,43 @@
+# Retire only the known AUR UID949 deployment. Keep private keys and audit data.
+retire_uid949() {
+    local release=/usr/lib/zethropol/aur-agent-lifecycle-949/releases/home-route-v2-20261103
+    local unit=/etc/systemd/system/zethropol-aur-manifest-agent.service
+    local config=/etc/zethropol-update/aur-manifest-signer.json
+    local value temporary
+    if [[ -f "$unit" && ! -L "$unit" ]]; then
+        value=$(sha256sum "$unit"); value=${value%% *}
+        if [[ "$value" != 4b9ef78b4a7b48ad4aed4b1250d79a007afe61a5dab3bf51221bf6e05cbfbd7d ]]; then
+            echo 'Modified UID949 unit preserved; operator must retire it explicitly.' >&2; return 1
+        fi
+        systemctl stop zethropol-aur-manifest-agent.service || return 1
+        systemctl disable zethropol-aur-manifest-agent.service 2>/dev/null || true
+        systemctl reset-failed zethropol-aur-manifest-agent.service 2>/dev/null || true
+        rm -- "$unit"
+    fi
+    if [[ -f "$release/uid949-rescue-init" && ! -L "$release/uid949-rescue-init" ]]; then
+        value=$(sha256sum "$release/uid949-rescue-init"); value=${value%% *}
+        if [[ "$value" == 848483ccecea5e9d7f32d17e57f1e215eeb3e682c78e1ffafce154396bac87d1 ]]; then
+            # Preserve a safe OS handoff for an already-created external reference.
+            temporary=$(mktemp "$release/.retired-init.XXXXXX") || return 1
+            printf '#!/bin/sh\n# UID949 AUR lifecycle retired.\nexec /usr/lib/systemd/systemd\n' > "$temporary"
+            chmod 0755 "$temporary" && mv -- "$temporary" "$release/uid949-rescue-init" || return 1
+        fi
+    fi
+    if [[ -f "$release/agent_lifecycle_949.py" && ! -L "$release/agent_lifecycle_949.py" ]]; then
+        value=$(sha256sum "$release/agent_lifecycle_949.py"); value=${value%% *}
+        case "$value" in
+            32196fec37fe1781ef772ea186ded8b545be824307e2889080ea1237b8e6b30e|c81dc3276c9e78d39a98f3bb29a305b2148adf7f441f615295e94ab0c90abe75)
+                rm -- "$release/agent_lifecycle_949.py";;
+            *) echo 'Modified retired UID949 helper preserved.' >&2; return 1;;
+        esac
+    fi
+    if [[ -f "$config" && ! -L "$config" ]]; then
+        value=$(sha256sum "$config"); value=${value%% *}
+        if [[ "$value" != 7fe4a64d0f88e4962cfa1ecc975e3b8fbd84d78db69717ea4f72bbe8981b411f ]]; then
+            echo 'Modified retired signer configuration preserved.' >&2; return 1
+        fi
+        rm -- "$config"
+    fi
+}
+post_install() { retire_uid949; }
+post_upgrade() { retire_uid949; }

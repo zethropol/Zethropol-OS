@@ -1128,9 +1128,11 @@ void UpdateService::finishSourceReview(const QVariantList &plan){m_reviewPlan=pl
 void UpdateService::finalizeReview(){
     if(!m_officialPreviewDone||!m_sourceReviewDone||!m_aurBrokerReviewDone||m_reviewFinalized)return;
     for(auto &value:m_reviewPlan){auto row=value.toMap();if(row.value("source")=="aur"){
-        row["broker"]=m_aurBrokerReview;row["state"]="blocked";
+        const bool reviewed=row.value("recipeChecks")=="declarations-checked"&&row.value("state")=="reviewed"
+            &&m_aurBrokerReview.value("api_version")=="2"&&m_aurBrokerReview.value("state")=="review-required";
+        row["broker"]=m_aurBrokerReview;row["state"]=reviewed?"reviewed":"blocked";
         if(!m_aurBrokerReview.isEmpty())row["reason"]=row.value("reason").toString()+"\nBroker: "+m_aurBrokerReview.value("reason").toString();
-        row["installCapability"]="blocked";value=row;
+        row["installCapability"]="requires-native-preview-and-polkit";value=row;
     }}
     m_reviewFinalized=true;m_previewing=false;
     QStringList details;

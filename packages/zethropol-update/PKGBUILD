@@ -1,14 +1,15 @@
 pkgname=zethropol-update
 pkgver=0.1.0
-pkgrel=11
+pkgrel=12
 pkgdesc="Zethropol OS Update D-Bus service"
 url="https://github.com/zethropol/Zethropol-OS"
 arch=("x86_64")
 license=("MIT")
 depends=("glibc" "dbus" "systemd" "pacman-contrib" "polkit")
 makedepends=("cargo" "git")
+install="zethropol-update.install"
 
-_commit="10f73a3b889457dce3003c76f7f7a3090f193701"
+_commit="bfa288dd18933e87d2508969fc5ffb5cab46cee2"
 source=("Zethropol-OS::git+https://github.com/zethropol/Zethropol-OS.git#commit=${_commit}")
 sha256sums=("SKIP")
 
