@@ -375,10 +375,21 @@ class Worker:
                         resolver = os.path.realpath('/etc/resolv.conf')
                         if resolver != '/etc/resolv.conf': args += ['--ro-bind',resolver,resolver]
                     return args + ['--',*argv]
+                self.report('checking-pkgbuild-declarations')
+                offset = (logdir/'worker.log').stat().st_size
+                self.execute(command(['/usr/bin/makepkg','--printsrcinfo']),logdir,cancel,min(timeout,30))
+                with open(logdir/'worker.log','rb') as log:
+                    log.seek(offset); actual = log.read(1024**2+1)
+                if len(actual)>1024**2: raise Rejected('Runtime source metadata quota exceeded')
+                def declarations(data):
+                    return sorted(line.strip() for line in data.decode('utf-8').splitlines()
+                                  if ' = ' in line and not line.strip().startswith('#'))
+                if declarations(actual) != declarations(regular(work/'.SRCINFO',1024**2)):
+                    raise Rejected('PKGBUILD declarations differ from reviewed .SRCINFO')
                 dependencies = review.get('dependencies',[])
                 steps = []
                 if dependencies: steps.append(('dependencies',['/usr/bin/pacman','-T','--',*dependencies],False))
-                steps += [('verifying-sources',['/usr/bin/makepkg','--noconfirm','--holdver','--verifysource'],True),('building',['/usr/bin/makepkg','--noconfirm','--holdver','--cleanbuild'],False)]
+                steps += [('verifying-sources',['/usr/bin/makepkg','--noconfirm','--holdver','--verifysource'],True),('building',['/usr/bin/makepkg','--noconfirm','--holdver','--cleanbuild','--nosign'],False)]
                 for stage,argv,network in steps:
                     if cancel(): raise Rejected('Cancelled')
                     self.report(stage); self.execute(command(argv,network),logdir,cancel,timeout)
