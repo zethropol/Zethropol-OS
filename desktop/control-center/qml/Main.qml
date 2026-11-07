@@ -1770,7 +1770,9 @@ ApplicationWindow {
                                 Label {
                                     Layout.fillWidth: true
                                     wrapMode: Text.Wrap
-                                    text: "AUR installation requires a verified independent receipt, separate confirmation and broker authorization. Build and preview do not grant installation consent."
+                                    text: UpdateBridge.aurInstallReady
+                                        ? "AUR installation requires a verified independent receipt, separate confirmation and broker authorization. Build and preview do not grant installation consent."
+                                        : "AUR production admission is closed. Build and preview do not grant installation consent."
                                 }
                             }
 
