@@ -152,7 +152,7 @@ impl Lab {
             package_name: "aur-fixture".into(),
             current_version: String::new(),
             new_version: "2-1".into(),
-            repository: "aur-attested".into(),
+            repository: "aur-local".into(),
             download_size: raw.len() as u64,
             filename: "aur-fixture.pkg.tar".into(),
             sha256: receipt_hash(&raw),

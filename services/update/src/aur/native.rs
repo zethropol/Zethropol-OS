@@ -390,7 +390,7 @@ fn native_request_valid(r: &NativeRequest, now: u64) -> Result<(), String> {
             || !receipt_digest(&a.identity.sha256)
             || !receipt_digest(&a.identity.repository_metadata_sha256)
             || !receipt_digest(&a.signature_sha256)
-            || a.identity.repository != "aur-attested"
+            || a.identity.repository != "aur-local"
             || a.archive_fd < 3
             || a.signature_fd < 3
             || !fds.insert(a.archive_fd)
@@ -887,7 +887,7 @@ fn exchange_native_observed(
             || p.new_version != a.identity.new_version
             || p.sha256 != a.identity.sha256
             || p.filename != a.identity.filename
-            || p.repository != "aur-attested"
+            || p.repository != "aur-local"
             || p.repository_metadata_sha256 != a.identity.repository_metadata_sha256
         {
             return Err("native plan differs from reviewed artifact set".into());

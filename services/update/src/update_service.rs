@@ -238,7 +238,7 @@ impl UpdateManager {
         names: Vec<String>,
         versions: Vec<String>,
     ) -> Result<HashMap<String, String>, zbus::fdo::Error> {
-        aur_selection_review(&names, &versions).map_err(zbus::fdo::Error::InvalidArgs)
+        normal_aur_selection(&names, &versions).map_err(zbus::fdo::Error::InvalidArgs)
     }
     async fn get_aur_build_context(
         &self,
@@ -276,9 +276,9 @@ impl UpdateManager {
         #[zbus(connection)] connection: &zbus::Connection,
         #[zbus(header)] header: zbus::message::Header<'_>,
     ) -> Result<String, zbus::fdo::Error> {
-        let review = load_approved_aur_review(&approved_review_sha256)
-            .map_err(zbus::fdo::Error::NotSupported)?;
-        let context = reserve_reviewed_aur_message(connection, &header, review)
+        let review =
+            normal_aur_review(&approved_review_sha256).map_err(zbus::fdo::Error::NotSupported)?;
+        let context = normal_reserve_aur_message(connection, &header, review)
             .await
             .map_err(broker_error)?;
         Ok(context.operation_id)
@@ -290,13 +290,12 @@ impl UpdateManager {
         &self,
         plan_hash: String,
         archives: Vec<zbus::zvariant::OwnedFd>,
-        signatures: Vec<zbus::zvariant::OwnedFd>,
         #[zbus(connection)] connection: &zbus::Connection,
         #[zbus(header)] header: zbus::message::Header<'_>,
     ) -> Result<String, zbus::fdo::Error> {
         // No caller-supplied boolean/key/receipt can open the production gate.
         require_aur_production_authority().map_err(zbus::fdo::Error::NotSupported)?;
-        if archives.is_empty() || archives.len() > 64 || archives.len() != signatures.len() {
+        if archives.is_empty() || archives.len() > 64 {
             return Err(zbus::fdo::Error::InvalidArgs(
                 "exact bounded archive/signature pairs required".into(),
             ));
@@ -309,7 +308,7 @@ impl UpdateManager {
         // Owned D-Bus FDs remain alive until the worker finishes. No caller
         // path or command is passed across this boundary.
         tokio::task::spawn_blocking(move || {
-            let result = aur_execute_received(&store, &consumed, archives, signatures);
+            let result = normal_aur_execute(&store, &consumed, archives);
             if let Err(error) = result {
                 eprintln!("AUR {}: {error}; no automatic retry", consumed.operation_id);
             }
@@ -329,29 +328,16 @@ impl UpdateManager {
             .map_err(broker_error)
     }
 
-    // The versioned D-Bus method carries independent sealed FDs and caller context.
-    #[allow(clippy::too_many_arguments)]
+    // Legacy method name retained; normal makepkg artifacts use sealed archive
+    // FDs and the original peer-bound reservation, with no manifest/signature FDs.
     #[zbus(out_args("packages", "removals", "plan_hash"))]
     async fn preview_aur_receipt(
         &self,
         operation_id: String,
-        receipt: zbus::zvariant::OwnedFd,
-        receipt_signature: zbus::zvariant::OwnedFd,
-        manifest: zbus::zvariant::OwnedFd,
-        manifest_signature: zbus::zvariant::OwnedFd,
         archives: Vec<zbus::zvariant::OwnedFd>,
-        signatures: Vec<zbus::zvariant::OwnedFd>,
         #[zbus(connection)] connection: &zbus::Connection,
         #[zbus(header)] header: zbus::message::Header<'_>,
     ) -> Result<(Vec<UpdatePackageInfo>, Vec<PackageRemoval>, String), zbus::fdo::Error> {
-        // Verification/preview does not enable installation. InstallAur retains
-        // its independent, unconditional real-system acceptance gate.
-        let trust = ReceiptTrust::load().map_err(zbus::fdo::Error::NotSupported)?;
-        if archives.is_empty() || archives.len() > 64 || archives.len() != signatures.len() {
-            return Err(zbus::fdo::Error::InvalidArgs(
-                "bounded archive/signature pairs required".into(),
-            ));
-        }
         let now = boottime_seconds()?;
         let caller =
             AuthorizedCaller::check_message(connection, &header, PolicyAction::Preview, now)
@@ -359,38 +345,13 @@ impl UpdateManager {
                 .map_err(broker_error)?;
         let store = persistent_aur_broker().map_err(broker_error)?;
         let context = store
-            .receipt_context_for_operation(caller.identity(), &operation_id, boottime_seconds()?)
+            .receipt_context_for_operation(caller.identity(), &operation_id, now)
             .map_err(broker_error)?;
         tokio::task::spawn_blocking(move || {
-            use std::os::fd::AsFd;
-            let parent = Path::new("/run/zethropol-update/aur-artifacts");
-            verify_aur_staging_parent(parent)?;
-            let fds: Vec<_> = archives
-                .iter()
-                .zip(&signatures)
-                .map(|(a, s)| (a.as_fd(), s.as_fd()))
-                .collect();
-            let verified = verify_aur_receipt_isolated(
-                &store,
-                &context,
-                ReceiptFds {
-                    receipt: receipt.as_fd(),
-                    receipt_signature: receipt_signature.as_fd(),
-                    manifest: manifest.as_fd(),
-                    manifest_signature: manifest_signature.as_fd(),
-                    packages: &fds,
-                },
-                &trust,
-                parent,
-            )?;
-            let plan = store
-                .admit_aur_receipt(
-                    caller,
-                    &verified,
-                    boottime_seconds().map_err(|e| e.to_string())?,
-                    receipt_unix_now()?,
-                )
-                .map_err(|e| format!("receipt admission: {e:?}"))?;
+            let plan = normal_aur_preview(&context, &archives)?;
+            store
+                .admit_normal_aur_build(caller, &context, &plan, aur_boottime()?)
+                .map_err(|e| format!("{e:?}"))?;
             Ok::<_, String>((
                 plan.packages().to_vec(),
                 plan.removals().to_vec(),
@@ -437,7 +398,7 @@ impl UpdateManager {
     }
 
     fn get_aur_readiness(&self) -> HashMap<String, String> {
-        aur_trust_readiness()
+        normal_aur_readiness()
     }
 
     async fn get_update_state(
@@ -1675,17 +1636,16 @@ fn configured_alpm_domain(
             ))
         })?;
 
-    handle
-        .set_gpgdir(if archive_domain {
-            AUR_NATIVE_DOMAIN.to_string()
-        } else {
-            gpg_dirs[0].clone()
-        })
-        .map_err(|error| {
-            zbus::fdo::Error::Failed(format!(
-                "Unable to configure libalpm GPG directory: {error}"
-            ))
-        })?;
+    if archive_domain {
+        return Err(zbus::fdo::Error::NotSupported(
+            "Project Archive signing domain retired; use normal local package policy".into(),
+        ));
+    }
+    handle.set_gpgdir(gpg_dirs[0].clone()).map_err(|error| {
+        zbus::fdo::Error::Failed(format!(
+            "Unable to configure libalpm GPG directory: {error}"
+        ))
+    })?;
 
     let default_siglevel = parse_pacman_siglevel(
         &pacman_conf_values(&["SigLevel"])?,

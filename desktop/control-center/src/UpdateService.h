@@ -162,6 +162,7 @@ private:
     bool m_aurOwnsInstallFlag = false;
     bool m_aurBundlePending = false;
     QVariantMap m_aurBrokerReview;
+    QVariantMap m_normalAurReview;
     QString m_aurOperationId;
     QString m_localAurExecution, m_localAurOperation;
     bool m_aurProvisioningPending=false, m_aurAttestationPending=false;

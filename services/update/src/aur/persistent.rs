@@ -382,7 +382,7 @@ impl BrokerStore {
     fn aur_validate_record(&self, r: &Record) -> Result<(), BrokerError> {
         if r.plan.packages().is_empty()
             || r.plan.packages().iter().any(|p| {
-                !["aur-attested", "aur-build-reservation"].contains(&p.repository.as_str())
+                !["aur-local", "aur-build-reservation"].contains(&p.repository.as_str())
             })
         {
             return Err(BrokerError::InvalidPlan);
@@ -390,7 +390,7 @@ impl BrokerStore {
         if r.plan
             .packages()
             .iter()
-            .all(|p| p.repository == "aur-attested")
+            .all(|p| p.repository == "aur-local")
         {
             let marker = self
                 .root

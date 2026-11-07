@@ -2,6 +2,7 @@
 // Neither the worker's claimed metadata nor an output self-signature is authority.
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+#[cfg(test)]
 use std::io::Read as _;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -64,6 +65,7 @@ pub(crate) struct ReceiptContext {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[cfg(test)]
 struct ReceiptOutput {
     name: String,
     version: String,
@@ -74,6 +76,7 @@ struct ReceiptOutput {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[cfg(test)]
 struct BuildReceipt {
     schema: u32,
     purpose: String,
@@ -92,6 +95,7 @@ struct BuildReceipt {
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[cfg(test)]
 struct RootPackage {
     name: String,
     version: String,
@@ -99,6 +103,7 @@ struct RootPackage {
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[cfg(test)]
 struct RootManifest {
     schema: u32,
     purpose: String,
@@ -108,6 +113,7 @@ struct RootManifest {
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[cfg(test)]
 struct ReceiptRoleConfig {
     keyring: String,
     keyring_sha256: String,
@@ -115,6 +121,7 @@ struct ReceiptRoleConfig {
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[cfg(test)]
 struct ReceiptPolicyConfig {
     schema: u32,
     purpose: String,
@@ -122,10 +129,12 @@ struct ReceiptPolicyConfig {
     receipt: ReceiptRoleConfig,
     archive: ReceiptRoleConfig,
 }
+#[cfg(test)]
 struct ReceiptRole {
     keyring: fs::File,
     signers: Vec<String>,
 }
+#[cfg(test)]
 struct ReceiptTrust {
     manifest: ReceiptRole,
     receipt: ReceiptRole,
@@ -153,6 +162,7 @@ fn receipt_name(s: &str) -> bool {
 fn receipt_basename(s: &str) -> bool {
     receipt_name(s) && s != "." && s != ".." && !s.ends_with(".sig")
 }
+#[cfg(test)]
 fn read_receipt_fd(fd: BorrowedFd<'_>, limit: u64) -> Result<Vec<u8>, String> {
     let size = sealed_size(fd, limit)?;
     let file = fs::File::from(fd.try_clone_to_owned().map_err(|e| e.to_string())?);
@@ -161,6 +171,7 @@ fn read_receipt_fd(fd: BorrowedFd<'_>, limit: u64) -> Result<Vec<u8>, String> {
         .map_err(|e| e.to_string())?;
     Ok(bytes)
 }
+#[cfg(test)]
 fn seal_receipt_bytes(bytes: &[u8]) -> Result<fs::File, String> {
     use std::os::fd::FromRawFd;
     let fd = unsafe {
@@ -180,6 +191,7 @@ fn seal_receipt_bytes(bytes: &[u8]) -> Result<fs::File, String> {
     }
     Ok(file)
 }
+#[cfg(test)]
 impl ReceiptTrust {
     fn load() -> Result<Self, String> {
         Self::load_owned(
@@ -266,6 +278,7 @@ impl ReceiptTrust {
         })
     }
 }
+#[cfg(test)]
 impl ReceiptRole {
     fn verify(
         &self,
@@ -300,6 +313,7 @@ impl ReceiptRole {
 }
 
 // Called only after gpgv exited successfully; status text alone is not proof.
+#[cfg(test)]
 fn validate_aur_signature_status(status: &str, approved: &[String]) -> Result<(), String> {
     let mut signers = Vec::new();
     for line in status.lines() {
@@ -343,6 +357,7 @@ fn validate_aur_signature_status(status: &str, approved: &[String]) -> Result<()
     Ok(())
 }
 
+#[cfg(test)]
 pub(crate) struct VerifiedAurReceipt {
     context: ReceiptContext,
     receipt_sha256: String,
@@ -352,6 +367,7 @@ pub(crate) struct VerifiedAurReceipt {
     intake: AurIntake,
     receipt: BuildReceipt,
 }
+#[cfg(test)]
 impl VerifiedAurReceipt {
     pub(crate) fn context(&self) -> &ReceiptContext {
         &self.context
@@ -376,6 +392,7 @@ impl VerifiedAurReceipt {
             .collect()
     }
 }
+#[cfg(test)]
 struct ReceiptFds<'a> {
     receipt: BorrowedFd<'a>,
     receipt_signature: BorrowedFd<'a>,
@@ -383,6 +400,7 @@ struct ReceiptFds<'a> {
     manifest_signature: BorrowedFd<'a>,
     packages: &'a [(BorrowedFd<'a>, BorrowedFd<'a>)],
 }
+#[cfg(test)]
 #[cfg(test)]
 fn verify_aur_receipt(
     context: &ReceiptContext,
@@ -414,6 +432,7 @@ fn verify_aur_receipt(
     })
 }
 
+#[cfg(test)]
 fn verify_aur_receipt_with_native(
     context: &ReceiptContext,
     inputs: ReceiptFds<'_>,
@@ -489,7 +508,7 @@ fn verify_aur_receipt_with_native(
             package_name: p.name.clone(),
             current_version: String::new(),
             new_version: p.version.clone(),
-            repository: "aur-attested".into(),
+            repository: "aur-local".into(),
             download_size: sealed_size(*archive, 1024 * 1024 * 1024)?,
             filename: p.filename.clone(),
             sha256: p.sha256.clone(),
@@ -524,12 +543,14 @@ fn verify_aur_receipt_with_native(
     })
 }
 
+#[cfg(test)]
 fn receipt_unix_now() -> Result<u64, String> {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|v| v.as_secs())
         .map_err(|e| e.to_string())
 }
+#[cfg(test)]
 fn verify_receipt_signature_delivery(
     plan: &CanonicalPlan,
     signatures: &[(String, String)],
@@ -548,6 +569,7 @@ fn verify_receipt_signature_delivery(
     Ok(())
 }
 
+#[cfg(test)]
 async fn reserve_reviewed_aur_message(
     connection: &zbus::Connection,
     header: &zbus::message::Header<'_>,
@@ -567,6 +589,7 @@ async fn reserve_reviewed_aur_message(
     )
 }
 
+#[cfg(test)]
 fn aur_trust_readiness() -> HashMap<String, String> {
     let mut report = HashMap::new();
     report.insert("installation".into(), "closed".into());
@@ -604,6 +627,7 @@ fn aur_trust_readiness() -> HashMap<String, String> {
     report
 }
 
+#[cfg(test)]
 fn aur_selection_review(
     names: &[String],
     versions: &[String],
@@ -635,6 +659,7 @@ fn aur_selection_review(
     report.insert("reason".into(), reason);
     Ok(report)
 }
+#[cfg(test)]
 fn load_approved_aur_review(digest: &str) -> Result<ReviewedBuild, String> {
     if !receipt_digest(digest) {
         return Err("approved source review SHA256 required".into());

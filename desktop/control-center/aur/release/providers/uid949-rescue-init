@@ -1,4 +1,4 @@
 #!/bin/sh
-# Only for a separately selected, trusted rescue boot with /usr, /var and /proc
-# already mounted. Never enable as a service or alter boot configuration here.
-exec /usr/bin/python3 -I -S -B /usr/lib/zethropol/aur-agent-lifecycle-949/releases/home-route-v2-20261103/agent_lifecycle_949.py rescue-init
+# Retired compatibility path for an already-created external boot entry.
+# No UID949, signing, activation or quarantine operation is performed.
+exec /usr/lib/systemd/systemd

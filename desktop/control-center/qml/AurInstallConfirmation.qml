@@ -27,7 +27,7 @@ Dialog {
         spacing: 12
 
         Label {
-            text: "AUR packages are built in an isolated sandbox and verified by an independent attestor. Installation is gated by the broker and requires separate confirmation."
+            text: "AUR packages are built without root in an isolated sandbox and checked by libalpm against the reviewed recipe and exact package hashes. Installation is gated by the broker and requires separate confirmation."
             wrapMode: Text.WordWrap
             Layout.fillWidth: true
         }

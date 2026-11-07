@@ -14,15 +14,17 @@ impl BrokerStore {
             return Err(BrokerError::AuthorizationDenied);
         }
         self.with_lock(|| {
-            let path = self.operation_path(operation_id)?;
+            let operation_path = self.operation_path(operation_id)?;
+            let path = if operation_path.exists() { operation_path } else { self.preview_path(&authorization.identity) };
             let mut record = self.read_record(&path)?;
+            if record.operation_id != operation_id { return Err(BrokerError::InvalidPlan); }
             ensure_owner(&record, &authorization.identity)?;
             if record.plan.packages().is_empty()
                 || !record
                     .plan
                     .packages()
                     .iter()
-                    .all(|p| p.repository == "aur-attested")
+                    .all(|p| matches!(p.repository.as_str(),"aur-local"|"aur-build-reservation"))
             {
                 return Err(BrokerError::InvalidPlan);
             }
@@ -31,7 +33,7 @@ impl BrokerStore {
             }
             if !matches!(
                 record.status,
-                OperationStatus::Queued | OperationStatus::Running
+                OperationStatus::Previewed | OperationStatus::Queued | OperationStatus::Running
             ) || record.evidence.package_commit != CommitState::NotStarted
             {
                 return Err(BrokerError::InvalidTransition);
@@ -69,7 +71,7 @@ impl BrokerStore {
                     .plan
                     .packages()
                     .iter()
-                    .all(|p| p.repository == "aur-attested")
+                    .all(|p| p.repository == "aur-local")
             {
                 return Err(BrokerError::PlanChanged);
             }
@@ -104,7 +106,7 @@ impl BrokerStore {
                     .plan
                     .packages()
                     .iter()
-                    .all(|p| p.repository == "aur-attested")
+                    .all(|p| p.repository == "aur-local")
             {
                 return Err(BrokerError::InvalidPlan);
             }
@@ -133,7 +135,7 @@ impl BrokerStore {
                 || plan
                     .packages()
                     .iter()
-                    .any(|p| p.repository != "aur-attested")
+                    .any(|p| p.repository != "aur-local")
             {
                 return Err(BrokerError::InvalidTransition);
             }
@@ -163,7 +165,7 @@ impl BrokerStore {
                 || plan
                     .packages()
                     .iter()
-                    .any(|p| p.repository != "aur-attested")
+                    .any(|p| p.repository != "aur-local")
                 || record.evidence.package_commit != CommitState::NotStarted
                 || !matches!(
                     record.status,
@@ -185,7 +187,9 @@ impl BrokerStore {
 
 // Receipt reservations and durable admission reuse this store's owner checks,
 // lock and original preview record. Companion tombstones are never auto-retried.
-use crate::update_service::{ReceiptContext, ReviewedBuild, VerifiedAurReceipt};
+use crate::update_service::{ReceiptContext, ReviewedBuild};
+#[cfg(test)]
+use crate::update_service::VerifiedAurReceipt;
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct AurReceiptBinding {
@@ -199,6 +203,7 @@ pub(crate) struct AurReceiptBinding {
     pub(crate) signatures: Vec<(String, String)>,
     review: ReviewedBuild,
 }
+#[cfg(test)]
 impl AurReceiptBinding {
     pub(crate) fn native_deadline(&self) -> u64 {
         self.deadline
@@ -282,6 +287,7 @@ impl BrokerStore {
             })
         })
     }
+    #[cfg(test)]
     pub(crate) fn admit_aur_receipt(
         &self,
         authorization: AuthorizedCaller,
@@ -344,6 +350,7 @@ impl BrokerStore {
             Ok(record.plan)
         })
     }
+    #[cfg(test)]
     fn read_aur_binding(
         &self,
         id: &str,
@@ -383,7 +390,7 @@ impl BrokerStore {
             || now >= binding.deadline
             || plan.packages().is_empty()
             || plan.packages().iter().any(|p| {
-                p.repository != "aur-attested"
+                p.repository != "aur-local"
                     || p.repository_metadata_sha256 != binding.receipt_sha256
             })
             || binding.signatures.len() != plan.packages().len()
@@ -392,6 +399,7 @@ impl BrokerStore {
         }
         Ok(binding)
     }
+    #[cfg(test)]
     pub(crate) fn consume_aur_receipt_preview(
         &self,
         authorization: AuthorizedCaller,
@@ -411,6 +419,7 @@ impl BrokerStore {
         })?;
         self.consume_aur_approved_preview(authorization, now, hash)
     }
+    #[cfg(test)]
     pub(crate) fn aur_receipt_binding(
         &self,
         operation: &str,
@@ -506,5 +515,15 @@ impl BrokerStore {
             }
         }
         Ok(())
+    }
+}
+
+impl BrokerStore {
+    pub(crate) fn admit_normal_aur_build(&self,authorization:AuthorizedCaller,context:&ReceiptContext,plan:&CanonicalPlan,now:u64)->Result<(),BrokerError>{
+        if authorization.action!=PolicyAction::Preview||authorization.decided_at>now||now.saturating_sub(authorization.decided_at)>AUTHORIZATION_MAX_AGE_SECS{return Err(BrokerError::AuthorizationDenied);}
+        self.with_lock(||{let path=self.preview_path(&authorization.identity);let mut r=self.read_record(&path)?;ensure_owner(&r,&authorization.identity)?;
+            if r.operation_id!=context.operation_id||r.status!=OperationStatus::Previewed||now>=r.expires_at||r.plan.policy_fingerprint()!=context.review.digest()||plan.packages().len()!=context.review.outputs.len()||!plan.removals().is_empty()||plan.packages().iter().any(|p|p.repository!="aur-local"||p.repository_metadata_sha256!=context.review.digest()){return Err(BrokerError::InvalidPlan);}
+            r.plan=plan.clone();r.message="Native AUR plan verified; exact package confirmation and PolicyKit install authorization required.".into();self.write_record(&path,&r)
+        })
     }
 }

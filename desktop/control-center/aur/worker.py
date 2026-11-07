@@ -199,6 +199,8 @@ class Worker:
         pass
 
     def run(self, plan, approved_hash, recipe, rootfs, cancel=lambda: False, timeout=1800, operation_id=None):
+        if plan.get('kind') == 'normal-makepkg':
+            return self.run_normal(plan, approved_hash, recipe, cancel, timeout, operation_id)
         operation = operation_id or str(uuid.uuid4())
         if str(uuid.UUID(operation)) != operation:
             raise Rejected("Invalid operation ID")
@@ -326,6 +328,80 @@ class Worker:
                     os.close(dirfd)
             finally:
                 self.release_workspace()
+        return result
+
+    def run_normal(self, plan, approved_hash, recipe, cancel, timeout, operation_id):
+        """Reuse quota/scopes/journal with the host's read-only makepkg tools."""
+        import tarfile
+        operation = operation_id or str(uuid.uuid4())
+        if str(uuid.UUID(operation)) != operation or os.getuid() == 0 or os.geteuid() == 0:
+            raise Rejected('Canonical operation and non-root desktop user required')
+        encoded = json.dumps(plan, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()
+        if digest(encoded) != approved_hash: raise Rejected('Reviewed build plan changed')
+        review = plan['review']
+        if not re.fullmatch('[0-9a-f]{40}', review['commit']): raise Rejected('Pinned Git commit required')
+        logdir = self.store / operation; logdir.mkdir(mode=0o700)
+        (logdir/'worker.log').touch(mode=0o600)
+        result = {'operation':operation,'source':'aur','state':'failed','plan_sha256':approved_hash,'archives':[]}
+        proc = None
+        try:
+            work = self.create_workspace(logdir)
+            proc = subprocess.Popen(['/usr/bin/git','-c','core.hooksPath=/dev/null','-c','core.attributesFile=/dev/null','-C',str(recipe),'archive','--format=tar',review['commit']],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,env={'PATH':'/usr/bin','LC_ALL':'C','GIT_CONFIG_NOSYSTEM':'1','GIT_CONFIG_GLOBAL':'/dev/null','GIT_CONFIG_SYSTEM':'/dev/null'})
+            total = 0
+            with tarfile.open(fileobj=proc.stdout,mode='r|') as archive:
+                for member in archive:
+                    if cancel(): raise Rejected('Cancelled')
+                    path = Path(member.name)
+                    if path.is_absolute() or '..' in path.parts or not (member.isdir() or member.isfile()): raise Rejected('Unsafe Git recipe entry')
+                    total += member.size
+                    if total > 64*1024**2: raise Rejected('Recipe quota exceeded')
+                    target = work/path
+                    if member.isdir(): target.mkdir(mode=0o700,parents=True,exist_ok=True)
+                    else:
+                        target.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
+                        with open(target,'xb') as output: output.write(archive.extractfile(member).read())
+                        target.chmod(0o600)
+            if proc.wait(timeout=15): raise Rejected('Pinned Git recipe extraction failed')
+            for name,key in [('PKGBUILD','pkgbuild_sha256'),('.SRCINFO','srcinfo_sha256')]:
+                if digest(regular(work/name,1024**2)) != review[key]: raise Rejected('Reviewed recipe bytes changed')
+            for name in ('out','sources','build'): (work/name).mkdir(mode=0o700)
+            workfd = self.open_workspace(work)
+            try:
+                self._sandbox_fds = (workfd,)
+                def command(argv, network=False):
+                    args = ['/usr/bin/bwrap','--die-with-parent','--new-session','--unshare-all','--unshare-user','--disable-userns','--assert-userns-disabled','--cap-drop','ALL','--uid',str(os.getuid()),'--gid',str(os.getgid()),'--ro-bind','/usr','/usr','--symlink','usr/bin','/bin','--symlink','usr/bin','/sbin','--symlink','usr/lib','/lib','--symlink','usr/lib','/lib64','--ro-bind','/etc','/etc','--ro-bind','/var/lib/pacman','/var/lib/pacman','--proc','/proc','--dev','/dev','--size','268435456','--tmpfs','/tmp','--dir','/home','--bind-fd',str(workfd),'/build','--remount-ro','/','--chdir','/build','--clearenv','--setenv','PATH','/usr/bin','--setenv','HOME','/tmp','--setenv','LC_ALL','C','--setenv','GNUPGHOME','/tmp/gnupg','--setenv','PKGDEST','/build/out','--setenv','SRCDEST','/build/sources','--setenv','BUILDDIR','/build/build']
+                    if network:
+                        args += ['--share-net']
+                        resolver = os.path.realpath('/etc/resolv.conf')
+                        if resolver != '/etc/resolv.conf': args += ['--ro-bind',resolver,resolver]
+                    return args + ['--',*argv]
+                dependencies = review.get('dependencies',[])
+                steps = []
+                if dependencies: steps.append(('dependencies',['/usr/bin/pacman','-T','--',*dependencies],False))
+                steps += [('verifying-sources',['/usr/bin/makepkg','--noconfirm','--holdver','--verifysource'],True),('building',['/usr/bin/makepkg','--noconfirm','--holdver','--cleanbuild'],False)]
+                for stage,argv,network in steps:
+                    if cancel(): raise Rejected('Cancelled')
+                    self.report(stage); self.execute(command(argv,network),logdir,cancel,timeout)
+                from sealed import Blob
+                for path in sorted((work/'out').iterdir()):
+                    if not re.fullmatch(r'[A-Za-z0-9@._+:-]+\.pkg\.tar(?:\.[A-Za-z0-9]+)?',path.name): raise Rejected('Unexpected makepkg output')
+                    fd = os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+                    try:
+                        with Blob(fd) as blob: result['archives'].append(self.archive_result(blob,path.name,work,logdir))
+                    finally: os.close(fd)
+            finally:
+                self._sandbox_fds = (); os.close(workfd)
+            if not result['archives']: raise Rejected('makepkg produced no package')
+            result.update(state='built-untrusted',reason='Build complete; native package/plan verification and explicit PolicyKit install approval remain required')
+        except (OSError,ValueError,KeyError,Rejected,subprocess.SubprocessError,tarfile.TarError) as error:
+            result.update(state='cancelled' if str(error)=='Cancelled' else 'failed',reason=str(error))
+        finally:
+            if proc is not None:
+                if proc.poll() is None: proc.kill()
+                proc.wait(); proc.stdout.close()
+            try: self.release_workspace()
+            except Exception as error: result.update(state='interrupted',reason='Quota cleanup failed: '+str(error),archives=[])
+            (logdir/'result.json').write_bytes(canonical(result))
         return result
 
     def execute(self, args, logdir, cancel, timeout):

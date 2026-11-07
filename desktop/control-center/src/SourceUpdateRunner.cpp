@@ -52,14 +52,14 @@ void SourceUpdateRunner::next(){
         const QByteArray request=m_current.value("buildRequestJson").toByteArray();
         if(!desktopUser()||request.isEmpty()||request.size()>1024*1024){finishEntry("blocked","Private reviewed build request and desktop user required");return;}
         m_execution=QUuid::createUuid().toString(QUuid::WithoutBraces);m_journalOperation.clear();m_buildBuffer.clear();m_buildResult.clear();m_buildProtocolFailed=false;m_localCancelRequested=false;
-        m_step="aur-build";emit localBuildState({{"execution",m_execution},{"stage","starting"}});emit progress("[AUR] Building in the existing signed-root sandbox; no installation consent");
+        m_step="aur-build";emit localBuildState({{"execution",m_execution},{"stage","starting"}});emit progress("[AUR] Building with makepkg in the existing non-root sandbox; no installation consent");
         m_timeout.start(1800000);
 #ifdef ZETHROPOL_AUR_PIPELINE
         const auto object=QJsonDocument::fromJson(request).object();
         m_process.start("/usr/bin/python3",{"-B",QStringLiteral(ZETHROPOL_AUR_PIPELINE),"--managed"});
         m_process.write(QJsonDocument(QJsonObject{{"execution",m_execution},{"request",object}}).toJson(QJsonDocument::Compact)+'\n');
 #else
-        finishEntry("blocked","Signed-root build pipeline is not packaged");
+        finishEntry("blocked","Managed makepkg pipeline is not packaged");
 #endif
         return;
     }

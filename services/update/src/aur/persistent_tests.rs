@@ -6,7 +6,7 @@ fn plan() -> CanonicalPlan {
         package_name: "durable-fixture".into(),
         current_version: "1-1".into(),
         new_version: "2-1".into(),
-        repository: "aur-attested".into(),
+        repository: "aur-local".into(),
         download_size: 1,
         filename: "durable.pkg.tar".into(),
         sha256: "a".repeat(64),

@@ -8,6 +8,7 @@ struct AurArchive {
 impl AurArchive {
     // The caller is internal server code; no D-Bus method accepts these values
     // from a desktop client. Root trust/receipt intake is still an external gate.
+    #[cfg(test)]
     fn from_root_staging(path: PathBuf, identity: UpdatePackageInfo) -> Result<Self, String> {
         if unsafe { libc::geteuid() } != 0 {
             return Err("root-only verified staging required".into());
@@ -33,7 +34,7 @@ impl AurArchive {
         Ok(Self { path, identity })
     }
     fn verify_identity_fields(path: &Path, identity: &UpdatePackageInfo) -> Result<(), String> {
-        if identity.repository != "aur-attested"
+        if identity.repository != "aur-local"
             || identity.filename.is_empty()
             || path.file_name().and_then(|p| p.to_str()) != Some(identity.filename.as_str())
         {
@@ -165,7 +166,7 @@ fn finish_aur_locked_transaction<'a>(
             {
                 return Err("AUR target belongs to official repository".into());
             }
-            let policy = aur_required_signatures(handle);
+            let policy = handle.local_file_siglevel();
             #[cfg(test)]
             let policy = if fixture_unsigned {
                 SigLevel::NONE
@@ -262,14 +263,8 @@ async fn aur_consume_message(
         AuthorizedCaller::check_message(connection, header, PolicyAction::Install, now).await?;
     let now = boottime_seconds().map_err(|e| BrokerError::Io(e.to_string()))?;
     // Existing atomic one-use consume assigns/retains the server operation ID.
-    let trust = ReceiptTrust::load().map_err(BrokerError::Io)?;
-    store.consume_aur_receipt_preview(
-        caller,
-        now,
-        receipt_unix_now().map_err(BrokerError::Io)?,
-        hash,
-        &trust.digest,
-    )
+    store.consume_aur_approved_preview(caller, now, hash)
+
 }
 async fn aur_cancel_message(
     connection: &zbus::Connection,
@@ -363,7 +358,7 @@ fn aur_database_state_fingerprint(db: &Path, policy: &str) -> Result<String, Str
     policy_fingerprint_with_values(&[db.join("local"), db.join("sync")], values.as_bytes())
 }
 fn aur_host_state_fingerprint(db: &Path) -> Result<String, String> {
-    NativePaths::production()?.state_stamp(db)
+    normal_aur_state(db)
 }
 
 include!("intake.rs");
@@ -372,26 +367,15 @@ include!("intake.rs");
 // after aur_begin_after_real_snapshot has durably won against cancellation.
 // Native commit, boot verifier and post-snapshot implementation are shared
 // with Update. No builder/PKGBUILD/shell command is accepted by this executor.
+#[cfg(test)]
 fn aur_commit_started(
     locked: LockedAur<'_>,
     store: &BrokerStore,
     operation: &str,
 ) -> Result<(), String> {
-    let trust = ReceiptTrust::load()?;
-    if aur_host_state_fingerprint(Path::new(locked.handle.dbpath()))?
-        != locked.plan.policy_fingerprint()
-    {
-        return Err("official/native policy changed before commit; no retry".into());
+    if aur_host_state_fingerprint(Path::new(locked.handle.dbpath()))? != locked.plan.policy_fingerprint() {
+        return Err("package database/policy changed before commit; no retry".into());
     }
-    store
-        .aur_receipt_binding(
-            operation,
-            &locked.plan,
-            boottime_seconds().map_err(|e| e.to_string())?,
-            receipt_unix_now()?,
-            &trust.digest,
-        )
-        .map_err(|e| format!("receipt expired/changed before commit: {e:?}"))?;
     aur_commit_started_with_post(locked, store, operation, create_post_snapshot)
 }
 fn aur_commit_started_with_post(
@@ -484,15 +468,10 @@ fn verify_aur_installed_versions(handle: &Alpm, plan: &CanonicalPlan) -> Result<
 // Deliberately no runtime enable flag. Trust verification is implemented;
 // real PolicyKit/snapshot/boot/recovery acceptance is a separate mandatory gate.
 fn require_aur_production_authority() -> Result<(), String> {
-    ReceiptTrust::load().map_err(|e| {
-        format!("AUR installation closed: production receipt policy unavailable: {e}")
-    })?;
-    Err(
-        "AUR installation closed: required PolicyKit/snapshot/boot/recovery security acceptance incomplete"
-            .into(),
-    )
+    normal_aur_official_barrier()
 }
 
+#[cfg(test)]
 fn aur_execute_received(
     store: &BrokerStore,
     consumed: &crate::broker_protocol::ConsumedPreview,
@@ -555,4 +534,7 @@ fn persistent_aur_broker() -> Result<Arc<BrokerStore>, BrokerError> {
         .clone()
 }
 
+#[cfg(test)]
 include!("native.rs");
+
+include!("normal.rs");

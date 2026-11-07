@@ -53,6 +53,7 @@ fn copy_sealed(fd: BorrowedFd<'_>, destination: &Path, size: u64) -> Result<(), 
     }
     output.sync_all().map_err(|e| e.to_string())
 }
+#[cfg(test)]
 fn aur_required_signatures(handle: &Alpm) -> SigLevel {
     let mut policy = handle.local_file_siglevel() | SigLevel::PACKAGE;
     policy.remove(
@@ -64,6 +65,7 @@ fn aur_required_signatures(handle: &Alpm) -> SigLevel {
     policy
 }
 
+#[cfg(test)]
 fn receive_aur_bytes(
     parent: &Path,
     approved: &CanonicalPlan,
@@ -76,7 +78,7 @@ fn receive_aur_bytes(
         || approved
             .packages()
             .iter()
-            .any(|p| p.repository != "aur-attested")
+            .any(|p| p.repository != "aur-local")
     {
         return Err("exact server-approved AUR archive set required".into());
     }
@@ -138,6 +140,7 @@ fn receive_aur_bytes(
     Ok(intake)
 }
 
+#[cfg(test)]
 fn receive_aur_fds(
     parent: &Path,
     approved: &CanonicalPlan,

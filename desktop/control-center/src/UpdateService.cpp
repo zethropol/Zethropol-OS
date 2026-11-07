@@ -9,6 +9,7 @@
 #include <QJsonDocument>
 #include <QCryptographicHash>
 #include <QFile>
+#include <QDir>
 #include <QJsonObject>
 #include <QJsonArray>
 #include <fcntl.h>
@@ -94,13 +95,22 @@ UpdateService::UpdateService(QObject *parent, bool runInitialCheck)
         if(m_aurRequestSelection!=selectionKey()){
             m_previewing=false;setSourceState("aur","blocked","Selection changed during broker reservation; review again. No installation was requested.");m_updateClient.releaseAurBuild(m_aurOperationId);emit stateChanged();return;
         }
-        auto row=m_sourceResults.value("aur").toMap();row["context"]=context;
-        row["detail"]="Reserved broker context (not installation authority): "+QString::fromUtf8(QJsonDocument::fromVariant(context).toJson(QJsonDocument::Compact)).left(8192);
-        m_sourceResults["aur"]=row;m_aurProvisioningPending=true;emit stateChanged();
-        m_updateClient.requestAurProvisioning(m_aurOperationId);
+        const auto reviewed=QJsonDocument::fromJson(context.value("review").toString().toUtf8()).object();
+        const auto raw=QJsonDocument::fromVariant(m_normalAurReview).toJson(QJsonDocument::Compact);
+        if(reviewed.value("source_plan_sha256").toString()!=QString::fromLatin1(QCryptographicHash::hash(raw,QCryptographicHash::Sha256).toHex())){
+            m_previewing=false;setSourceState("aur","blocked","Broker review differs from the selected pinned recipe");emit stateChanged();return;
+        }
+        const QJsonObject plan{{"kind","normal-makepkg"},{"review",QJsonObject::fromVariantMap(m_normalAurReview)}};
+        const auto bytes=QJsonDocument(plan).toJson(QJsonDocument::Compact);
+        const auto store=QStandardPaths::writableLocation(QStandardPaths::CacheLocation)+"/aur-build";
+        if(!QDir().mkpath(store)||::chmod(QFile::encodeName(store).constData(),0700)){
+            m_previewing=false;setSourceState("aur","blocked","Cannot create private build store");emit stateChanged();return;
+        }
+        const QJsonObject request{{"store",store},{"recipe",m_normalAurReview.value("recipePath").toString()},{"plan",plan},{"plan_sha256",QString::fromLatin1(QCryptographicHash::hash(bytes,QCryptographicHash::Sha256).toHex())}};
+        startProvisionedBuild(QJsonDocument(request).toJson(QJsonDocument::Compact));
     });
     connect(&m_updateClient,&ZethropolUpdateClient::aurReservationCreated,this,[this](const QString &id){
-        m_aurOperationId=id;setSourceState("aur","reserved","Broker reservation: "+id+". Independent receipt attestation is required; no install consent was granted.");emit stateChanged();
+        m_aurOperationId=id;setSourceState("aur","reserved","Broker reservation: "+id+". A pinned recipe will be built without root; no install consent was granted.");emit stateChanged();
     });
     connect(&m_updateClient,&ZethropolUpdateClient::aurReceiptPreviewFinished,this,[this](bool success,const QString &id,const QVariantList &packages,const QString &hash,const QString &error){
         if(!m_aurBundlePending)return;
@@ -113,7 +123,7 @@ UpdateService::UpdateService(QObject *parent, bool runInitialCheck)
         success=success&&m_aurRequestSelection==selectionKey()&&!selected.isEmpty()&&selected==observed&&packages.size()==selected.size();
         if(success){m_aurReceiptHash=hash;m_aurReceiptSelection=selectionKey();m_aurReceiptClock.start();}
         else m_updateClient.discardAurPreview();
-        const QString detail=success?"Verified receipt/native plan "+hash+" for operation "+id+". Installation requires separate confirmation and all broker authorization checks.":(error.isEmpty()?"Receipt output differs from the selected AUR package/version set":error);
+        const QString detail=success?"Verified makepkg/native plan "+hash+" for operation "+id+". Installation requires separate confirmation and all broker authorization checks.":(error.isEmpty()?"Package output differs from the selected AUR package/version set":error);
         if(success)m_aurOperationId=id;
         m_transactionPreview=detail+"\n"+QString::fromUtf8(QJsonDocument::fromVariant(packages).toJson(QJsonDocument::Indented));
         m_transactionPreviewReceived=true;setSourceState("aur",success?"preview-verified-awaiting-consent":"blocked",detail);emit stateChanged();
@@ -150,19 +160,19 @@ UpdateService::UpdateService(QObject *parent, bool runInitialCheck)
     connect(&m_updateClient,&ZethropolUpdateClient::aurBuildSubmitted,this,[this](const QString &id){
         if(id!=m_aurOperationId)return;
         m_previewing=false;m_aurAttestationPending=true;
-        setSourceState("aur","awaiting-attestation","Untrusted build delivered for independent attestation; no installation authorized.");emit stateChanged();
+        setSourceState("aur","awaiting-native-preview","Unprivileged build complete; native plan preview pending; no installation authorized.");emit stateChanged();
         refreshAurAttestation();
     });
     connect(&m_updateClient,&ZethropolUpdateClient::aurAttestationUnavailable,this,[this](const QString &id,const QString &reason){
         if(id!=m_aurOperationId)return;
         m_previewing=false;m_aurBundlePending=false;
-        setSourceState("aur","awaiting-attestation",reason+" No installation authorized.");emit stateChanged();
+        setSourceState("aur","awaiting-native-preview",reason+" No installation authorized.");emit stateChanged();
     });
     connect(&m_updateClient,&ZethropolUpdateClient::aurReservationReleased,this,[this](const QString &id,bool success,const QString &reason){
         if(id!=m_aurOperationId)return;
         m_previewing=false;m_aurAttestationPending=false;
         auto row=m_sourceResults.value("aur").toMap();row["reservationReleased"]=success;
-        if(success&&QStringList{"awaiting-attestation","reserving"}.contains(row.value("state").toString()))row["state"]="cancelled";
+        if(success&&QStringList{"awaiting-native-preview","reserving"}.contains(row.value("state").toString()))row["state"]="cancelled";
         row["detail"]=row.value("detail").toString()+(success?" Broker reservation retired; no replay.":" Reservation release unconfirmed: "+reason);
         m_sourceResults["aur"]=row;emit stateChanged();
     });
@@ -679,7 +689,7 @@ void UpdateService::install()
     }
     if(!applicableSources()){
         m_status="No selected source can be applied.";
-        m_output="The AUR review is informational until signed inputs and broker security requirements pass. No update request was sent.";
+        m_output="The AUR review is informational until the reviewed build and native broker plan pass. No update request was sent.";
         setSourceState("aur","blocked",m_output);emit stateChanged();emit operationError("Selected sources are blocked",m_output);return;
     }
     if(officialTransactionRequired()&&(m_planHash.isEmpty()||(removalApprovalRequired()&&m_approvedRemovalHash!=m_planHash))){
@@ -1149,7 +1159,7 @@ void UpdateService::finishSourceBatch(const QVariantList &results){
         row["detail"]=result.value("reason");m_sourceResults["aur"]=row;
         m_localAurExecution.clear();m_installing=state=="unknown";m_batchStatus=state;m_batchActive=false;
         if(state=="built-untrusted"&&build.value("cleanup")=="verified"){
-            m_aurAttestationPending=true;m_previewing=true;
+            m_aurAttestationPending=false;m_aurBundlePending=true;m_previewing=true;
             m_updateClient.submitAurBuild(m_aurOperationId,build.value("archives").toList());
         }else if(!m_aurOperationId.isEmpty()){
             m_previewing=true;m_updateClient.releaseAurBuild(m_aurOperationId);
@@ -1175,7 +1185,7 @@ bool UpdateService::applicableSources() const {
 }
 void UpdateService::finishAurBrokerReview(bool success,const QVariantMap &report){
     m_aurBrokerReview=success?report:QVariantMap{};m_aurBrokerReviewDone=true;
-    setSourceState("aur","blocked",report.value("reason","AUR broker did not provide a verified receipt-backed plan").toString());
+    setSourceState("aur",report.value("state","blocked").toString(),report.value("reason","AUR broker review unavailable").toString());
     finalizeReview();emit stateChanged();
 }
 void UpdateService::inspectAurOperation(const QString &id){
@@ -1217,10 +1227,10 @@ void UpdateService::finishAurOperation(const QString &id,const QVariantMap &stat
 }
 
 void UpdateService::reserveAurBuild(const QString &digest){
-    Q_UNUSED(digest);emit operationError("Manual AUR delivery disabled","Use the reviewed selection and authenticated provisioning flow.");
+    Q_UNUSED(digest);emit operationError("Manual AUR delivery disabled","Use the current pinned recipe review.");
 }
 void UpdateService::previewAurBundle(const QString &path){
-    Q_UNUSED(path);emit operationError("Manual AUR delivery disabled","Use independent attestor FD delivery.");
+    Q_UNUSED(path);emit operationError("Manual AUR delivery disabled","Use the reviewed makepkg build output.");
 }
 void UpdateService::startAurBuild(){
     if(m_installing||m_previewing||m_checking)return;
@@ -1228,55 +1238,43 @@ void UpdateService::startAurBuild(){
         ||!m_previewClock.isValid()||m_previewClock.elapsed()>=300000){
         emit operationError("Current AUR review required","Select one recipe and create a current Preview Plan.");return;
     }
-    m_aurAttestationPending=false;m_aurRequestSelection=selectionKey();invalidateReview();m_aurReservationPending=true;m_previewing=true;
-    setSourceState("aur","reserving","Requesting server-approved provisioning for the reviewed selection");emit stateChanged();
-    m_updateClient.prepareAurSelection(selectedRows(m_aurUpdates));
+    if(!m_aurBrokerReviewDone||m_aurBrokerReview.value("api_version")!="2"||m_aurBrokerReview.value("state")!="review-required"){
+        emit operationError("AUR build blocked",m_aurBrokerReview.value("reason","Current broker review required").toString());return;
+    }
+    m_normalAurReview.clear();const auto selected=selectedRows(m_aurUpdates).first().toMap();
+    for(const auto &v:m_reviewPlan){const auto row=v.toMap();if(row.value("source")=="aur"&&row.value("name")==selected.value("name"))m_normalAurReview=row;}
+    if(m_normalAurReview.value("recipeChecks")!="declarations-checked"||m_normalAurReview.value("state")!="reviewed"){
+        emit operationError("AUR recipe blocked",m_normalAurReview.value("reason","Review the pinned recipe first").toString());return;
+    }
+    m_aurRequestSelection=selectionKey();m_aurReservationPending=true;m_previewing=true;
+    setSourceState("aur","reserving","Reserving the reviewed recipe; no package installation authorized");emit stateChanged();
+    m_updateClient.prepareAurSelection({m_normalAurReview});
 }
 void UpdateService::refreshAurAttestation(){
     if(m_installing||m_previewing||m_checking||!m_aurAttestationPending)return;
     if(m_aurRequestSelection!=selectionKey()){
-        emit operationError("AUR selection changed","The attestation belongs to the original selection; create a new reviewed operation.");return;
+        emit operationError("AUR selection changed","The build belongs to the original selection; create a new reviewed operation.");return;
     }
     m_aurBundlePending=true;m_previewing=true;m_updateClient.fetchAurAttestation(m_aurOperationId);emit stateChanged();
 }
 void UpdateService::buildAurRequest(const QString &path){
-    Q_UNUSED(path);emit operationError("Manual AUR delivery disabled","Use authenticated provisioning for the current reviewed selection.");
+    Q_UNUSED(path);emit operationError("Manual AUR delivery disabled","Use the current pinned recipe selection.");
 }
 void UpdateService::startProvisionedBuild(const QByteArray &bytes){
-
-    if(m_installing||m_previewing)return;
-    const auto selected=selectedRows(m_aurUpdates);
-    if(selected.size()!=1){emit operationError("One reviewed AUR recipe required","Build one reviewed recipe at a time; receipt preview still verifies the full selected output set.");m_updateClient.releaseAurBuild(m_aurOperationId);return;}
-    if(m_aurRequestSelection!=selectionKey()||m_selectionAtReview!=selectionKey()
-        ||!m_previewClock.isValid()||m_previewClock.elapsed()>=300000){
-        emit operationError("Current AUR review required","Create a new Preview Plan for the current selection before building.");m_updateClient.releaseAurBuild(m_aurOperationId);return;
+    if(m_installing||m_aurRequestSelection!=selectionKey()||m_selectionAtReview!=selectionKey()||::geteuid()==0||bytes.isEmpty()||bytes.size()>1024*1024){
+        m_previewing=false;setSourceState("aur","blocked","Pinned build selection changed or desktop-user request invalid");emit stateChanged();return;
     }
-    if(::geteuid()==0){emit operationError("Desktop user required","AUR builds never run as root.");m_updateClient.releaseAurBuild(m_aurOperationId);return;}
-    if(bytes.isEmpty()||bytes.size()>1024*1024){
-        emit operationError("Provisioning delivery unavailable","Bounded authenticated build request required.");m_updateClient.releaseAurBuild(m_aurOperationId);return;
-    }
-    const auto request=QJsonDocument::fromJson(bytes).object();
-    const auto plan=request.value("plan").toObject();const auto identity=plan.value("identity").toObject();const auto recipe=plan.value("recipe").toObject();
-    QVariantMap reviewed;
-    for(const auto &value:m_reviewPlan){const auto row=value.toMap();if(row.value("source")=="aur"&&row.value("name")==selected[0].toMap().value("name"))reviewed=row;}
-    if(reviewed.value("newVersion")!=selected[0].toMap().value("newVersion")
-        ||recipe.value("PKGBUILD").toArray().size()!=3||recipe.value(".SRCINFO").toArray().size()!=3||reviewed.value("recipeChecks")!="declarations-checked"||identity.value("commit").toString()!=reviewed.value("commit").toString()
-        ||recipe.value("PKGBUILD").toArray().at(2).toString()!=reviewed.value("pkgbuild_sha256").toString()
-        ||recipe.value(".SRCINFO").toArray().at(2).toString()!=reviewed.value("srcinfo_sha256").toString()){
-        emit operationError("Reviewed source changed","Preview the pinned AUR recipe first; the build request must contain the same Git, PKGBUILD and .SRCINFO identities.");m_updateClient.releaseAurBuild(m_aurOperationId);return;
-    }
-    invalidateReview();m_installing=true;m_batchStatus="aur-build";
-    auto row=reviewed;row["state"]="build-ready";row["buildRequestJson"]=bytes;
-    setSourceState("aur","building","Unprivileged signed-root build only; independent attestation and broker receipt preview still required");emit stateChanged();m_sourceRunner.start({row});
+    QVariantMap row=m_normalAurReview;row["state"]="build-ready";row["buildRequestJson"]=bytes;
+    m_previewing=false;m_installing=true;m_batchStatus="aur-build";m_localAurExecution.clear();
+    setSourceState("aur","building","Non-root isolated makepkg build; native plan and PolicyKit approval are still required");emit stateChanged();m_sourceRunner.start({row});
 }
-
 void UpdateService::requestAurInstallConfirmation(){
     if(!aurInstallReady()){
-        emit operationError("AUR installation unavailable","The broker has not confirmed complete production security acceptance. Installation remains closed.");return;
+        emit operationError("AUR installation unavailable","A current native package plan is required before installation consent.");return;
     }
     if(m_installing||m_previewing||m_aurReceiptHash.isEmpty()||m_aurReceiptSelection!=selectionKey()
         ||!m_aurReceiptClock.isValid()||m_aurReceiptClock.elapsed()>=300000){
-        emit operationError("Current AUR receipt required","Preview a signed bundle for the current selection before requesting installation.");return;
+        emit operationError("Current AUR plan required","Preview the reviewed makepkg artifacts for the current selection before requesting installation.");return;
     }
     m_aurConsentPending=true;emit aurInstallConfirmationRequested(m_aurReceiptHash,m_transactionPreview);
 }
@@ -1285,19 +1283,16 @@ void UpdateService::confirmAurInstall(const QString &hash,bool approved){
     if(!approved)return;
     if(!aurInstallReady()||!requested||m_aurCancelPending||m_installing||m_previewing||hash.isEmpty()||hash!=m_aurReceiptHash||m_aurReceiptSelection!=selectionKey()
         ||!m_aurReceiptClock.isValid()||m_aurReceiptClock.elapsed()>=300000){
-        emit operationError("AUR consent expired","Selection or receipt preview changed; preview and confirm again.");return;
+        emit operationError("AUR consent expired","Selection or native preview changed; preview and confirm again.");return;
     }
     m_aurReceiptHash.clear();m_aurOwnsInstallFlag=true;m_installing=true;
     setSourceState("aur","authorizing","Explicit AUR request sent to the broker security gate; installation is not yet authorized.");emit stateChanged();
     m_updateClient.installPreparedAur(hash);
 }
 bool UpdateService::aurInstallReady() const {
-    // A verified receipt alone does not certify the production trust domain,
-    // PolicyKit or recovery acceptance. Unknown/old broker contracts stay shut.
-    return m_aurBrokerReviewDone
-        && m_aurBrokerReview.value("state").toString()=="ready"
-        && m_aurBrokerReview.value("installation").toString()=="ready"
-        && m_aurBrokerReview.value("system_acceptance").toString()=="complete";
+    return m_aurBrokerReviewDone&&m_aurBrokerReview.value("api_version")=="2"
+        &&!m_aurReceiptHash.isEmpty()&&m_aurReceiptSelection==selectionKey()
+        &&m_aurReceiptClock.isValid()&&m_aurReceiptClock.elapsed()<300000;
 }
 void UpdateService::requestAurCancellation(){
     if(m_batchStatus=="aur-build"&&m_installing){

@@ -262,7 +262,7 @@ void ZethropolUpdateClient::reviewAurSelection(const QVariantList &selection){
     auto *watcher=new QDBusPendingCallWatcher(QDBusConnection::systemBus().asyncCall(aurCall("ReviewAurSelection",{names,versions}),15000),this);
     connect(watcher,&QDBusPendingCallWatcher::finished,this,[this](QDBusPendingCallWatcher *done){
         const auto reply=done->reply();done->deleteLater();QVariantMap report;
-        const bool valid=aurMap(reply,&report)&&report.value("api_version")=="1"&&report.value("state")=="blocked";
+        const bool valid=aurMap(reply,&report)&&report.value("api_version")=="2"&&report.value("workflow")=="isolated-makepkg-alpm"&&QStringList{"blocked","review-required"}.contains(report.value("state").toString());
         if(!valid)report={{"state","blocked"},{"reason","AUR broker API unavailable or incompatible: "+dbusError(reply)},{"installation","closed"}};
         emit aurSelectionReviewed(valid,report);
     });
@@ -302,37 +302,28 @@ void ZethropolUpdateClient::previewAurReceipt(const QString &id,const QDBusUnixF
     const QDBusUnixFileDescriptor &receiptSignature,const QDBusUnixFileDescriptor &manifest,
     const QDBusUnixFileDescriptor &manifestSignature,const QList<QDBusUnixFileDescriptor> &archives,
     const QList<QDBusUnixFileDescriptor> &signatures){
-    discardAurPreview();
-    if(!aurId(id)||!receipt.isValid()||!receiptSignature.isValid()||!manifest.isValid()||!manifestSignature.isValid()||!aurPairs(archives,signatures)){
-        emit aurReceiptPreviewFinished(false,id,{}, {},"Valid sealed receipt/manifest/archive FD pairs are required");return;
-    }
-    qDBusRegisterMetaType<QList<QDBusUnixFileDescriptor>>();
-    QVariantList args{id,QVariant::fromValue(receipt),QVariant::fromValue(receiptSignature),QVariant::fromValue(manifest),QVariant::fromValue(manifestSignature),QVariant::fromValue(archives),QVariant::fromValue(signatures)};
-    auto *watcher=new QDBusPendingCallWatcher(QDBusConnection::systemBus().asyncCall(aurCall("PreviewAurReceipt",args),90000),this);
-    connect(watcher,&QDBusPendingCallWatcher::finished,this,[this,id,archives,signatures](QDBusPendingCallWatcher *done){
-        const auto reply=done->reply();done->deleteLater();QVariantList packages,removals;QString hash,error;
-        bool valid=reply.type()==QDBusMessage::ReplyMessage&&ZethropolUpdateWire::decodePlan(reply.arguments(),&packages,&removals,&hash,&error)&&removals.isEmpty()&&!packages.isEmpty();
-        for(const auto &value:packages)valid=valid&&value.toMap().value("repository")=="aur-attested";
-        if(valid){m_aurPreparedId=id;m_aurPreparedHash=hash;m_aurPreparedArchives=archives;m_aurPreparedSignatures=signatures;m_aurPreparedClock.start();}
-        emit aurReceiptPreviewFinished(valid,id,valid?packages:QVariantList{},valid?hash:QString{},valid?QString{}:(error.isEmpty()?dbusError(reply):error));
-    });
+    Q_UNUSED(receipt);Q_UNUSED(receiptSignature);Q_UNUSED(manifest);Q_UNUSED(manifestSignature);Q_UNUSED(archives);Q_UNUSED(signatures);
+    emit aurReceiptPreviewFinished(false,id,{},{},"Detached manifest/receipt delivery retired; use the reviewed makepkg output handoff");
 }
+
 void ZethropolUpdateClient::discardAurPreview(){
     m_aurPreparedId.clear();m_aurPreparedHash.clear();m_aurPreparedClock.invalidate();
     m_aurPreparedArchives.clear();m_aurPreparedSignatures.clear();
 }
 void ZethropolUpdateClient::installPreparedAur(const QString &hash){
     if(!m_aurPreparedClock.isValid()||m_aurPreparedClock.elapsed()>=300000){
-        discardAurPreview();emit aurRequestFailed({},"AUR receipt preview expired; preview again",false);return;
+        discardAurPreview();emit aurRequestFailed({},"AUR native preview expired; preview again",false);return;
     }
     const auto archives=m_aurPreparedArchives,signatures=m_aurPreparedSignatures;
     installAur(hash,archives,signatures);
 }
 void ZethropolUpdateClient::installAur(const QString &hash,const QList<QDBusUnixFileDescriptor> &archives,const QList<QDBusUnixFileDescriptor> &signatures){
-    if(!m_aurPreparedClock.isValid()||m_aurPreparedClock.elapsed()>=300000||!aurDigest(hash)||!aurPairs(archives,signatures)||hash!=m_aurPreparedHash||!aurId(m_aurPreparedId)){emit aurRequestFailed({},"A current verified receipt preview, matching plan hash and valid archive/signature FDs are required",false);return;}
-    const QString operation=m_aurPreparedId;discardAurPreview();
-    qDBusRegisterMetaType<QList<QDBusUnixFileDescriptor>>();
-    aurStringRequest("InstallAur",{hash,QVariant::fromValue(archives),QVariant::fromValue(signatures)},operation);
+    if(!signatures.isEmpty()||!m_aurPreparedClock.isValid()||m_aurPreparedClock.elapsed()>=300000||!aurDigest(hash)||archives.isEmpty()||archives.size()>64||hash!=m_aurPreparedHash||!aurId(m_aurPreparedId)){
+        emit aurRequestFailed({},"A current native plan and matching sealed package archives are required",false);return;
+    }
+    for(const auto &fd:archives)if(!fd.isValid()){emit aurRequestFailed({},"Invalid package descriptor",false);return;}
+    const QString operation=m_aurPreparedId;discardAurPreview();qDBusRegisterMetaType<QList<QDBusUnixFileDescriptor>>();
+    aurStringRequest("InstallAur",{hash,QVariant::fromValue(archives)},operation);
 }
 void ZethropolUpdateClient::checkAurOperationStatus(const QString &id){
     if(!aurId(id)){emit aurRequestFailed(id,"Valid AUR operation UUID required",false);return;}
@@ -352,7 +343,6 @@ void ZethropolUpdateClient::cancelAur(const QString &id){
 namespace {
 struct AurBundle {
     QString id,error;
-    QDBusUnixFileDescriptor receipt,receiptSig,manifest,manifestSig;
     QList<QDBusUnixFileDescriptor> archives,signatures;
 };
 QDBusUnixFileDescriptor sealAurFile(const QString &path,quint64 maximum,quint64 &total,QString &error){
@@ -377,22 +367,14 @@ QDBusUnixFileDescriptor sealAurFile(const QString &path,quint64 maximum,quint64 
 }
 void ZethropolUpdateClient::previewAurBundle(const QString &path){
     Q_UNUSED(path);
-    emit aurReceiptPreviewFinished(false,{}, {},{},"Manual bundles disabled; independent attestor FD delivery required");
+    emit aurReceiptPreviewFinished(false,{}, {},{},"Manual bundles retired; use the reviewed makepkg output");
 }
 
 void ZethropolUpdateClient::prepareAurSelection(const QVariantList &selection){
-    QStringList names,versions;
-    for(const auto &value:selection){const auto row=value.toMap();names<<row.value("name").toString();versions<<row.value("newVersion").toString();}
-    aurStringRequest("PrepareAurSelection",{names,versions},{});
+    if(selection.size()!=1){emit aurRequestFailed({},"One reviewed recipe is required",false);return;}
+    aurStringRequest("ReserveAurBuild",{QString::fromUtf8(QJsonDocument::fromVariant(selection[0]).toJson(QJsonDocument::Compact))},{});
 }
-void ZethropolUpdateClient::requestAurProvisioning(const QString &id){
-    auto *watcher=new QDBusPendingCallWatcher(QDBusConnection::systemBus().asyncCall(aurCall("GetAurProvisioning",{id}),90000),this);
-    connect(watcher,&QDBusPendingCallWatcher::finished,this,[this,id](QDBusPendingCallWatcher *done){
-        const auto reply=done->reply();done->deleteLater();QVariantMap delivery;
-        if(!aurMap(reply,&delivery)||delivery.value("operation_id")!=id){emit aurRequestFailed(id,"Provisioning delivery unavailable: "+dbusError(reply),false);return;}
-        emit aurProvisioningReceived(id,delivery);
-    });
-}
+void ZethropolUpdateClient::requestAurProvisioning(const QString &id){emit aurRequestFailed(id,"Signed-root provisioning retired; use the pinned recipe",false);}
 void ZethropolUpdateClient::submitAurBuild(const QString &id,const QVariantList &outputs){
     if(!aurId(id)||outputs.isEmpty()||outputs.size()>64){emit aurRequestFailed(id,"Invalid build output handoff",false);return;}
     auto bundle=QSharedPointer<AurBundle>::create();
@@ -408,32 +390,20 @@ void ZethropolUpdateClient::submitAurBuild(const QString &id,const QVariantList 
     connect(thread,&QThread::finished,this,[this,id,bundle]{
         if(!bundle->error.isEmpty()){emit aurRequestFailed(id,bundle->error,false);return;}
         qDBusRegisterMetaType<QList<QDBusUnixFileDescriptor>>();
-        auto *watcher=new QDBusPendingCallWatcher(QDBusConnection::systemBus().asyncCall(aurCall("SubmitAurBuild",{id,QVariant::fromValue(bundle->archives)}),90000),this);
+        auto *watcher=new QDBusPendingCallWatcher(QDBusConnection::systemBus().asyncCall(aurCall("PreviewAurReceipt",{id,QVariant::fromValue(bundle->archives)}),90000),this);
         connect(watcher,&QDBusPendingCallWatcher::finished,this,[this,id,bundle](QDBusPendingCallWatcher *done){
-            const auto reply=done->reply();done->deleteLater();
-            if(reply.type()!=QDBusMessage::ReplyMessage||!reply.signature().isEmpty()){
-                emit aurRequestFailed(id,"Independent attestor intake unconfirmed; no automatic resubmission: "+dbusError(reply),true);return;
-            }
-            emit aurBuildSubmitted(id);
+            const auto reply=done->reply();done->deleteLater();QVariantList packages,removals;QString hash,error;
+            bool valid=reply.type()==QDBusMessage::ReplyMessage&&ZethropolUpdateWire::decodePlan(reply.arguments(),&packages,&removals,&hash,&error)&&removals.isEmpty()&&!packages.isEmpty();
+            for(const auto &v:packages)valid=valid&&v.toMap().value("repository")=="aur-local";
+            if(valid){m_aurPreparedId=id;m_aurPreparedHash=hash;m_aurPreparedArchives=bundle->archives;m_aurPreparedSignatures.clear();m_aurPreparedClock.start();}
+            emit aurReceiptPreviewFinished(valid,id,valid?packages:QVariantList{},valid?hash:QString{},valid?QString{}:(error.isEmpty()?dbusError(reply):error));
         });
     });
     connect(thread,&QThread::finished,thread,&QObject::deleteLater);thread->start();
 }
-void ZethropolUpdateClient::fetchAurAttestation(const QString &id){
-    if(!aurId(id)){emit aurAttestationUnavailable(id,"Valid reservation required");return;}
-    qDBusRegisterMetaType<QList<QDBusUnixFileDescriptor>>();
-    auto *watcher=new QDBusPendingCallWatcher(QDBusConnection::systemBus().asyncCall(aurCall("GetAurAttestation",{id}),90000),this);
-    connect(watcher,&QDBusPendingCallWatcher::finished,this,[this,id](QDBusPendingCallWatcher *done){
-        const auto reply=done->reply();done->deleteLater();
-        if(reply.type()!=QDBusMessage::ReplyMessage||reply.signature()!="hhhhahah"||reply.arguments().size()!=6){emit aurAttestationUnavailable(id,"Independent signed delivery unavailable: "+dbusError(reply));return;}
-        const auto args=reply.arguments();
-        previewAurReceipt(id,qdbus_cast<QDBusUnixFileDescriptor>(args[0]),qdbus_cast<QDBusUnixFileDescriptor>(args[1]),
-            qdbus_cast<QDBusUnixFileDescriptor>(args[2]),qdbus_cast<QDBusUnixFileDescriptor>(args[3]),
-            qdbus_cast<QList<QDBusUnixFileDescriptor>>(args[4]),qdbus_cast<QList<QDBusUnixFileDescriptor>>(args[5]));
-    });
-}
+void ZethropolUpdateClient::fetchAurAttestation(const QString &id){emit aurAttestationUnavailable(id,"Independent project attestation retired; makepkg artifacts are previewed directly by libalpm");}
 void ZethropolUpdateClient::releaseAurBuild(const QString &id){
-    auto *watcher=new QDBusPendingCallWatcher(QDBusConnection::systemBus().asyncCall(aurCall("ReleaseAurBuild",{id}),15000),this);
+    auto *watcher=new QDBusPendingCallWatcher(QDBusConnection::systemBus().asyncCall(aurCall("CancelAur",{id}),15000),this);
     connect(watcher,&QDBusPendingCallWatcher::finished,this,[this,id](QDBusPendingCallWatcher *done){
         const auto reply=done->reply();done->deleteLater();
         const bool ok=reply.type()==QDBusMessage::ReplyMessage&&reply.signature().isEmpty();

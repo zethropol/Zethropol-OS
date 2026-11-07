@@ -1,7 +1,7 @@
-"""Unprivileged composition of existing signed-root, quota worker and journal.
+"""Managed non-root makepkg composition using the existing quota worker and journal.
 
-Emits built-untrusted/awaiting-attestation, NEVER an installation grant or a
-self-signed receipt. The broker independently authenticates the later FD handoff.
+Artifacts are sealed and previewed by the Update broker before separate PolicyKit
+installation consent. Project signing and activation are not part of this path.
 """
 from contextlib import ExitStack
 import json
@@ -14,96 +14,24 @@ import uuid
 
 from root_limits import root_limits
 from worker import Rejected, canonical, digest
-from trust import SignedArchive, TrustPolicy, approved_manifest
-from worker import tree, matches_root
 from quota import QuotaWorker
 from journal import Supervisor, Journal
-
-POLICY = '/etc/zethropol-update/aur-trust/policy.json'
-DISTRIBUTION_POLICY = '/etc/zethropol-update/aur-trust/distribution.json'
 HELPER = '/usr/lib/zethropol/aur-quota-mount'
 
 
 def run(request, cancel=lambda: False, notify=lambda event: None, require_metadata=False, timeout=1800):
-    if os.getuid() == 0 or os.geteuid() == 0:
-        raise Rejected('Build pipeline must run as the desktop user, never root')
-    if cancel(): raise Rejected('Cancelled')
-    if set(request) != {'store','recipe','plan','plan_sha256','manifest','manifest_signature','packages','build_root'}:
-        raise Rejected('Exact bounded build request required')
-    if not isinstance(request['packages'], list) or not 1 <= len(request['packages']) <= 256:
-        raise Rejected('Bounded signed root dependency closure required')
-    if digest(canonical(request['plan'])) != request['plan_sha256']:
-        raise Rejected('Reviewed source plan changed')
-    with ExitStack() as stack:
-        manifest_policy = TrustPolicy.load(POLICY, role='manifest')
-        stack.callback(manifest_policy.keyring.close)
-        distribution_policy = TrustPolicy.load(DISTRIBUTION_POLICY)
-        stack.callback(distribution_policy.keyring.close)
-        def signed(path, signature, policy, archive_limit=256*1024**2):
-            archive_fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-            try:
-                signature_fd = os.open(signature, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-                try:
-                    return stack.enter_context(SignedArchive(archive_fd, signature_fd, policy, archive_limit=archive_limit))
-                finally:
-                    os.close(signature_fd)
-            finally:
-                os.close(archive_fd)
-        manifest = signed(request['manifest'], request['manifest_signature'], manifest_policy)
-        root_plan, root_id = approved_manifest(manifest)
-        package_limit, archive_limit, _, _ = root_limits(root_plan['schema'])
-        if len(request['packages']) != len(root_plan['packages']) or len(request['packages']) > package_limit:
-            raise Rejected('Signed root package count mismatch')
-        packages = []
-        total_bytes = 0
-        for package in request['packages']:
-            if cancel(): raise Rejected('Cancelled')
-            if set(package) != {'archive','signature'}:
-                raise Rejected('Signed root archive/signature pairs required')
-            item = signed(package['archive'], package['signature'], distribution_policy,
-                          archive_limit=archive_limit-total_bytes)
-            total_bytes += item.archive.size
-            if total_bytes > archive_limit:
-                raise Rejected('Aggregate signed input quota exceeded')
-            packages.append(item)
-        store = Path(request['store'])
-        info = store.lstat()
-        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o700:
-            raise Rejected('Private caller-owned build store required')
-        supervisor = Supervisor(store)
-        stack.callback(supervisor.journal.close)
+    if os.getuid() == 0 or os.geteuid() == 0: raise Rejected('Build must never run as root')
+    if set(request) != {'store','recipe','plan','plan_sha256'} or request['plan'].get('kind') != 'normal-makepkg':
+        raise Rejected('Normal reviewed makepkg request required; signed-root provisioning retired')
+    raw=json.dumps(request['plan'],sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()
+    if digest(raw) != request['plan_sha256']: raise Rejected('Reviewed plan changed')
+    store=Path(request['store']);info=store.lstat()
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid!=os.getuid() or stat.S_IMODE(info.st_mode)!=0o700: raise Rejected('Private desktop build store required')
+    supervisor=Supervisor(store)
+    try:
         supervisor.journal.recover()
-        # Provisioning is the existing root-owned, bounded, script-free stage.
-        # Never replace Worker.tree(trusted=True) with a caller-owned extraction.
-        root_plan, root_id = approved_manifest(manifest)
-        root = Path(request['build_root'])
-        expected_root = Path('/var/lib/zethropol/aur-build-roots') / manifest.archive.sha256
-        if root != expected_root or root.resolve() != root:
-            raise Rejected('Server-provisioned immutable build root required')
-        root_tree = tree(root, trusted=True)
-        if not matches_root(request['plan'], root_tree):
-            raise Rejected('Provisioned build root differs from reviewed source plan')
-        provenance = json.loads((root/'.provenance.json').read_bytes())
-        expected_packages = [{'name':expected['name'], 'sha256':signed.archive.sha256,
-                              'signer':signed.signer}
-                             for expected,signed in zip(root_plan['packages'],packages)]
-        if len(packages) != len(root_plan['packages']) or any(
-                signed.archive.sha256 != expected['sha256']
-                for expected,signed in zip(root_plan['packages'],packages)):
-            raise Rejected('Signed distribution root closure mismatch')
-        if provenance != {'manifest_sha256':root_id, 'scope':'production-policy-only',
-                          'packages':expected_packages}:
-            raise Rejected('Root-owned provisioning provenance does not match signed inputs')
-        worker = QuotaWorker(store, Path(HELPER))
-        worker.root_schema=root_plan['schema']
-        worker.capture_metadata=require_metadata
-        result = supervisor.run(worker, request['plan'], request['plan_sha256'],
-                                request['recipe'], root, cancel=cancel, notify=notify, timeout=timeout)
-        if result['state'] == 'built-untrusted':
-            result['handoff'] = 'awaiting-independent-attestation'
-            result['build_root_sha256'] = manifest.archive.sha256
-            result['reason'] = 'Build output is untrusted until an approved independent receipt and broker native preview pass; installation is not authorized'
-        return result
+        return supervisor.run(QuotaWorker(store,Path(HELPER)),request['plan'],request['plan_sha256'],request['recipe'],None,timeout=timeout,cancel=cancel,notify=notify)
+    finally: supervisor.journal.close()
 
 
 class ManagedChannel:
@@ -160,12 +88,12 @@ def main():
             finally: journal.close()
             return 0
         if sys.argv[1:]!=['--managed']:
-            raise Rejected('Manual build requests disabled; authenticated provisioning delivery required')
+            raise Rejected('Manual build requests disabled; reviewed makepkg request required')
         channel=ManagedChannel()
         request=channel.initial()
         for signum in (signal.SIGTERM,signal.SIGINT):
             signal.signal(signum,lambda *_: setattr(channel,'cancel_requested',True))
-        channel.emit({'event':'progress','stage':'validating-provisioning'})
+        channel.emit({'event':'progress','stage':'validating-reviewed-makepkg'})
         if channel.cancelled(): raise Rejected('Cancelled')
         result=run(request,channel.cancelled,channel.emit)
         channel.emit({'event':'result','result':result})

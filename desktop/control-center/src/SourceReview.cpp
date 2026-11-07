@@ -27,8 +27,8 @@ QVariantMap SourceReview::inspectAur(const QVariantMap &candidate,const QString 
     result["srcinfo_sha256"]=QString::fromLatin1(QCryptographicHash::hash(srcinfo,QCryptographicHash::Sha256).toHex());
     result["pkgbuild"]=QString::fromUtf8(pkgbuild);
     result["srcinfo"]=QString::fromUtf8(srcinfo);
-    result["buildCapability"]="isolated-worker-requires-signed-root-and-attestation";
-    result["installCapability"]="unavailable";
+    result["buildCapability"]="isolated-makepkg";
+    result["installCapability"]="native-plan-and-polkit";
     QStringList issues;
     QMap<QString,QStringList> values;
     for(const QString &line:QString::fromUtf8(srcinfo).split('\n')) {
@@ -77,7 +77,8 @@ QVariantMap SourceReview::inspectAur(const QVariantMap &candidate,const QString 
     for(const auto &dep:conflicts)if(!dependency.match(dep).hasMatch())issues<<"Invalid conflict declaration";
     result["dependencies"]=dependencies;result["conflicts"]=conflicts;result["sources"]=sources;
     result["recipeChecks"]=issues.isEmpty()?"declarations-checked":"failed";
-    issues<<"AUR apply blocked: the isolated build worker requires an approved signed build-root, reviewed source plan and independently signed receipt. The Update broker revalidates archive/signature FDs and the native plan. Recipe declarations alone are not an install plan; production trust and security acceptance must pass. No helper -S/-Su or makepkg command was run.";
+    result["state"]=issues.isEmpty()?"reviewed":"blocked";
+    if(issues.isEmpty())issues<<"Pinned recipe declarations checked. An isolated non-root makepkg build, native dependency/conflict checks and explicit PolicyKit installation authorization are required.";
     result["reason"]=issues.join("\n");
     return result;
 }
@@ -154,7 +155,7 @@ void SourceReview::completed(int code,QProcess::ExitStatus status){
     }else if(m_step=="pkgbuild"){
         m_pkgbuild=output;command("srcinfo","/usr/bin/git",{"-C",m_repo,"show","--no-ext-diff","--no-textconv",m_commit+":.SRCINFO"});
     }else if(m_step=="srcinfo"){
-        m_srcinfo=output;m_current=inspectAur(m_current,m_base,m_commit,m_pkgbuild,m_srcinfo);
+        m_srcinfo=output;m_current=inspectAur(m_current,m_base,m_commit,m_pkgbuild,m_srcinfo);m_current["recipePath"]=m_repo;
         if(m_current.value("recipeChecks")!="declarations-checked"){finishEntry();return;}
         const auto deps=m_current.value("dependencies").toStringList();
         if(!deps.isEmpty()){QStringList args{"-T","--"};args+=deps;command("deps","/usr/bin/pacman",args);return;}
@@ -170,7 +171,7 @@ void SourceReview::completed(int code,QProcess::ExitStatus status){
         QString reason=m_current.value("reason").toString();
         if(!m_missing.isEmpty())reason+="\nMissing build/runtime dependencies (not installed on host): "+m_missing.join(", ");
         if(!m_conflicts.isEmpty())reason+="\nInstalled conflict targets require a reviewed transaction: "+m_conflicts.join(", ");
-        m_current["reason"]=reason;finishEntry();
+        if(!m_missing.isEmpty()||!m_conflicts.isEmpty())m_current["state"]="blocked";m_current["reason"]=reason;finishEntry();
     }
 }
 void SourceReview::finishEntry(const QString &error){

@@ -1757,7 +1757,6 @@ ApplicationWindow {
                                 }
                                 RowLayout {
                                     Button { text: "Build reviewed AUR selection"; enabled: !UpdateBridge.installing && !UpdateBridge.previewing && !UpdateBridge.checking; onClicked: UpdateBridge.startAurBuild() }
-                                    Button { text: "Check independent attestation"; enabled: !UpdateBridge.installing && !UpdateBridge.previewing; onClicked: UpdateBridge.refreshAurAttestation() }
                                 }
                                 RowLayout {
                                     BusyIndicator { running: UpdateBridge.batchStatus === "aur-build"; visible: running }
@@ -1771,8 +1770,8 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                     wrapMode: Text.Wrap
                                     text: UpdateBridge.aurInstallReady
-                                        ? "AUR installation requires a verified independent receipt, separate confirmation and broker authorization. Build and preview do not grant installation consent."
-                                        : "AUR production admission is closed. Build and preview do not grant installation consent."
+                                        ? "The reviewed AUR plan is ready. Separate confirmation and PolicyKit authorization are required."
+                                        : "AUR installation requires a reviewed build and a current native plan. See AUR status for blockers."
                                 }
                             }
 
