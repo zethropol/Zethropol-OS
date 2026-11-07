@@ -1,14 +1,14 @@
 pkgname=zethropol-update
 pkgver=0.1.0
-pkgrel=1
+pkgrel=11
 pkgdesc="Zethropol OS Update D-Bus service"
 url="https://github.com/zethropol/Zethropol-OS"
 arch=("x86_64")
 license=("MIT")
 depends=("glibc" "dbus" "systemd" "pacman-contrib" "polkit")
-makedepends=("cargo")
+makedepends=("cargo" "git")
 
-_commit="f99eeebf0723a2032b02cd3f6f94fc8611498966"
+_commit="10f73a3b889457dce3003c76f7f7a3090f193701"
 source=("Zethropol-OS::git+https://github.com/zethropol/Zethropol-OS.git#commit=${_commit}")
 sha256sums=("SKIP")
 
@@ -25,4 +25,5 @@ package() {
     install -Dm644 deployment/dbus/org.zethropol.Update.service "$pkgdir/usr/share/dbus-1/system-services/org.zethropol.Update.service"
     install -Dm644 deployment/polkit/org.zethropol.update.policy "$pkgdir/usr/share/polkit-1/actions/org.zethropol.update.policy"
     install -Dm644 deployment/systemd/zethropol-update.service "$pkgdir/usr/lib/systemd/system/zethropol-update.service"
+    install -Dm644 deployment/systemd/zethropol-update-worker@.service "$pkgdir/usr/lib/systemd/system/zethropol-update-worker@.service"
 }

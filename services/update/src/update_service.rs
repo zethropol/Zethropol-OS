@@ -284,8 +284,8 @@ impl UpdateManager {
         Ok(context.operation_id)
     }
 
-    // Included in the ORIGINAL UpdateManager D-Bus impl by the development
-    // build only. No installed interface, bus policy or service is changed.
+    // Exported by the same UpdateManager interface in normal service builds.
+    // Production installation still requires its independent acceptance gate.
     async fn install_aur(
         &self,
         plan_hash: String,
