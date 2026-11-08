@@ -16,6 +16,11 @@
 
 int main(int argc, char *argv[])
 {
+    if (qEnvironmentVariableIsEmpty("QT_QPA_PLATFORMTHEME")
+        && qEnvironmentVariable("XDG_CURRENT_DESKTOP").split(QLatin1Char(':')).contains(
+            QStringLiteral("KDE"), Qt::CaseInsensitive)) {
+        qputenv("QT_QPA_PLATFORMTHEME", QByteArrayLiteral("kde"));
+    }
     QGuiApplication app(argc, argv);
 
     HardwareServiceClient hardwareServiceClient;

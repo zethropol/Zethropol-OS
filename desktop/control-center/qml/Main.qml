@@ -2,7 +2,6 @@ import Zethropol.ControlCenter
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Controls.Material
 
 ApplicationWindow {
     id: rootWindow
@@ -123,12 +122,15 @@ ApplicationWindow {
     width: 1280
     height: 800
     title: "Zethropol Control Center"
+    color: palette.window
 
     RowLayout {
         anchors.fill: parent
         spacing: 0
 
         Rectangle {
+            objectName: "controlCenterSidebar"
+            color: rootWindow.palette.window
             Layout.preferredWidth: 240
             Layout.fillHeight: true
 
@@ -149,6 +151,11 @@ ApplicationWindow {
                     delegate: Button {
                         text: modelData
                         Layout.fillWidth: true
+                        checkable: true
+                        autoExclusive: true
+                        checked: contentStack.currentIndex === index
+                        highlighted: checked
+                        font.bold: checked
                         onClicked: contentStack.currentIndex = index
                     }
                 }
@@ -160,6 +167,8 @@ ApplicationWindow {
         }
 
         Rectangle {
+            objectName: "controlCenterContent"
+            color: rootWindow.palette.base
             Layout.fillWidth: true
             Layout.fillHeight: true
 
@@ -170,6 +179,7 @@ ApplicationWindow {
 
                 StackLayout {
                     id: contentStack
+                    objectName: "controlCenterPages"
                     Layout.fillWidth: true
                     Layout.fillHeight: true
 
@@ -206,10 +216,12 @@ ApplicationWindow {
                                     model: ["Overall Health", "Hardware Health", "System Activity", "Power"]
 
                                     delegate: Rectangle {
+                                        color: rootWindow.palette.alternateBase
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: 125
                                         radius: 8
                                         border.width: 1
+                                        border.color: rootWindow.palette.mid
 
                                         ColumnLayout {
                                             anchors.fill: parent
@@ -265,10 +277,12 @@ ApplicationWindow {
                                     model: ["CPU", "GPU", "Memory", "Storage", "Network", "Overall Health"]
 
                                     delegate: Rectangle {
+                                        color: rootWindow.palette.alternateBase
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: 110
                                         radius: 6
                                         border.width: 1
+                                        border.color: rootWindow.palette.mid
 
                                         ColumnLayout {
                                             anchors.fill: parent
@@ -334,11 +348,13 @@ ApplicationWindow {
                                         spacing: 8
 
                                         Rectangle {
+                                            color: rootWindow.palette.alternateBase
                                             visible: String(SystemState.firmwareStatus).toLowerCase().indexOf("firmware update available") >= 0
                                             Layout.fillWidth: true
                                             Layout.preferredHeight: 72
                                             radius: 8
                                             border.width: 1
+                                            border.color: rootWindow.palette.mid
 
                                             RowLayout {
                                                 anchors.fill: parent
@@ -372,11 +388,13 @@ ApplicationWindow {
 
 
                                         Rectangle {
+                                            color: rootWindow.palette.alternateBase
                                             visible: RecoveryBridge.available && RecoveryBridge.snapshotCount === 0
                                             Layout.fillWidth: true
                                             Layout.preferredHeight: 72
                                             radius: 8
                                             border.width: 1
+                                            border.color: rootWindow.palette.mid
 
                                             RowLayout {
                                                 anchors.fill: parent
@@ -408,11 +426,13 @@ ApplicationWindow {
                                         }
 
                                         Rectangle {
+                                            color: rootWindow.palette.alternateBase
                                             visible: ServiceBridge.failed > 0
                                             Layout.fillWidth: true
                                             Layout.preferredHeight: 72
                                             radius: 8
                                             border.width: 1
+                                            border.color: rootWindow.palette.mid
 
                                             RowLayout {
                                                 anchors.fill: parent
@@ -443,11 +463,13 @@ ApplicationWindow {
                                         }
 
                                         Rectangle {
+                                            color: rootWindow.palette.alternateBase
                                             visible: String(SystemState.overallHealth).toUpperCase() === "WARNING"
                                             Layout.fillWidth: true
                                             Layout.preferredHeight: 72
                                             radius: 8
                                             border.width: 1
+                                            border.color: rootWindow.palette.mid
 
                                             RowLayout {
                                                 anchors.fill: parent
@@ -511,10 +533,12 @@ ApplicationWindow {
                                 columnSpacing: 12
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 150
                                     radius: 8
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.fill: parent
@@ -546,10 +570,12 @@ ApplicationWindow {
                                 }
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 150
                                     radius: 8
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.fill: parent
@@ -591,10 +617,12 @@ ApplicationWindow {
                                 }
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 140
                                     radius: 8
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.fill: parent
@@ -621,10 +649,12 @@ ApplicationWindow {
                                 }
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 140
                                     radius: 8
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.fill: parent
@@ -651,10 +681,12 @@ ApplicationWindow {
                                 }
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 140
                                     radius: 8
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.fill: parent
@@ -681,10 +713,12 @@ ApplicationWindow {
                                 }
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 140
                                     radius: 8
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.fill: parent
@@ -711,10 +745,12 @@ ApplicationWindow {
                                 }
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 140
                                     radius: 8
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.fill: parent
@@ -741,10 +777,12 @@ ApplicationWindow {
                                 }
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 140
                                     radius: 8
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.fill: parent
@@ -796,10 +834,12 @@ ApplicationWindow {
                                 columnSpacing: 12
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 125
                                     radius: 8
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.fill: parent
@@ -825,10 +865,12 @@ ApplicationWindow {
                                 }
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 125
                                     radius: 8
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.fill: parent
@@ -853,10 +895,12 @@ ApplicationWindow {
                                 }
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 125
                                     radius: 8
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.fill: parent
@@ -883,10 +927,12 @@ ApplicationWindow {
                                 }
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 125
                                     radius: 8
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.fill: parent
@@ -913,10 +959,12 @@ ApplicationWindow {
                                 }
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 125
                                     radius: 8
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.fill: parent
@@ -968,10 +1016,12 @@ ApplicationWindow {
                                 columnSpacing: 12
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 145
                                     radius: 8
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.fill: parent
@@ -1001,10 +1051,12 @@ ApplicationWindow {
                                 }
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 145
                                     radius: 8
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.fill: parent
@@ -1031,10 +1083,12 @@ ApplicationWindow {
                                 }
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 145
                                     radius: 8
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.fill: parent
@@ -1064,10 +1118,12 @@ ApplicationWindow {
                                 }
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 145
                                     radius: 8
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.fill: parent
@@ -1119,10 +1175,12 @@ ApplicationWindow {
                                 columnSpacing: 12
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.fillHeight: true
                                     radius: 8
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.fill: parent
@@ -1152,10 +1210,12 @@ ApplicationWindow {
                                 }
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.fillHeight: true
                                     radius: 8
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.fill: parent
@@ -1185,10 +1245,12 @@ ApplicationWindow {
                                 }
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.fillHeight: true
                                     radius: 8
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.fill: parent
@@ -1206,10 +1268,12 @@ ApplicationWindow {
                                 }
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.fillHeight: true
                                     radius: 8
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.fill: parent
@@ -1233,10 +1297,12 @@ ApplicationWindow {
                                 }
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.fillHeight: true
                                     radius: 8
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.fill: parent
@@ -1282,6 +1348,7 @@ ApplicationWindow {
                                 rowSpacing: 16
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 120
                                     radius: 12
@@ -1309,6 +1376,7 @@ ApplicationWindow {
                                 }
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 120
                                     radius: 12
@@ -1336,6 +1404,7 @@ ApplicationWindow {
                                 }
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 120
                                     radius: 12
@@ -1363,6 +1432,7 @@ ApplicationWindow {
                                 }
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 120
                                     radius: 12
@@ -1458,6 +1528,7 @@ ApplicationWindow {
                             }
 
                             Rectangle {
+                                color: rootWindow.palette.alternateBase
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 125
                                 radius: 12
@@ -1498,6 +1569,7 @@ ApplicationWindow {
                                 spacing: 12
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 82
                                     radius: 10
@@ -1523,6 +1595,7 @@ ApplicationWindow {
                                 }
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 82
                                     radius: 10
@@ -1572,6 +1645,7 @@ ApplicationWindow {
                                         model: RecoveryBridge.recoveryEvents
 
                                         delegate: Rectangle {
+                                            color: rootWindow.palette.alternateBase
                                             width: ListView.view.width
                                             height: 104
                                             radius: 10
@@ -1645,6 +1719,7 @@ ApplicationWindow {
                                         model: RecoveryBridge.recoveryPoints
 
                                         delegate: Rectangle {
+                                            color: rootWindow.palette.alternateBase
                                             width: ListView.view.width
                                             height: 88
                                             radius: 10
@@ -1747,10 +1822,12 @@ ApplicationWindow {
                                 columnSpacing: 12
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 120
                                     radius: 10
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.fill: parent
@@ -1772,10 +1849,12 @@ ApplicationWindow {
                                 }
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 120
                                     radius: 10
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.fill: parent
@@ -1797,10 +1876,12 @@ ApplicationWindow {
                                 }
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 120
                                     radius: 10
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.fill: parent
@@ -1822,10 +1903,12 @@ ApplicationWindow {
                                 }
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 120
                                     radius: 10
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.fill: parent
@@ -1847,10 +1930,12 @@ ApplicationWindow {
                                 }
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 120
                                     radius: 10
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.fill: parent
@@ -1872,10 +1957,12 @@ ApplicationWindow {
                                 }
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 120
                                     radius: 10
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.fill: parent
@@ -1910,9 +1997,20 @@ ApplicationWindow {
                             anchors.fill: parent
                             spacing: 14
 
-                            Label {
-                                text: "Services"
-                                font.pixelSize: 32
+                            RowLayout {
+                                Layout.fillWidth: true
+
+                                Label {
+                                    text: "Services"
+                                    font.pixelSize: 32
+                                    Layout.fillWidth: true
+                                }
+
+                                Button {
+                                    text: "Yenile"
+                                    enabled: !ServiceBridge.busy && !ServiceBridge.failureDetailsBusy
+                                    onClicked: ServiceBridge.refresh()
+                                }
                             }
 
                             Label {
@@ -1925,10 +2023,12 @@ ApplicationWindow {
                                 spacing: 12
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 90
                                     radius: 8
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.centerIn: parent
@@ -1947,10 +2047,12 @@ ApplicationWindow {
                                 }
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 90
                                     radius: 8
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.centerIn: parent
@@ -1969,10 +2071,12 @@ ApplicationWindow {
                                 }
 
                                 Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 90
                                     radius: 8
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     ColumnLayout {
                                         anchors.centerIn: parent
@@ -1999,6 +2103,134 @@ ApplicationWindow {
                                 Layout.fillWidth: true
                             }
 
+                            Frame {
+                                objectName: "failedServicesPanel"
+                                visible: ServiceBridge.failed > 0
+                                Layout.fillWidth: true
+                                padding: 12
+
+                                background: Rectangle {
+                                    color: rootWindow.palette.alternateBase
+                                    radius: 8
+                                    border.width: 1
+                                    border.color: rootWindow.palette.highlight
+                                }
+
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    spacing: 8
+
+                                    Label {
+                                        text: "Hata veren servisler"
+                                        font.bold: true
+                                        Layout.fillWidth: true
+                                    }
+
+                                    ListView {
+                                        objectName: "failedServicesList"
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: Math.min(ServiceBridge.failed * 112, 224)
+                                        clip: true
+                                        spacing: 8
+                                        model: ServiceBridge.failedServices
+                                        ScrollBar.vertical: ScrollBar { }
+
+                                        delegate: Column {
+                                            width: ListView.view.width
+                                            spacing: 2
+
+                                            Label {
+                                                objectName: "failedServiceName"
+                                                text: modelData.name
+                                                width: parent.width
+                                                font.bold: true
+                                                wrapMode: Text.WrapAnywhere
+                                            }
+
+                                            Label {
+                                                text: modelData.active + " / " + modelData.sub
+                                                width: parent.width
+                                                wrapMode: Text.WrapAnywhere
+                                            }
+
+                                            Label {
+                                                text: modelData.description
+                                                visible: text.length > 0
+                                                width: parent.width
+                                                opacity: 0.7
+                                                wrapMode: Text.WordWrap
+                                            }
+
+                                            Button {
+                                                objectName: "showServiceFailureDetails"
+                                                text: "Hata ayrıntıları"
+                                                enabled: !ServiceBridge.failureDetailsBusy
+                                                onClicked: ServiceBridge.loadFailureDetails(modelData.name)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Frame {
+                                objectName: "serviceFailureDetailsPanel"
+                                visible: ServiceBridge.failureDetailsName.length > 0
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: Math.min(240, rootWindow.height * 0.3)
+                                padding: 12
+
+                                background: Rectangle {
+                                    color: rootWindow.palette.alternateBase
+                                    radius: 8
+                                    border.width: 1
+                                    border.color: rootWindow.palette.mid
+                                }
+
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    spacing: 6
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+
+                                        Label {
+                                            text: "Hata ayrıntıları — " + ServiceBridge.failureDetailsName
+                                            font.bold: true
+                                            Layout.fillWidth: true
+                                            wrapMode: Text.WrapAnywhere
+                                        }
+
+                                        BusyIndicator {
+                                            running: ServiceBridge.failureDetailsBusy
+                                            visible: running
+                                            Layout.preferredWidth: 24
+                                            Layout.preferredHeight: 24
+                                        }
+                                    }
+
+                                    ScrollView {
+                                        id: serviceFailureScroll
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        clip: true
+                                        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+
+                                        TextArea {
+                                            objectName: "serviceFailureDetailsText"
+                                            text: ServiceBridge.failureDetailsText
+                                            textFormat: TextEdit.PlainText
+                                            readOnly: true
+                                            selectByMouse: true
+                                            wrapMode: TextEdit.WrapAnywhere
+                                            font.family: "monospace"
+                                            color: rootWindow.palette.text
+                                            width: serviceFailureScroll.availableWidth
+                                            background: null
+                                        }
+                                    }
+                                }
+                            }
+
                             ListView {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
@@ -2007,10 +2239,12 @@ ApplicationWindow {
                                 model: ServiceBridge.services
 
                                 delegate: Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     width: ListView.view.width
                                     height: 108
                                     radius: 8
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     RowLayout {
                                         anchors.fill: parent
@@ -2121,10 +2355,12 @@ ApplicationWindow {
                                 model: ApplicationBridge.applications
 
                                 delegate: Rectangle {
+                                    color: rootWindow.palette.alternateBase
                                     width: ListView.view.width
                                     height: 78
                                     radius: 8
                                     border.width: 1
+                                    border.color: rootWindow.palette.mid
 
                                     RowLayout {
                                         anchors.fill: parent

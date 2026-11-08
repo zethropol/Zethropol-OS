@@ -4,9 +4,15 @@ import QtQuick.Layouts
 
 Item {
     id: reportPage
+    objectName: "updateReportPage"
     required property var scanner
     required property var installer
-    readonly property color reportText: "#202124"
+    readonly property color reportText: reportPalette.text
+
+    SystemPalette {
+        id: reportPalette
+        colorGroup: SystemPalette.Active
+    }
 
     Connections {
         target: installer
@@ -111,9 +117,9 @@ Item {
                         Layout.fillWidth: true
                         implicitHeight: sourceReport.implicitHeight + 32
                         radius: 8
-                        color: "transparent"
+                        color: reportPalette.alternateBase
                         border.width: 1
-                        border.color: "#d9dce1"
+                        border.color: reportPalette.mid
 
                         ColumnLayout {
                             id: sourceReport
@@ -164,7 +170,7 @@ Item {
                                     Rectangle {
                                         Layout.fillWidth: true
                                         implicitHeight: 1
-                                        color: "#d9dce1"
+                                        color: reportPalette.mid
                                         opacity: 0.4
                                     }
 
@@ -234,8 +240,8 @@ Item {
                 width: installationScroll.availableWidth
                 onTextChanged: cursorPosition = length
                 background: Rectangle {
-                    color: "#f5f6f8"
-                    border.color: "#d9dce1"
+                    color: reportPalette.base
+                    border.color: reportPalette.mid
                     radius: 6
                 }
             }
@@ -314,8 +320,8 @@ Item {
         width: Math.min(reportPage.width - 24, 680)
         modal: true
         background: Rectangle {
-            color: "white"
-            border.color: "#d9dce1"
+            color: reportPalette.window
+            border.color: reportPalette.mid
             radius: 8
         }
         header: Label {
