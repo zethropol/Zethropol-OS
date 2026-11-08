@@ -6,6 +6,34 @@ import QtQuick.Controls.Material
 
 ApplicationWindow {
     id: rootWindow
+    onClosing: function(close) {
+        if (UpdateInstallBridge.busy) {
+            close.accepted = false
+            installationCloseNotice.open()
+        }
+    }
+
+    Connections {
+        target: UpdateInstallBridge
+        function onChanged() {
+            if (!UpdateInstallBridge.busy)
+                installationCloseNotice.close()
+        }
+    }
+
+    Dialog {
+        id: installationCloseNotice
+        anchors.centerIn: parent
+        title: "Kurulum devam ediyor"
+        modal: true
+        standardButtons: Dialog.Ok
+        width: Math.min(rootWindow.width - 48, 560)
+        Label {
+            width: parent.width
+            text: "Paket işlemi tamamlanana kadar Control Center kapatılamaz. İlerlemeyi ve bekleyen soruları Updates sekmesinden takip edin."
+            wrapMode: Text.WordWrap
+        }
+    }
 
 
 
@@ -1368,7 +1396,10 @@ ApplicationWindow {
                         }
                     }
 
-                    Item { }
+                    UpdateReport {
+                        scanner: UpdateBridge
+                        installer: UpdateInstallBridge
+                    }
 
                     Item {
                         Layout.fillWidth: true
