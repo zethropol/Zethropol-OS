@@ -256,6 +256,141 @@ fn permissions_symlinks_hardlinks_and_wrong_owner_fail_closed() {
     }
 }
 #[test]
+fn normal_makepkg_admission_reopens_using_its_retained_review() {
+    let f = Fixture::persistent(BOOT_A, 90);
+    let review = review();
+    let c = f
+        .store
+        .reserve_aur_build(
+            f.grant(f.owner.clone(), PolicyAction::Preview, 100),
+            review.clone(),
+            100,
+        )
+        .unwrap();
+    let mut packages = plan().packages().to_vec();
+    packages[0].repository_metadata_sha256 = review.digest();
+    let native = CanonicalPlan::from_packages(packages)
+        .unwrap()
+        .with_policy_fingerprint(review.build_root_sha256.clone())
+        .unwrap();
+    f.store
+        .admit_normal_aur_build(
+            f.grant(f.owner.clone(), PolicyAction::Preview, 101),
+            &c,
+            &native,
+            101,
+        )
+        .unwrap();
+    let restarted = f.reboot(BOOT_A, 102).unwrap();
+    restarted
+        .cancel_aur_before_commit(
+            f.grant(f.owner.clone(), PolicyAction::Preview, 103),
+            &c.operation_id,
+            103,
+        )
+        .unwrap();
+    let rebooted = f.reboot(BOOT_B, 1).unwrap();
+    assert_eq!(
+        rebooted
+            .aur_history_for_owner(
+                f.grant(f.owner.clone(), PolicyAction::Preview, 2),
+                &c.operation_id,
+                2,
+            )
+            .unwrap()
+            .evidence
+            .package_commit,
+        CommitState::NotStarted
+    );
+    let mut changed = review.clone();
+    changed.outputs[0].version = "3-1".into();
+    changed.source_version = "3-1".into();
+    rebooted
+        .aur_atomic(
+            &f.path.join(format!("aur-review-{}.json", c.operation_id)),
+            &rebooted
+                .aur_pack_bytes(&serde_json::to_vec(&changed).unwrap())
+                .unwrap(),
+            false,
+        )
+        .unwrap();
+    assert!(matches!(
+        f.reboot(BOOT_B, 3),
+        Err(BrokerError::CorruptRecord)
+    ));
+}
+
+#[test]
+fn cancelled_build_reservation_survives_replacement_restart_and_boot_change() {
+    let f = Fixture::persistent(BOOT_A, 90);
+    let c = f
+        .store
+        .reserve_aur_build(
+            f.grant(f.owner.clone(), PolicyAction::Preview, 100),
+            review(),
+            100,
+        )
+        .unwrap();
+    f.store
+        .cancel_aur_before_commit(
+            f.grant(f.owner.clone(), PolicyAction::Preview, 101),
+            &c.operation_id,
+            101,
+        )
+        .unwrap();
+    let r = f
+        .store
+        .read_record(&f.store.preview_path(&f.owner))
+        .unwrap();
+    assert_eq!(r.status, OperationStatus::Failed);
+    assert!(r.install_authorized_at.is_none());
+    for commit in [
+        CommitState::InProgress,
+        CommitState::Committed,
+        CommitState::Unknown,
+    ] {
+        let mut invalid = r.clone();
+        invalid.evidence.package_commit = commit;
+        assert_eq!(
+            decode_record(&encode_record(&invalid)).unwrap_err(),
+            BrokerError::CorruptRecord
+        );
+    }
+    let mut invalid = r.clone();
+    let mut packages = r.plan.packages().to_vec();
+    packages[0].repository = "extra".into();
+    invalid.plan = CanonicalPlan::from_packages(packages)
+        .unwrap()
+        .with_policy_fingerprint("c".repeat(64))
+        .unwrap();
+    assert_eq!(
+        decode_record(&encode_record(&invalid)).unwrap_err(),
+        BrokerError::CorruptRecord
+    );
+    let restarted = f.reboot(BOOT_A, 102).unwrap();
+    restarted
+        .reserve_aur_build(
+            f.grant(f.owner.clone(), PolicyAction::Preview, 103),
+            review(),
+            103,
+        )
+        .unwrap();
+    let rebooted = f.reboot(BOOT_B, 1).unwrap();
+    let view = rebooted
+        .aur_history_for_owner(
+            f.grant(f.owner.clone(), PolicyAction::Preview, 2),
+            &c.operation_id,
+            2,
+        )
+        .unwrap();
+    assert_eq!(view.status, OperationStatus::Failed);
+    assert_eq!(view.evidence.package_commit, CommitState::NotStarted);
+    assert!(rebooted
+        .claim_transaction(&c.operation_id, &r.plan, 3)
+        .is_err());
+}
+
+#[test]
 fn retirement_cutoff_is_idempotent_and_replaced_or_expired_previews_are_retained() {
     let f = Fixture::persistent(BOOT_A, 90);
     let c = f

@@ -10,7 +10,7 @@ from worker import Rejected
 
 
 class QuotaDirectory:
-    def __init__(self, helper, mountpoint, byte_limit=512*1024**2, inodes=16384):
+    def __init__(self, helper, mountpoint, byte_limit=1024*1024**2, inodes=16384):
         self.fd=-1
         self.namespaces=()
         Path(mountpoint).mkdir(mode=0o700,exist_ok=False)

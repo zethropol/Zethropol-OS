@@ -12,6 +12,9 @@ Group=root
 Restart=on-failure
 RestartSec=2s
 PrivateTmp=true
+# Reviewed makepkg AUR commits now execute in this service too. Apply the
+# existing audited snap-pac contract; mandatory Zethropol snapshots stay enabled.
+Environment=SNAP_PAC_SKIP=1
 ProtectSystem=full
 ReadWritePaths=/usr /boot -/efi
 ProtectHome=true

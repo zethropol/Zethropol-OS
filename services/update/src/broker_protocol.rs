@@ -1667,6 +1667,7 @@ fn decode_record(bytes: &[u8]) -> Result<Record, BrokerError> {
             (OperationStatus::Previewed, None) => false,
             (OperationStatus::Previewed, Some(_)) => true,
             (_, Some(authorized_at)) => authorized_at < created_at || authorized_at >= expires_at,
+            (OperationStatus::Failed, None) => false,
             (_, None) => true,
         }
         || status.terminal() != finished_at.is_some()
@@ -1808,6 +1809,17 @@ fn decode_record(bytes: &[u8]) -> Result<Record, BrokerError> {
         };
     }
     if lines.next().is_some() {
+        return Err(BrokerError::CorruptRecord);
+    }
+    if install_authorized_at.is_none()
+        && status == OperationStatus::Failed
+        && (evidence.package_commit != CommitState::NotStarted
+            || !plan.removals().is_empty()
+            || plan.packages().is_empty()
+            || plan.packages().iter().any(|p| {
+                !matches!(p.repository.as_str(), "aur-local" | "aur-build-reservation")
+            }))
+    {
         return Err(BrokerError::CorruptRecord);
     }
     let plan = plan;

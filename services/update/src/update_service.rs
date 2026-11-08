@@ -3268,10 +3268,10 @@ mod execution_boundary_tests {
             assert!(unit.contains(setting), "{setting}");
         }
         assert!(!unit.contains("RuntimeDirectory="));
-        assert!(
-            !include_str!("../deployment/systemd/zethropol-update.service")
-                .contains("SNAP_PAC_SKIP")
-        );
+        // The reviewed makepkg path commits in the main service. Both native
+        // execution hosts need the same audited snapshot environment.
+        assert!(include_str!("../deployment/systemd/zethropol-update.service")
+            .contains("Environment=SNAP_PAC_SKIP=1"));
     }
 }
 include!("aur/adapter.rs");

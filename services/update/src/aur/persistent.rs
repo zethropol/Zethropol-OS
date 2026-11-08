@@ -334,7 +334,7 @@ impl BrokerStore {
             {
                 let r = decode_record(&aur_unwrap(&self.aur_read_file(&p)?)?)?;
                 if r.operation_id != valid_uuid(id.into())?
-                    || r.status != OperationStatus::Previewed
+                    || !aur_retirable_preview(&r)
                 {
                     return Err(BrokerError::CorruptRecord);
                 }
@@ -381,9 +381,10 @@ impl BrokerStore {
     }
     fn aur_validate_record(&self, r: &Record) -> Result<(), BrokerError> {
         if r.plan.packages().is_empty()
-            || r.plan.packages().iter().any(|p| {
-                !["aur-local", "aur-build-reservation"].contains(&p.repository.as_str())
-            })
+            || r.plan
+                .packages()
+                .iter()
+                .any(|p| !["aur-local", "aur-build-reservation"].contains(&p.repository.as_str()))
         {
             return Err(BrokerError::InvalidPlan);
         }
@@ -395,9 +396,38 @@ impl BrokerStore {
             let marker = self
                 .root
                 .join(format!("aur-receipt-{}.spent", r.operation_id));
-            let b: AurReceiptBinding =
-                serde_json::from_slice(&aur_unwrap(&self.aur_read_file(&marker)?)?)
-                    .map_err(|_| BrokerError::CorruptRecord)?;
+            let bytes = match self.aur_read_file(&marker) {
+                Ok(bytes) => bytes,
+                Err(BrokerError::NotFound) => {
+                    // Normal makepkg admission binds native packages directly
+                    // to the retained review; it never creates a signing receipt.
+                    let path = self
+                        .root
+                        .join(format!("aur-review-{}.json", r.operation_id));
+                    let review: ReviewedBuild =
+                        serde_json::from_slice(&aur_unwrap(&self.aur_read_file(&path)?)?)
+                            .map_err(|_| BrokerError::CorruptRecord)?;
+                    review.validate().map_err(|_| BrokerError::CorruptRecord)?;
+                    if r.plan.policy_fingerprint() != review.build_root_sha256
+                        || !r.plan.removals().is_empty()
+                        || r.plan.packages().len() != review.outputs.len()
+                        || r.plan.packages().iter().any(|p| {
+                            p.repository_metadata_sha256 != review.digest()
+                                || !review.outputs.iter().any(|o| {
+                                    o.name == p.package_name
+                                        && o.version == p.new_version
+                                        && o.filename == p.filename
+                                })
+                        })
+                    {
+                        return Err(BrokerError::CorruptRecord);
+                    }
+                    return Ok(());
+                }
+                Err(e) => return Err(e),
+            };
+            let b: AurReceiptBinding = serde_json::from_slice(&aur_unwrap(&bytes)?)
+                .map_err(|_| BrokerError::CorruptRecord)?;
             if b.operation_id != r.operation_id
                 || b.plan_hash != r.plan.hash()
                 || r.plan
@@ -525,7 +555,7 @@ impl BrokerStore {
 impl BrokerStore {
     fn aur_retire_preview(&self, path: &Path) -> Result<(), BrokerError> {
         let record = self.read_record(path)?;
-        if record.status != OperationStatus::Previewed {
+        if !aur_retirable_preview(&record) {
             return Err(BrokerError::InvalidTransition);
         }
         let retired = self
@@ -560,6 +590,13 @@ impl BrokerStore {
             remove_owned_record(path, self.expected_owner)
         }
     }
+}
+
+fn aur_retirable_preview(record: &Record) -> bool {
+    record.status == OperationStatus::Previewed
+        || (record.status == OperationStatus::Failed
+            && record.install_authorized_at.is_none()
+            && record.evidence.package_commit == CommitState::NotStarted)
 }
 
 #[cfg(test)]
