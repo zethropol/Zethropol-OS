@@ -95,21 +95,6 @@ Potential responsibilities:
 
 Diagnostics should provide useful information without exposing unnecessary low-level implementation details to the user interface.
 
-### Update Service
-
-Provides controlled system update operations.
-
-Potential responsibilities:
-
-- Update availability
-- Update information
-- Update preparation
-- Controlled update execution
-- Update status reporting
-- Update result reporting
-
-The service should integrate with the existing Arch/CachyOS package infrastructure rather than replacing pacman/ALPM.
-
 ### Recovery Service
 
 Provides system recovery and rollback capabilities.
@@ -150,7 +135,7 @@ Zethropol Service Interface
 ┌───────────────────────────────┐
 │ Hardware      Monitoring      │
 │ Performance   Power           │
-│ Diagnostics   Update          │
+│ Diagnostics                   │
 │ Recovery      Configuration   │
 └───────────────────────────────┘
         ↓
@@ -234,7 +219,6 @@ The following service boundaries are established as initial architectural concep
 - Performance Service
 - Power Service
 - Diagnostics Service
-- Update Service
 - Recovery Service
 - Configuration Service
 

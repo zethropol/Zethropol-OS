@@ -1,4 +1,0 @@
-#!/bin/sh
-# Retired compatibility path for an already-created external boot entry.
-# No UID949, signing, activation or quarantine operation is performed.
-exec /usr/lib/systemd/systemd

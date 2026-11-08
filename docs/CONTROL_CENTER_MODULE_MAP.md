@@ -28,7 +28,7 @@ Drivers → Zethropol Hardware Service → driver state and compatibility
 Firmware → Zethropol Hardware Service → firmware state
 Performance → Zethropol services → performance capabilities and profiles
 Power → Zethropol services → power state and profiles
-Updates → Zethropol update service → update state and operations
+Updates → empty navigation placeholder
 Recovery → Zethropol recovery service → snapshots and rollback operations
 Security → Zethropol security service → security state and controls
 Applications → Zethropol software service → application management

@@ -1,6 +1,0 @@
-# Review/provision on the target only; do NOT install as part of this task.
-# Journal must live outside package-root rollback and on reviewed ext4/Btrfs/XFS.
-d /var/lib/zethropol 0755 root root -
-d /var/lib/zethropol/aur-transactions 0700 root root -
-d /var/lib/zethropol/aur-approved-reviews 0700 root root -
-d /run/zethropol-update/aur-artifacts 0700 root root -

@@ -36,7 +36,6 @@ Initial logical service identities include:
 - Performance Service
 - Power Service
 - Diagnostics Service
-- Update Service
 - Recovery Service
 - Configuration Service
 
@@ -282,7 +281,6 @@ For example:
 - Monitoring Service consumes Hardware Service interfaces.
 - Performance Service consumes Hardware and Power Service interfaces.
 - Diagnostics Service consumes Hardware and Monitoring Service interfaces.
-- Update Service consumes package-management and Configuration Service interfaces where required.
 
 Circular service dependencies should not be introduced.
 
@@ -511,38 +509,6 @@ ADMIN:
 - Disable service
 
 Service names must be validated by the service before an administrative operation is performed.
-
-### Update Service
-
-Logical identity:
-
-- Update
-
-READ state:
-
-- System update availability
-- System update list
-- Update count
-- AUR availability and updates
-- Flatpak availability and updates
-- Orphan package list and count
-- Current operation state
-- Failure state
-
-OBSERVE:
-
-- Update state and operation state changes
-
-ACTION:
-
-- Check for updates
-
-ADMIN:
-
-- Install available updates
-- Remove orphan packages
-
-Update operations may involve multiple package-management backends. Backend-specific implementation details must remain behind the service boundary.
 
 ### Recovery Service
 
@@ -794,26 +760,6 @@ Signals:
 - `OperationChanged`
 
 Administrative service operations must validate the requested service name and authorization before execution.
-
-### Update
-
-Interface:
-
-`org.zethropol.Update.v1`
-
-Methods:
-
-- `GetState`
-- `CheckForUpdates`
-- `InstallUpdates`
-- `RemoveOrphans`
-
-Signals:
-
-- `StateChanged`
-- `OperationChanged`
-
-Package-manager-specific operations remain behind the Update Service boundary.
 
 ### Recovery
 

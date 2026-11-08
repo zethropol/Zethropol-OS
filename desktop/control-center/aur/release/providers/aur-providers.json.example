@@ -1,6 +1,0 @@
-{
-  "schema": 1,
-  "purpose": "zethropol-aur-providers",
-  "archive": {"user": "zethropol-aur-archive", "signer": null},
-  "receipt": {"user": "zethropol-aur-attestor", "signer": null}
-}

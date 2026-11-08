@@ -4,8 +4,6 @@
 #include <QCoreApplication>
 
 #include "HardwareServiceClient.h"
-#include "UpdateService.h"
-#include "PostUpdateFlow.h"
 #include "RecoveryService.h"
 #include "SecurityService.h"
 #include "ServiceService.h"
@@ -19,8 +17,6 @@ int main(int argc, char *argv[])
     QGuiApplication app(argc, argv);
 
     HardwareServiceClient hardwareServiceClient;
-    UpdateService updateService;
-    PostUpdateFlow postUpdateFlow;
     RecoveryService recoveryService;
     SecurityService securityService;
     ServiceService serviceService;
@@ -30,8 +26,6 @@ int main(int argc, char *argv[])
     ZethropolMonitoringClient monitoringClient;
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("HardwareBridge"), &hardwareServiceClient);
-    engine.rootContext()->setContextProperty(QStringLiteral("UpdateBridge"), &updateService);
-    engine.rootContext()->setContextProperty(QStringLiteral("PostUpdateBridge"), &postUpdateFlow);
     engine.rootContext()->setContextProperty(QStringLiteral("RecoveryBridge"), &recoveryService);
     engine.rootContext()->setContextProperty(QStringLiteral("SecurityBridge"), &securityService);
     engine.rootContext()->setContextProperty(QStringLiteral("ServiceBridge"), &serviceService);

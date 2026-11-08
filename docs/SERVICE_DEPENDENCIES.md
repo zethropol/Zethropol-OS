@@ -97,19 +97,6 @@ It may consume information from:
 
 Diagnostic operations should not require the user interface to understand low-level implementation details.
 
-### Update Service
-
-The Update Service coordinates system update operations.
-
-It may depend on:
-
-- CachyOS and Arch package infrastructure
-- pacman and ALPM
-- Repository configuration
-- Configuration Service where appropriate
-
-The Update Service should not replace the underlying package-management infrastructure.
-
 ### Recovery Service
 
 The Recovery Service coordinates supported recovery, rollback, and restoration operations.
@@ -118,7 +105,6 @@ It may depend on:
 
 - System storage and filesystem interfaces
 - Boot and system configuration mechanisms
-- Update Service
 - Configuration Service
 - Existing recovery or rollback capabilities provided by the base system
 
@@ -160,10 +146,6 @@ Hardware Service + Monitoring Service
 Diagnostics Service
 
 Configuration Service
-        ↓
-Update Service
-
-Configuration Service + Update Service
         ↓
 Recovery Service
 

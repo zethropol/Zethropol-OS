@@ -1,4 +1,0 @@
-# Optional target deployment drop-in, not activated or installed here.
-# Paths must be separately provisioned and actual worker mount access checked.
-[Service]
-ReadWritePaths=-/var/lib/zethropol/aur-transactions -/run/zethropol-update/aur-artifacts

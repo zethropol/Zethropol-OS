@@ -1,7 +1,0 @@
-{
-  "schema": 1,
-  "purpose": "zethropol-aur-trust",
-  "manifest": {"keyring": "manifest.gpg", "keyring_sha256": "OWNER_APPROVED_PUBLIC_KEYRING_SHA256_REQUIRED", "signers": []},
-  "receipt": {"keyring": "receipt.gpg", "keyring_sha256": "OWNER_APPROVED_PUBLIC_KEYRING_SHA256_REQUIRED", "signers": []},
-  "archive": {"keyring": "archive.gpg", "keyring_sha256": "OWNER_APPROVED_PUBLIC_KEYRING_SHA256_REQUIRED", "signers": []}
-}

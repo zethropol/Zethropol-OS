@@ -1,9 +1,0 @@
-{
-  "schema": 2,
-  "purpose": "zethropol-manifest-signer",
-  "identity_model": "existing-key-owner",
-  "user": "zethropol-aur-release",
-  "uid": 949,
-  "gnupg_home": "/var/lib/zethropol-aur-release/gnupg",
-  "signer": null
-}

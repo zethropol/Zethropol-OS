@@ -208,7 +208,6 @@ The initial service model suggests the following execution candidates:
 - Performance Service: system-level service candidate
 - Power Service: system-level service candidate
 - Diagnostics Service: system-level service candidate
-- Update Service: privileged system service candidate
 - Recovery Service: privileged system service candidate
 - Configuration Service: controlled system service candidate with user-session interaction
 
