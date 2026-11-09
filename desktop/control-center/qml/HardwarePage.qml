@@ -2,11 +2,11 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
-ScrollView {
+ColumnLayout {
     id: page
     objectName: "hardwarePage"
     clip: true
-    contentWidth: availableWidth
+    spacing: 14
     property var state: HardwareBridge.state
     function number(value, digits, suffix) {
         return typeof value === "number" && isFinite(value) ? value.toFixed(digits) + suffix : "Unavailable"
@@ -67,29 +67,34 @@ ScrollView {
         result.push({title: "Hardware Changes", details: text(s.changes ? s.changes.message : undefined)})
         return result
     }
-    ColumnLayout {
-        width: page.availableWidth
-        spacing: 14
-        RowLayout {
-            Layout.fillWidth: true
-            Label { text: "Hardware"; font.pixelSize: 32; Layout.fillWidth: true }
-            Button {
-                objectName: "hardwareRefresh"
-                text: HardwareBridge.loading ? "Refreshing…" : "Refresh"
-                enabled: !HardwareBridge.loading
-                onClicked: HardwareBridge.refresh()
-            }
+    RowLayout {
+        Layout.fillWidth: true
+        Label { objectName: "hardwareTitle"; text: "Hardware"; font.pixelSize: 32; Layout.fillWidth: true }
+        Button {
+            objectName: "hardwareRefresh"
+            text: HardwareBridge.loading ? "Refreshing…" : "Refresh"
+            enabled: !HardwareBridge.loading
+            onClicked: HardwareBridge.refresh()
         }
-        Label {
-            objectName: "hardwareStatus"
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-            text: HardwareBridge.available ? "Detected hardware · Last refresh: " + HardwareBridge.lastUpdated
-                : HardwareBridge.loading ? "Reading hardware information…" : "Hardware information unavailable: " + HardwareBridge.error
-        }
+    }
+    Label {
+        objectName: "hardwareStatus"
+        Layout.fillWidth: true
+        wrapMode: Text.WordWrap
+        text: HardwareBridge.available ? "Detected hardware · Last refresh: " + HardwareBridge.lastUpdated
+            : HardwareBridge.loading ? "Reading hardware information…" : "Hardware information unavailable: " + HardwareBridge.error
+    }
+    ScrollView {
+        id: hardwareScroll
+        objectName: "hardwareScroll"
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+        Layout.minimumHeight: 0
+        clip: true
+        contentWidth: availableWidth
         GridLayout {
-            Layout.fillWidth: true
-            columns: page.availableWidth >= 760 ? 2 : 1
+            width: hardwareScroll.availableWidth
+            columns: hardwareScroll.availableWidth >= 760 ? 2 : 1
             columnSpacing: 12
             rowSpacing: 12
             Repeater {
@@ -100,10 +105,10 @@ ScrollView {
                     Layout.fillWidth: true
                     Layout.alignment: Qt.AlignTop
                     implicitHeight: cardContents.implicitHeight + 28
-                    color: page.palette.alternateBase
+                    color: hardwareScroll.palette.alternateBase
                     radius: 8
                     border.width: 1
-                    border.color: page.palette.mid
+                    border.color: hardwareScroll.palette.mid
                     ColumnLayout {
                         id: cardContents
                         anchors.left: parent.left

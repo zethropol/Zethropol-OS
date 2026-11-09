@@ -1,19 +1,24 @@
 pkgname=zethropol-hardware
 pkgver=0.1.0
-pkgrel=1
+pkgrel=2
 pkgdesc="Zethropol Hardware D-Bus service"
 url="https://github.com/zethropol/Zethropol-OS"
 arch=("x86_64")
 license=("MIT")
 depends=("glibc" "dbus" "systemd")
-makedepends=("cargo")
-_commit=3a8e40c
+makedepends=("cargo" "git")
+_commit=cd976ad79a930f3a28e0b6b6184f047e979ba5f0
 source=("git+https://github.com/zethropol/Zethropol-OS.git#commit=${_commit}")
 sha256sums=("SKIP")
 
 build() {
     cd "$srcdir/Zethropol-OS/services/hardware"
     cargo build --release --locked
+}
+
+check() {
+    cd "$srcdir/Zethropol-OS/services/hardware"
+    cargo test --locked
 }
 
 package() {

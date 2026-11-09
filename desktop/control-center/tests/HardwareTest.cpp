@@ -34,6 +34,15 @@ public slots:
     }
 };
 
+class PerformanceFixture : public QObject {
+    Q_OBJECT
+    Q_CLASSINFO("D-Bus Interface", "org.zethropol.Performance.v1")
+public slots:
+    QVariantMap GetState() {
+        return {{"success", true}, {"code", "ok"}, {"data", QVariantMap{{"cpu_usage_percent", 42.0}}}};
+    }
+};
+
 class HardwareTest : public QObject {
     Q_OBJECT
     QProcess service;
@@ -107,6 +116,25 @@ private slots:
         // The automatic poll must recover without a manual request.
         QTRY_VERIFY_WITH_TIMEOUT(client.available(), 12000);
         QCOMPARE(client.state()["cpu"].toMap()["model"].toString(), "Refreshed CPU");
+    }
+    void hardwareAndPerformanceUseStandardSystemBus() {
+        fixture.data = hybridData();
+        fixture.success = true;
+        registerFixture();
+        auto bus = QDBusConnection::systemBus();
+        const auto name = bus.baseService();
+        PerformanceFixture performance;
+        QVERIFY(bus.registerObject("/org/zethropol/Performance", &performance, QDBusConnection::ExportAllSlots));
+        QVERIFY(bus.registerService("org.zethropol.Performance"));
+        const auto cleanupPerformance = qScopeGuard([&] {
+            bus.unregisterService("org.zethropol.Performance");
+            bus.unregisterObject("/org/zethropol/Performance");
+        });
+        HardwareServiceClient client;
+        QTRY_VERIFY(client.available());
+        QCOMPARE(client.state()["cpu"].toMap()["model"].toString(), "Fixture CPU");
+        QTRY_COMPARE(client.performance()["cpu_usage_percent"].toDouble(), 42.0);
+        QCOMPARE(QDBusConnection::systemBus().baseService(), name);
     }
     void realServiceAndAllTabs() {
         startRealService();
@@ -226,6 +254,38 @@ private:
             QVERIFY(!texts.contains("NaN"));
             QVERIFY(!texts.contains("undefined"));
         }
+        // The page controls must stay inside the viewport when the cards are
+        // scrolled, including in a smaller window. Checking visible alone would
+        // miss items clipped by a Flickable ancestor.
+        auto fullyVisible = [window](QQuickItem *item) {
+            const auto bounds = item->mapRectToScene(item->boundingRect());
+            QRectF visible = bounds.intersected(QRectF(0, 0, window->width(), window->height()));
+            for (auto *parent = item->parentItem(); parent; parent = parent->parentItem())
+                if (parent->clip())
+                    visible = visible.intersected(parent->mapRectToScene(parent->boundingRect()));
+            return item->isVisible() && visible.width() >= bounds.width() - 0.5
+                && visible.height() >= bounds.height() - 0.5;
+        };
+        auto *scroll = window->findChild<QQuickItem *>("hardwareScroll");
+        QVERIFY(scroll);
+        auto *flickable = scroll->property("contentItem").value<QQuickItem *>();
+        QVERIFY(flickable);
+        const QSize originalSize = window->size();
+        for (const auto &size : {QSize(1280, 800), QSize(900, 600)}) {
+            window->resize(size);
+            QTest::qWait(50);
+            const qreal bottom = qMax(0.0, flickable->property("contentHeight").toDouble() - flickable->height());
+            QVERIFY(flickable->setProperty("contentY", bottom));
+            QTest::qWait(30);
+            for (const auto &name : {"hardwareTitle", "hardwareRefresh", "hardwareStatus"}) {
+                auto *control = window->findChild<QQuickItem *>(name);
+                QVERIFY(control);
+                QVERIFY2(fullyVisible(control), name);
+            }
+        }
+        window->resize(originalSize);
+        QVERIFY(flickable->setProperty("contentY", 0));
+        QTest::qWait(50);
         // Capture the same source page rendered in the development application.
         if (live) {
             const auto capture = window->grabWindow();

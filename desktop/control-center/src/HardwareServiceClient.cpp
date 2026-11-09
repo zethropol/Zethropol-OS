@@ -97,13 +97,23 @@ void HardwareServiceClient::refresh()
 {
     if (m_loading)
         return;
+    const auto connection = QDBusConnection::systemBus();
+    if (!connection.isConnected()) {
+        m_available = false;
+        m_state.clear();
+        m_error = connection.lastError().message();
+        if (m_error.isEmpty())
+            m_error = QStringLiteral("Hardware D-Bus connection is unavailable.");
+        emit stateChanged();
+        return;
+    }
     m_loading = true;
     emit stateChanged();
     const auto message = QDBusMessage::createMethodCall(
         QStringLiteral("org.zethropol.Hardware"), QStringLiteral("/org/zethropol/Hardware"),
         QStringLiteral("org.zethropol.Hardware.v1"), QStringLiteral("GetState"));
     auto *watcher = new QDBusPendingCallWatcher(
-        QDBusConnection::systemBus().asyncCall(message, 5000), this);
+        connection.asyncCall(message, 5000), this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, &HardwareServiceClient::readState);
 }
 
