@@ -42,6 +42,7 @@ qt_add_qml_module(control_center
     VERSION 1.0
     QML_FILES
         qml/Main.qml
+        qml/HardwarePage.qml
         qml/UpdateReport.qml
         qml/SystemState.qml
 )
@@ -80,4 +81,24 @@ if(BUILD_TESTING)
              COMMAND control_center_update_installer_test)
     set_tests_properties(control_center_update_installer_test PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+    qt_add_executable(control_center_hardware_test
+        tests/HardwareTest.cpp
+        ${CONTROL_CENTER_SRCS}
+        ${ZETHROPOL_DBUS_SRCS})
+    qt_add_resources(control_center_hardware_test "hardware_test_qml"
+        PREFIX "/Zethropol/ControlCenter"
+        FILES qml/Main.qml qml/SystemState.qml qml/HardwarePage.qml qml/UpdateReport.qml)
+    target_include_directories(control_center_hardware_test PRIVATE src)
+    target_link_libraries(control_center_hardware_test PRIVATE
+        Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::DBus Qt6::Test)
+    target_compile_definitions(control_center_hardware_test PRIVATE
+        CONTROL_CENTER_BINARY="$<TARGET_FILE:control_center>"
+        HARDWARE_BINARY="${CMAKE_CURRENT_SOURCE_DIR}/../../services/hardware/target/debug/hardware")
+    add_dependencies(control_center_hardware_test control_center)
+    add_test(NAME control_center_hardware_test
+        COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/tests/hardware-private-bus.sh
+            $<TARGET_FILE:control_center_hardware_test>)
+    set_tests_properties(control_center_hardware_test PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+        TIMEOUT 90)
 endif()

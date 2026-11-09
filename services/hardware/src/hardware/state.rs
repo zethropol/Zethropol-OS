@@ -1,11 +1,11 @@
 use crate::hardware::cpu::CpuInfo;
-use crate::hardware::memory::MemoryInfo;
+use crate::hardware::diagnostics::StorageDiagnostics;
 use crate::hardware::gpu::GpuInfo;
-use crate::hardware::storage::StorageInfo;
+use crate::hardware::intelligence::HardwareAssessment;
+use crate::hardware::memory::MemoryInfo;
 use crate::hardware::network::NetworkInfo;
 use crate::hardware::power::PowerInfo;
-use crate::hardware::intelligence::HardwareAssessment;
-use crate::hardware::diagnostics::StorageDiagnostics;
+use crate::hardware::storage::StorageInfo;
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -18,14 +18,14 @@ pub struct NormalizedCpuState {
     pub frequency_max_ghz: Option<f64>,
     pub governor: Option<String>,
     pub temperature_c: Option<f64>,
-    pub usage_percent: f64,
+    pub usage_percent: Option<f64>,
 }
 
 #[derive(Serialize)]
 pub struct NormalizedMemoryState {
-    pub total_gb: f64,
-    pub used_gb: f64,
-    pub available_gb: f64,
+    pub total_gb: Option<f64>,
+    pub used_gb: Option<f64>,
+    pub available_gb: Option<f64>,
 }
 
 #[derive(Serialize)]
@@ -66,9 +66,9 @@ pub struct NormalizedCapabilitiesState {
     pub cpu_frequency_max_ghz: Option<f64>,
     pub cpu_governor: Option<String>,
     pub thread_capacity: String,
-    pub gpu_acceleration: bool,
+    pub gpu_acceleration: Option<bool>,
     pub gpu_vram_gb: Option<f64>,
-    pub storage_power_management: bool,
+    pub storage_power_management: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -80,8 +80,10 @@ pub struct NormalizedFirmwareState {
 
 #[derive(Serialize)]
 pub struct NormalizedNetworkState {
-    pub download_mbps: f64,
-    pub upload_mbps: f64,
+    pub interface: Option<String>,
+    pub operstate: Option<String>,
+    pub download_mbps: Option<f64>,
+    pub upload_mbps: Option<f64>,
     pub ping_ms: Option<f64>,
 }
 
@@ -151,6 +153,8 @@ pub struct NormalizedChangesState {
 pub struct NormalizedHardwareState {
     pub cpu: NormalizedCpuState,
     pub gpu: NormalizedGpuState,
+    pub gpus: Vec<NormalizedGpuState>,
+    pub motherboard: crate::hardware::system::MotherboardInfo,
     pub normalized_storage: NormalizedStorageState,
     pub memory: NormalizedMemoryState,
     pub storage: String,
@@ -209,45 +213,29 @@ impl NormalizedHardwareState {
             update_available: assessment
                 .firmware_status
                 .contains("firmware update available"),
-            capsule_updates_available: !assessment
+            capsule_updates_available: assessment
                 .firmware_status
-                .contains("UEFI capsule updates unavailable or disabled"),
+                .contains("UEFI capsule updates available"),
         };
 
         let normalized_network = NormalizedNetworkState {
+            interface: network.interface.clone(),
+            operstate: network.operstate.clone(),
             download_mbps: network.download_mbps,
             upload_mbps: network.upload_mbps,
             ping_ms: network.ping_ms,
         };
 
-        let normalized_gpu = NormalizedGpuState {
-            detected: gpu.is_some(),
-            card: gpu.map(|value| value.card.clone()),
-            vendor: gpu.map(|value| value.vendor.clone()),
-            device: gpu.map(|value| value.device.clone()),
-            subsystem_vendor: gpu.map(|value| value.subsystem_vendor.clone()),
-            subsystem_device: gpu.map(|value| value.subsystem_device.clone()),
-            model: gpu.map(|value| value.model.clone()),
-            family: gpu.map(|value| value.family.clone()),
-            driver: gpu.map(|value| value.driver.clone()),
-            capability_status: assessment.gpu_capability_status.clone(),
-            usage_percent: gpu.and_then(|value| value.usage_percent),
-            memory_usage_percent: gpu.and_then(|value| value.memory_usage_percent),
-            vram_used_gb: gpu.and_then(|value| value.vram_used_gb),
-            vram_total_gb: gpu.and_then(|value| value.vram_total_gb),
-            temperature_c: gpu.and_then(|value| value.temperature_c),
-            core_clock_mhz: gpu.and_then(|value| value.core_clock_mhz),
-            memory_clock_mhz: gpu.and_then(|value| value.memory_clock_mhz),
-        };
+        let normalized_gpu = NormalizedGpuState::from_gpu(gpu, &assessment.gpu_capability_status);
 
         let normalized_storage = NormalizedStorageState {
             detected: storage.is_some(),
             device_path: storage.map(|value| value.device_path.clone()),
             model: storage.map(|value| value.model.clone()),
-            firmware: storage.map(|value| value.firmware.clone()),
+            firmware: storage.and_then(|value| value.firmware.clone()),
             capacity_gb: storage.map(|value| value.capacity_gb),
-            used_gb: storage.map(|value| value.used_gb),
-            available_gb: storage.map(|value| value.available_gb),
+            used_gb: storage.and_then(|value| value.used_gb),
+            available_gb: storage.and_then(|value| value.available_gb),
             temperature_c: storage.and_then(|value| value.temperature_c),
         };
 
@@ -263,9 +251,9 @@ impl NormalizedHardwareState {
             } else {
                 "standard".to_string()
             },
-            gpu_acceleration: gpu.is_some(),
+            gpu_acceleration: None,
             gpu_vram_gb: gpu.and_then(|value| value.vram_total_gb),
-            storage_power_management: storage.is_some(),
+            storage_power_management: None,
         };
 
         let normalized_diagnostics = NormalizedDiagnosticsState {
@@ -325,6 +313,8 @@ impl NormalizedHardwareState {
         Self {
             cpu: normalized_cpu,
             gpu: normalized_gpu,
+            gpus: Vec::new(),
+            motherboard: crate::hardware::system::read_motherboard(),
             memory: normalized_memory,
             normalized_storage,
             storage: assessment.storage_status.clone(),
@@ -336,6 +326,30 @@ impl NormalizedHardwareState {
             changes: normalized_changes,
             power: normalized_power,
             system: normalized_system,
+        }
+    }
+}
+
+impl NormalizedGpuState {
+    pub fn from_gpu(gpu: Option<&GpuInfo>, capability_status: &str) -> Self {
+        Self {
+            detected: gpu.is_some(),
+            card: gpu.map(|value| value.card.clone()),
+            vendor: gpu.map(|value| value.vendor.clone()),
+            device: gpu.map(|value| value.device.clone()),
+            subsystem_vendor: gpu.map(|value| value.subsystem_vendor.clone()),
+            subsystem_device: gpu.map(|value| value.subsystem_device.clone()),
+            model: gpu.map(|value| value.model.clone()),
+            family: gpu.map(|value| value.family.clone()),
+            driver: gpu.map(|value| value.driver.clone()),
+            capability_status: capability_status.to_string(),
+            usage_percent: gpu.and_then(|value| value.usage_percent),
+            memory_usage_percent: gpu.and_then(|value| value.memory_usage_percent),
+            vram_used_gb: gpu.and_then(|value| value.vram_used_gb),
+            vram_total_gb: gpu.and_then(|value| value.vram_total_gb),
+            temperature_c: gpu.and_then(|value| value.temperature_c),
+            core_clock_mhz: gpu.and_then(|value| value.core_clock_mhz),
+            memory_clock_mhz: gpu.and_then(|value| value.memory_clock_mhz),
         }
     }
 }

@@ -55,22 +55,20 @@ pub fn assess(
     let driver_status = assess_driver(gpu);
     let firmware_status = assess_firmware();
 
-    let memory_usage = if memory.total_gb > 0.0 {
-        memory.used_gb / memory.total_gb * 100.0
-    } else {
-        0.0
-    };
-
-    let memory_status = if memory_usage >= 95.0 {
-        "warning: critical memory usage".to_string()
-    } else if memory_usage >= 85.0 {
-        "attention: high memory usage".to_string()
-    } else {
-        format!("ok: memory usage {:.1}%", memory_usage)
+    let memory_status = match memory
+        .used_gb
+        .zip(memory.total_gb)
+        .filter(|(_, total)| *total > 0.0)
+        .map(|(used, total)| used / total * 100.0)
+    {
+        Some(usage) if usage >= 95.0 => "warning: critical memory usage".to_string(),
+        Some(usage) if usage >= 85.0 => "attention: high memory usage".to_string(),
+        Some(usage) => format!("ok: memory usage {usage:.1}%"),
+        None => "unknown: memory usage unavailable".to_string(),
     };
 
     let storage_status = match storage {
-        Some(storage) if storage.firmware.trim().is_empty() => {
+        Some(storage) if storage.firmware.is_none() => {
             "attention: storage firmware unavailable".to_string()
         }
         Some(storage) if storage.temperature_c.is_some_and(|temp| temp >= 70.0) => {
@@ -83,23 +81,14 @@ pub fn assess(
     let performance_power_status = assess_performance_power(cpu, gpu, storage);
     let recommendations = build_recommendations(cpu, &driver_status, &firmware_status, storage);
 
-    let warning_count = [
-        cpu_status.starts_with("warning"),
-        gpu_status.starts_with("warning"),
-        driver_status.starts_with("warning"),
-        firmware_status.starts_with("warning"),
-        memory_status.starts_with("warning"),
-        storage_status.starts_with("warning"),
-    ]
-    .into_iter()
-    .filter(|value| *value)
-    .count();
-
-    let overall_status = if warning_count > 0 {
-        "WARNING".to_string()
-    } else {
-        "OK".to_string()
-    };
+    let overall_status = aggregate_health(&[
+        &cpu_status,
+        &gpu_status,
+        &driver_status,
+        &memory_status,
+        &storage_status,
+    ])
+    .to_string();
 
     HardwareAssessment {
         cpu_status,
@@ -115,20 +104,43 @@ pub fn assess(
     }
 }
 
-fn build_recommendations(cpu: &CpuInfo, driver_status: &str, firmware_status: &str, _storage: Option<&StorageInfo>) -> Vec<String> {
+fn aggregate_health(statuses: &[&str]) -> &'static str {
+    if statuses.iter().any(|s| s.starts_with("warning")) {
+        "WARNING"
+    } else if statuses.iter().any(|s| s.starts_with("unknown")) {
+        "UNKNOWN"
+    } else if statuses.iter().any(|s| s.starts_with("attention")) {
+        "ATTENTION"
+    } else {
+        "OK"
+    }
+}
+
+fn build_recommendations(
+    cpu: &CpuInfo,
+    driver_status: &str,
+    firmware_status: &str,
+    _storage: Option<&StorageInfo>,
+) -> Vec<String> {
     let mut recommendations = Vec::new();
 
     if driver_status.starts_with("warning") {
-        recommendations.push("Review the stale GPU driver profile before making driver changes.".to_string());
+        recommendations
+            .push("Review the stale GPU driver profile before making driver changes.".to_string());
     }
 
     if firmware_status.contains("firmware update available") {
-        recommendations.push("Review the available SSD firmware update with fwupdmgr before applying it.".to_string());
+        recommendations.push(
+            "Review the available SSD firmware update with fwupdmgr before applying it."
+                .to_string(),
+        );
     }
 
     if let Some(temp) = cpu.temperature_c {
         if temp >= 90.0 {
-            recommendations.push("Inspect CPU cooling and airflow before sustained high-load use.".to_string());
+            recommendations.push(
+                "Inspect CPU cooling and airflow before sustained high-load use.".to_string(),
+            );
         } else if temp >= 80.0 {
             recommendations.push("Monitor CPU cooling under sustained load.".to_string());
         }
@@ -160,48 +172,17 @@ fn assess_firmware() -> String {
         Err(_) => return "unknown: fwupd JSON unavailable".to_string(),
     };
 
-    let updatable: Vec<String> = root
+    let updatable = root
         .devices
         .iter()
         .filter(|device| device.flags.iter().any(|flag| flag == "updatable"))
-        .map(|device| {
-            device
-                .name
-                .clone()
-                .unwrap_or_else(|| "unknown device".to_string())
-                .trim_start_matches("-")
-                .trim()
-                .to_string()
-        })
-        .collect();
-
-    let capsule_warning = Command::new("fwupdmgr")
-        .arg("get-devices")
-        .output()
-        .map(|output| {
-            String::from_utf8_lossy(&output.stderr)
-                .contains("UEFI capsule updates not available or enabled")
-        })
-        .unwrap_or(false);
-
-    let mut statuses = Vec::new();
-
-    if !updatable.is_empty() {
-        statuses.push(format!(
-            "firmware update available for {}",
-            updatable.join(", ")
-        ));
-    }
-
-    if capsule_warning {
-        statuses.push("UEFI capsule updates unavailable or disabled".to_string());
-    }
-
-    if statuses.is_empty() {
-        "ok: no firmware updates available".to_string()
-    } else {
-        format!("attention: {}", statuses.join("; "))
-    }
+        .map(|device| device.name.as_deref().unwrap_or("unknown device"))
+        .collect::<Vec<_>>();
+    // "updatable" describes a capability, not the presence of a newer release.
+    format!(
+        "unknown: firmware updates not checked; {} updatable devices detected",
+        updatable.len()
+    )
 }
 
 fn assess_driver(gpu: Option<&GpuInfo>) -> String {
@@ -210,40 +191,30 @@ fn assess_driver(gpu: Option<&GpuInfo>) -> String {
         None => return "warning: GPU unavailable".to_string(),
     };
 
-    let expected_profile = match gpu.vendor.to_lowercase().as_str() {
-        "0x1002" => "amd",
-        "0x8086" => "intel",
-        "0x10de" => "nvidia",
-        _ => return format!("unknown: unsupported GPU vendor {}", gpu.vendor),
+    assess_active_driver(&gpu.vendor, &gpu.driver)
+}
+
+fn assess_active_driver(vendor: &str, driver: &str) -> String {
+    let vendor = vendor.trim().trim_start_matches("0x").to_ascii_lowercase();
+    let driver = driver.trim().to_ascii_lowercase();
+
+    if driver.is_empty() {
+        return "unknown: GPU driver unavailable".to_string();
+    }
+
+    let (vendor_name, expected_drivers): (&str, &[&str]) = match vendor.as_str() {
+        "1002" => ("AMD", &["amdgpu", "radeon"]),
+        "8086" => ("Intel", &["i915", "xe"]),
+        "10de" => ("NVIDIA", &["nvidia", "nouveau"]),
+        _ => return format!("unknown: unsupported GPU vendor {}", vendor),
     };
 
-    let output = Command::new("chwd").arg("--list-installed").output();
-    let installed = match output {
-        Ok(output) if output.status.success() => {
-            String::from_utf8_lossy(&output.stdout).to_lowercase()
-        }
-        _ => {
-            return format!(
-                "unknown: chwd profile state unavailable; active driver {}",
-                gpu.driver
-            );
-        }
-    };
-
-    if installed.contains(expected_profile) {
-        format!(
-            "ok: active driver {} matches chwd profile {}",
-            gpu.driver, expected_profile
-        )
-    } else if installed.contains("nouveau") && expected_profile == "amd" {
-        format!(
-            "warning: active driver {} is AMD but chwd has stale nouveau profile",
-            gpu.driver
-        )
+    if expected_drivers.contains(&driver.as_str()) {
+        format!("ok: active driver {} matches {} GPU", driver, vendor_name)
     } else {
         format!(
-            "attention: active driver {} differs from chwd profile {}",
-            gpu.driver, expected_profile
+            "warning: active driver {} is unexpected for {} GPU",
+            driver, vendor_name
         )
     }
 }
@@ -253,24 +224,7 @@ fn assess_gpu_capabilities(gpu: Option<&GpuInfo>) -> String {
         return "unknown: GPU unavailable".to_string();
     }
 
-    let vulkan = Command::new("vulkaninfo")
-        .args(["--summary"])
-        .output()
-        .map(|output| output.status.success())
-        .unwrap_or(false);
-
-    let opengl = Command::new("glxinfo")
-        .args(["-B"])
-        .output()
-        .map(|output| output.status.success())
-        .unwrap_or(false);
-
-    match (vulkan, opengl) {
-        (true, true) => "ok: Vulkan and OpenGL available".to_string(),
-        (true, false) => "attention: Vulkan available, OpenGL unavailable".to_string(),
-        (false, true) => "attention: OpenGL available, Vulkan unavailable".to_string(),
-        (false, false) => "warning: Vulkan and OpenGL unavailable".to_string(),
-    }
+    "unknown: per-device graphics runtime unverified".to_string()
 }
 
 pub fn hardware_fingerprint(
@@ -293,7 +247,10 @@ pub fn hardware_fingerprint(
         cpu.cores,
         cpu.threads,
         gpu_identity,
-        memory.total_gb,
+        memory
+            .total_gb
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "unknown".to_string()),
         storage_identity
     );
 
@@ -301,8 +258,47 @@ pub fn hardware_fingerprint(
     format!("{:x}", digest)
 }
 
+pub fn inventory_fingerprint(
+    cpu: &CpuInfo,
+    gpus: &[GpuInfo],
+    memory: &MemoryInfo,
+    storage: Option<&StorageInfo>,
+) -> String {
+    let primary = hardware_fingerprint(cpu, gpus.first(), memory, storage);
+    if gpus.len() <= 1 {
+        return primary;
+    }
+    let mut identities: Vec<_> = gpus
+        .iter()
+        .map(|gpu| {
+            format!(
+                "{}:{}:{}:{}:{}",
+                gpu.card, gpu.vendor, gpu.device, gpu.subsystem_vendor, gpu.subsystem_device
+            )
+        })
+        .collect();
+    identities.sort();
+    format!(
+        "{:x}",
+        Sha256::digest(format!("{primary}|gpus:{}", identities.join("|")))
+    )
+}
+
 pub fn assess_hardware_change(current_fingerprint: &str) -> String {
-    let path = std::path::Path::new("/home/Zevor/.local/state/zethropol/hardware-fingerprint");
+    let path = std::env::var_os("STATE_DIRECTORY")
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("XDG_STATE_HOME")
+                .map(|p| std::path::PathBuf::from(p).join("zethropol"))
+        })
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .map(|p| std::path::PathBuf::from(p).join(".local/state/zethropol"))
+        })
+        .map(|p| p.join("hardware-fingerprint"));
+    let Some(path) = path else {
+        return "unknown: no hardware baseline".to_string();
+    };
 
     let previous = match std::fs::read_to_string(path) {
         Ok(value) => value.trim().to_string(),
@@ -316,7 +312,11 @@ pub fn assess_hardware_change(current_fingerprint: &str) -> String {
     }
 }
 
-fn assess_performance_power(cpu: &CpuInfo, gpu: Option<&GpuInfo>, storage: Option<&StorageInfo>) -> String {
+fn assess_performance_power(
+    cpu: &CpuInfo,
+    gpu: Option<&GpuInfo>,
+    storage: Option<&StorageInfo>,
+) -> String {
     let mut capabilities = Vec::new();
 
     match cpu.frequency_ghz {
@@ -339,7 +339,7 @@ fn assess_performance_power(cpu: &CpuInfo, gpu: Option<&GpuInfo>, storage: Optio
     }
 
     if gpu.is_some() {
-        capabilities.push("GPU acceleration available".to_string());
+        capabilities.push("GPU detected; acceleration unverified".to_string());
     }
 
     if let Some(gpu) = gpu {
@@ -351,12 +351,54 @@ fn assess_performance_power(cpu: &CpuInfo, gpu: Option<&GpuInfo>, storage: Optio
     }
 
     if storage.is_some() {
-        capabilities.push("NVMe storage power management available".to_string());
+        capabilities.push("storage detected; power management unverified".to_string());
     }
 
     if capabilities.is_empty() {
         "unknown: performance and power capabilities unavailable".to_string()
     } else {
         format!("ok: {}", capabilities.join("; "))
+    }
+}
+
+#[cfg(test)]
+mod driver_assessment_tests {
+    use super::assess_active_driver;
+
+    #[test]
+    fn unknown_health_is_not_reported_as_ok() {
+        assert_eq!(
+            super::aggregate_health(&["ok: memory", "unknown: CPU sensor"]),
+            "UNKNOWN"
+        );
+        assert_eq!(
+            super::aggregate_health(&["unknown: CPU sensor", "warning: storage"]),
+            "WARNING"
+        );
+        assert!(assess_active_driver("1002", "").starts_with("unknown:"));
+    }
+    #[test]
+    fn amd_accepts_amdgpu_with_normalized_vendor_id() {
+        assert!(assess_active_driver("0x1002", "amdgpu").starts_with("ok:"));
+    }
+
+    #[test]
+    fn amd_accepts_legacy_radeon_driver() {
+        assert!(assess_active_driver("1002", "radeon").starts_with("ok:"));
+    }
+
+    #[test]
+    fn nvidia_accepts_nouveau_driver() {
+        assert!(assess_active_driver("10de", "nouveau").starts_with("ok:"));
+    }
+
+    #[test]
+    fn intel_accepts_xe_driver() {
+        assert!(assess_active_driver("8086", "xe").starts_with("ok:"));
+    }
+
+    #[test]
+    fn amd_rejects_nouveau_as_active_driver() {
+        assert!(assess_active_driver("1002", "nouveau").starts_with("warning:"));
     }
 }

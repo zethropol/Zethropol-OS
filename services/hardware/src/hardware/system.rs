@@ -18,16 +18,32 @@ pub struct SystemInfo {
 pub fn read() -> SystemInfo {
     let os_release = read_os_release();
 
-    let os_name = os_release.get("NAME").cloned().unwrap_or_else(|| "Unknown".to_string());
-    let os_version = os_release.get("VERSION_ID").cloned().unwrap_or_else(|| "Unknown".to_string());
-    let base_system = os_release.get("ID").cloned().unwrap_or_else(|| "Unknown".to_string());
+    let os_name = os_release
+        .get("NAME")
+        .cloned()
+        .unwrap_or_else(|| "Unknown".to_string());
+    let os_version = os_release
+        .get("VERSION_ID")
+        .cloned()
+        .unwrap_or_else(|| "Unknown".to_string());
+    let base_system = os_release
+        .get("ID")
+        .cloned()
+        .unwrap_or_else(|| "Unknown".to_string());
     let architecture = command_output("uname", &["-m"]).unwrap_or_else(|| "Unknown".to_string());
     let kernel_version = command_output("uname", &["-r"]).unwrap_or_else(|| "Unknown".to_string());
-    let desktop_name = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_else(|_| "Unknown".to_string());
-    let desktop_version = std::env::var("KDE_SESSION_VERSION").unwrap_or_else(|_| "Unknown".to_string());
+    let desktop_name =
+        std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_else(|_| "Unknown".to_string());
+    let desktop_version =
+        std::env::var("KDE_SESSION_VERSION").unwrap_or_else(|_| "Unknown".to_string());
     let session_type = std::env::var("XDG_SESSION_TYPE").unwrap_or_else(|_| "Unknown".to_string());
     let hostname = command_output("hostname", &[]).unwrap_or_else(|| "Unknown".to_string());
-    let uptime_seconds = fs::read_to_string("/proc/uptime").ok().and_then(|value| value.split_whitespace().next().and_then(|value| value.parse::<f64>().ok()));
+    let uptime_seconds = fs::read_to_string("/proc/uptime").ok().and_then(|value| {
+        value
+            .split_whitespace()
+            .next()
+            .and_then(|value| value.parse::<f64>().ok())
+    });
 
     SystemInfo {
         os_name,
@@ -51,8 +67,10 @@ fn read_os_release() -> HashMap<String, String> {
     };
 
     for line in content.lines() {
-        let Some((key, value)) = line.split_once("=") else { continue; };
-        values.insert(key.to_string(), value.trim().trim_matches('"' ).to_string());
+        let Some((key, value)) = line.split_once("=") else {
+            continue;
+        };
+        values.insert(key.to_string(), value.trim().trim_matches('"').to_string());
     }
 
     values
@@ -60,7 +78,42 @@ fn read_os_release() -> HashMap<String, String> {
 
 fn command_output(program: &str, args: &[&str]) -> Option<String> {
     let output = Command::new(program).args(args).output().ok()?;
-    if !output.status.success() { return None; }
+    if !output.status.success() {
+        return None;
+    }
     let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
     if value.is_empty() { None } else { Some(value) }
+}
+
+#[derive(serde::Serialize)]
+pub struct MotherboardInfo {
+    pub vendor: Option<String>,
+    pub model: Option<String>,
+    pub version: Option<String>,
+    pub bios_vendor: Option<String>,
+    pub bios_version: Option<String>,
+    pub bios_date: Option<String>,
+}
+
+pub fn read_motherboard() -> MotherboardInfo {
+    let field = |name| {
+        fs::read_to_string(std::path::Path::new("/sys/class/dmi/id").join(name))
+            .ok()
+            .map(|v| v.trim().to_string())
+            .filter(|v| {
+                !v.is_empty()
+                    && !matches!(
+                        v.to_ascii_lowercase().as_str(),
+                        "to be filled by o.e.m." | "default string" | "not specified" | "none"
+                    )
+            })
+    };
+    MotherboardInfo {
+        vendor: field("board_vendor"),
+        model: field("board_name"),
+        version: field("board_version"),
+        bios_vendor: field("bios_vendor"),
+        bios_version: field("bios_version"),
+        bios_date: field("bios_date"),
+    }
 }

@@ -11,11 +11,11 @@ pub struct CpuInfo {
     pub frequency_max_ghz: Option<f64>,
     pub governor: Option<String>,
     pub temperature_c: Option<f64>,
-    pub usage_percent: f64,
+    pub usage_percent: Option<f64>,
 }
 
 pub fn read() -> CpuInfo {
-    let cpuinfo = fs::read_to_string("/proc/cpuinfo").expect("Failed to read /proc/cpuinfo");
+    let cpuinfo = fs::read_to_string("/proc/cpuinfo").unwrap_or_default();
 
     let model = cpuinfo
         .lines()
@@ -29,27 +29,24 @@ pub fn read() -> CpuInfo {
         .filter(|line| line.starts_with("processor"))
         .count();
 
-    let cores = cpuinfo
-        .lines()
-        .find(|line| line.starts_with("cpu cores"))
-        .and_then(|line| line.split_once(":"))
-        .and_then(|(_, value)| value.trim().parse::<usize>().ok())
-        .unwrap_or(0);
+    let cores = physical_cores(&cpuinfo);
 
     let frequency_ghz = fs::read_to_string("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq")
         .ok()
         .and_then(|value| value.trim().parse::<u64>().ok())
         .map(|khz| khz as f64 / 1_000_000.0);
 
-    let frequency_min_ghz = fs::read_to_string("/sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq")
-        .ok()
-        .and_then(|value| value.trim().parse::<u64>().ok())
-        .map(|khz| khz as f64 / 1_000_000.0);
+    let frequency_min_ghz =
+        fs::read_to_string("/sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq")
+            .ok()
+            .and_then(|value| value.trim().parse::<u64>().ok())
+            .map(|khz| khz as f64 / 1_000_000.0);
 
-    let frequency_max_ghz = fs::read_to_string("/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq")
-        .ok()
-        .and_then(|value| value.trim().parse::<u64>().ok())
-        .map(|khz| khz as f64 / 1_000_000.0);
+    let frequency_max_ghz =
+        fs::read_to_string("/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq")
+            .ok()
+            .and_then(|value| value.trim().parse::<u64>().ok())
+            .map(|khz| khz as f64 / 1_000_000.0);
 
     let governor = fs::read_to_string("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor")
         .ok()
@@ -72,22 +69,56 @@ pub fn read() -> CpuInfo {
     }
 }
 
-fn read_temperature() -> Option<f64> {
-    let entries = fs::read_dir("/sys/class/hwmon").ok()?;
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let name = fs::read_to_string(path.join("name")).ok()?;
-        if name.trim() == "k10temp" {
-            return fs::read_to_string(path.join("temp1_input"))
-                .ok()
-                .and_then(|value| value.trim().parse::<f64>().ok())
-                .map(|millidegrees| millidegrees / 1000.0);
+fn physical_cores(cpuinfo: &str) -> usize {
+    let mut cores = std::collections::HashSet::new();
+    for block in cpuinfo.split("\n\n") {
+        let field = |name| {
+            block
+                .lines()
+                .filter_map(|l| l.split_once(':'))
+                .find(|(key, _)| key.trim() == name)
+                .map(|(_, value)| value.trim())
+        };
+        if let (Some(socket), Some(core)) = (field("physical id"), field("core id")) {
+            cores.insert((socket, core));
         }
     }
-    None
+    cores.len()
 }
 
-fn read_usage_percent() -> f64 {
+fn read_temperature() -> Option<f64> {
+    temperature_at(std::path::Path::new("/sys/class/hwmon"))
+}
+
+fn temperature_at(root: &std::path::Path) -> Option<f64> {
+    let mut temperatures = Vec::new();
+    for entry in fs::read_dir(root).ok()?.flatten() {
+        let path = entry.path();
+        let name = fs::read_to_string(path.join("name")).unwrap_or_default();
+        if !matches!(
+            name.trim(),
+            "k10temp" | "coretemp" | "zenpower" | "cpu_thermal"
+        ) {
+            continue;
+        }
+        for sensor in fs::read_dir(&path).into_iter().flatten().flatten() {
+            let name = sensor.file_name().to_string_lossy().into_owned();
+            if !name.starts_with("temp") || !name.ends_with("_input") {
+                continue;
+            }
+            if let Some(value) = fs::read_to_string(sensor.path())
+                .ok()
+                .and_then(|text| text.trim().parse::<f64>().ok())
+                .filter(|v| v.is_finite() && (-100_000.0..=250_000.0).contains(v))
+            {
+                temperatures.push(value / 1000.0);
+            }
+        }
+    }
+    temperatures.into_iter().reduce(f64::max)
+}
+
+fn read_usage_percent() -> Option<f64> {
     let first = read_cpu_times();
     thread::sleep(Duration::from_millis(100));
     let second = read_cpu_times();
@@ -98,12 +129,15 @@ fn read_usage_percent() -> f64 {
             let idle_delta = idle2.saturating_sub(idle1);
 
             if total_delta == 0 {
-                return 0.0;
+                return None;
             }
 
-            ((total_delta - idle_delta) as f64 / total_delta as f64 * 100.0).clamp(0.0, 100.0)
+            Some(
+                (total_delta.saturating_sub(idle_delta) as f64 / total_delta as f64 * 100.0)
+                    .clamp(0.0, 100.0),
+            )
         }
-        _ => 0.0,
+        _ => None,
     }
 }
 
@@ -121,6 +155,29 @@ fn read_cpu_times() -> Option<(u64, u64)> {
     }
 
     let idle = values[3].saturating_add(*values.get(4).unwrap_or(&0));
-    let total = values.iter().sum();
+    // guest and guest_nice are already included in user/nice.
+    let total = values.iter().take(8).sum();
     Some((idle, total))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn missing_hwmon_name_does_not_hide_intel_cpu_sensor() {
+        let f = crate::hardware::test_support::Fixture::new();
+        f.write("hwmon0/temp1_input", "1000");
+        f.write("hwmon1/name", "coretemp");
+        f.write("hwmon1/temp1_input", "NaN");
+        f.write("hwmon1/temp2_input", "47000");
+        f.write("hwmon2/name", "nvme");
+        f.write("hwmon2/temp1_input", "99000");
+        assert_eq!(temperature_at(&f.0), Some(47.0));
+    }
+    #[test]
+    fn cores_count_socket_and_core_pairs() {
+        let data = "physical id : 0\ncore id : 0\n\nphysical id : 0\ncore id : 0\n\nphysical id : 1\ncore id : 0\n\nphysical id : 1\ncore id : 1\n";
+        assert_eq!(physical_cores(data), 3);
+        assert_eq!(physical_cores("processor : 0"), 0);
+    }
 }

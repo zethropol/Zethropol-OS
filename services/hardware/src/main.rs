@@ -1,15 +1,15 @@
-mod hardware;
 mod dbus;
+mod hardware;
 use hardware::network::NetworkInfo;
 use hardware::power::PowerInfo;
 
 use hardware::cpu::CpuInfo;
+use hardware::diagnostics::assess_storage;
 use hardware::gpu::GpuInfo;
 use hardware::intelligence::{assess, assess_hardware_change, hardware_fingerprint};
-use hardware::diagnostics::assess_storage;
 use hardware::memory::MemoryInfo;
-use hardware::storage::StorageInfo;
 use hardware::state::NormalizedHardwareState;
+use hardware::storage::StorageInfo;
 use std::io::{self, Write};
 
 struct HardwareInfo {
@@ -57,7 +57,7 @@ fn main() {
     println!("CPU: {}", hardware.cpu.model);
     println!("Cores: {}", hardware.cpu.cores);
     println!("Threads: {}", hardware.cpu.threads);
-    println!("CPU Usage: {:.1}%", hardware.cpu.usage_percent);
+    println!("CPU Usage: {}%", measurement(hardware.cpu.usage_percent, 1));
 
     match hardware.cpu.temperature_c {
         Some(value) => println!("CPU Temperature: {value:.1} °C"),
@@ -114,10 +114,16 @@ fn main() {
     match hardware.storage {
         Some(storage) => {
             println!("Storage: {}", storage.model);
-            println!("Storage Firmware: {}", storage.firmware);
+            println!(
+                "Storage Firmware: {}",
+                storage.firmware.as_deref().unwrap_or("Unavailable")
+            );
             println!("Storage Capacity: {:.0} GB", storage.capacity_gb);
-            println!("Storage Used: {:.2} GB", storage.used_gb);
-            println!("Storage Available: {:.2} GB", storage.available_gb);
+            println!("Storage Used: {} GB", measurement(storage.used_gb, 2));
+            println!(
+                "Storage Available: {} GB",
+                measurement(storage.available_gb, 2)
+            );
 
             match storage.temperature_c {
                 Some(value) => println!("Storage Temperature: {value:.1} °C"),
@@ -128,10 +134,13 @@ fn main() {
     }
 
     println!(
-        "Network Download: {:.2} MB/s",
-        hardware.network.download_mbps
+        "Network Download: {} Mbps",
+        measurement(hardware.network.download_mbps, 2)
     );
-    println!("Network Upload: {:.2} MB/s", hardware.network.upload_mbps);
+    println!(
+        "Network Upload: {} Mbps",
+        measurement(hardware.network.upload_mbps, 2)
+    );
     match hardware.network.ping_ms {
         Some(value) => println!("Network Ping: {value:.1} ms"),
         None => println!("Network Ping: Unavailable"),
@@ -179,20 +188,87 @@ fn main() {
         println!("Zethropol Hardware Intelligence");
         println!("Hardware Fingerprint: {}", fingerprint);
         println!("Hardware Change: {}", hardware_change_status);
-        println!("Normalized CPU: model={}, cores={}, threads={}, frequency={:?} GHz, range={:?}-{:?} GHz, governor={:?}, temperature={:?} °C, usage={:.1}%", normalized_state.cpu.model, normalized_state.cpu.cores, normalized_state.cpu.threads, normalized_state.cpu.frequency_ghz, normalized_state.cpu.frequency_min_ghz, normalized_state.cpu.frequency_max_ghz, normalized_state.cpu.governor, normalized_state.cpu.temperature_c, normalized_state.cpu.usage_percent);
-        println!("Normalized GPU: detected={}, card={:?}, vendor={:?}, device={:?}, driver={:?}, capability={}", normalized_state.gpu.detected, normalized_state.gpu.card, normalized_state.gpu.vendor, normalized_state.gpu.device, normalized_state.gpu.driver, normalized_state.gpu.capability_status);
-        println!("Normalized Storage: detected={}, device={:?}, model={:?}, firmware={:?}, capacity={:?} GB, used={:?} GB, available={:?} GB, temperature={:?} °C", normalized_state.normalized_storage.detected, normalized_state.normalized_storage.device_path, normalized_state.normalized_storage.model, normalized_state.normalized_storage.firmware, normalized_state.normalized_storage.capacity_gb, normalized_state.normalized_storage.used_gb, normalized_state.normalized_storage.available_gb, normalized_state.normalized_storage.temperature_c);
-        println!("Normalized Memory: total={:.2} GB, used={:.2} GB, available={:.2} GB", normalized_state.memory.total_gb, normalized_state.memory.used_gb, normalized_state.memory.available_gb);
+        println!(
+            "Normalized CPU: model={}, cores={}, threads={}, frequency={:?} GHz, range={:?}-{:?} GHz, governor={:?}, temperature={:?} °C, usage={:?}%",
+            normalized_state.cpu.model,
+            normalized_state.cpu.cores,
+            normalized_state.cpu.threads,
+            normalized_state.cpu.frequency_ghz,
+            normalized_state.cpu.frequency_min_ghz,
+            normalized_state.cpu.frequency_max_ghz,
+            normalized_state.cpu.governor,
+            normalized_state.cpu.temperature_c,
+            normalized_state.cpu.usage_percent
+        );
+        println!(
+            "Normalized GPU: detected={}, card={:?}, vendor={:?}, device={:?}, driver={:?}, capability={}",
+            normalized_state.gpu.detected,
+            normalized_state.gpu.card,
+            normalized_state.gpu.vendor,
+            normalized_state.gpu.device,
+            normalized_state.gpu.driver,
+            normalized_state.gpu.capability_status
+        );
+        println!(
+            "Normalized Storage: detected={}, device={:?}, model={:?}, firmware={:?}, capacity={:?} GB, used={:?} GB, available={:?} GB, temperature={:?} °C",
+            normalized_state.normalized_storage.detected,
+            normalized_state.normalized_storage.device_path,
+            normalized_state.normalized_storage.model,
+            normalized_state.normalized_storage.firmware,
+            normalized_state.normalized_storage.capacity_gb,
+            normalized_state.normalized_storage.used_gb,
+            normalized_state.normalized_storage.available_gb,
+            normalized_state.normalized_storage.temperature_c
+        );
+        println!(
+            "Normalized Memory: total={:?} GB, used={:?} GB, available={:?} GB",
+            normalized_state.memory.total_gb,
+            normalized_state.memory.used_gb,
+            normalized_state.memory.available_gb
+        );
         println!("Normalized Storage: {}", normalized_state.storage);
-        println!("Normalized Network: download={:.2} Mbps, upload={:.2} Mbps, ping={:?} ms", normalized_state.network.download_mbps, normalized_state.network.upload_mbps, normalized_state.network.ping_ms);
-        println!("Normalized Firmware: status={}, update_available={}, capsule_updates_available={}", normalized_state.firmware.status, normalized_state.firmware.update_available, normalized_state.firmware.capsule_updates_available);
-        println!("Normalized Capabilities: cpu_frequency={:?} GHz, cpu_range={:?}-{:?} GHz, governor={:?}, thread_capacity={}, gpu_acceleration={}, gpu_vram={:?} GiB, storage_power_management={}", normalized_state.capabilities.cpu_frequency_ghz, normalized_state.capabilities.cpu_frequency_min_ghz, normalized_state.capabilities.cpu_frequency_max_ghz, normalized_state.capabilities.cpu_governor, normalized_state.capabilities.thread_capacity, normalized_state.capabilities.gpu_acceleration, normalized_state.capabilities.gpu_vram_gb, normalized_state.capabilities.storage_power_management);
-        println!("Normalized Health: overall={}, cpu={}, gpu={}, driver={}, memory={}, storage={}", normalized_state.health.overall_status, normalized_state.health.cpu_status, normalized_state.health.gpu_status, normalized_state.health.driver_status, normalized_state.health.memory_status, normalized_state.health.storage_status);
-        println!("Normalized Changes: status={}, changed={}, message={}", normalized_state.changes.status, normalized_state.changes.changed, normalized_state.changes.message);
+        println!(
+            "Normalized Network: download={:?} Mbps, upload={:?} Mbps, ping={:?} ms",
+            normalized_state.network.download_mbps,
+            normalized_state.network.upload_mbps,
+            normalized_state.network.ping_ms
+        );
+        println!(
+            "Normalized Firmware: status={}, update_available={}, capsule_updates_available={}",
+            normalized_state.firmware.status,
+            normalized_state.firmware.update_available,
+            normalized_state.firmware.capsule_updates_available
+        );
+        println!(
+            "Normalized Capabilities: cpu_frequency={:?} GHz, cpu_range={:?}-{:?} GHz, governor={:?}, thread_capacity={}, gpu_acceleration={:?}, gpu_vram={:?} GiB, storage_power_management={:?}",
+            normalized_state.capabilities.cpu_frequency_ghz,
+            normalized_state.capabilities.cpu_frequency_min_ghz,
+            normalized_state.capabilities.cpu_frequency_max_ghz,
+            normalized_state.capabilities.cpu_governor,
+            normalized_state.capabilities.thread_capacity,
+            normalized_state.capabilities.gpu_acceleration,
+            normalized_state.capabilities.gpu_vram_gb,
+            normalized_state.capabilities.storage_power_management
+        );
+        println!(
+            "Normalized Health: overall={}, cpu={}, gpu={}, driver={}, memory={}, storage={}",
+            normalized_state.health.overall_status,
+            normalized_state.health.cpu_status,
+            normalized_state.health.gpu_status,
+            normalized_state.health.driver_status,
+            normalized_state.health.memory_status,
+            normalized_state.health.storage_status
+        );
+        println!(
+            "Normalized Changes: status={}, changed={}, message={}",
+            normalized_state.changes.status,
+            normalized_state.changes.changed,
+            normalized_state.changes.message
+        );
         println!("Overall: {}", assessment.overall_status);
         println!("CPU: {}", assessment.cpu_status);
         println!("GPU: {}", assessment.gpu_status);
-    println!("GPU Capability: {}", assessment.gpu_capability_status);
+        println!("GPU Capability: {}", assessment.gpu_capability_status);
         println!("Driver: {}", assessment.driver_status);
         println!("Firmware: {}", assessment.firmware_status);
         println!("Memory: {}", assessment.memory_status);
@@ -222,62 +298,46 @@ fn main() {
             Some(value) => println!("Storage Error Log Entries: {value}"),
             None => println!("Storage Error Log Entries: Unavailable"),
         }
-        println!("Storage Unsafe Shutdowns Status: {}", storage_diagnostics.unsafe_shutdowns_status);
-        println!("Storage Error Log Status: {}", storage_diagnostics.error_log_status);
-        println!("Storage Self-Test: {}", storage_diagnostics.self_test_status);
-    println!("Performance / Power: {}", assessment.performance_power_status);
-    for recommendation in &assessment.recommendations {
-        println!("Recommendation: {}", recommendation);
-    }
+        println!(
+            "Storage Unsafe Shutdowns Status: {}",
+            storage_diagnostics.unsafe_shutdowns_status
+        );
+        println!(
+            "Storage Error Log Status: {}",
+            storage_diagnostics.error_log_status
+        );
+        println!(
+            "Storage Self-Test: {}",
+            storage_diagnostics.self_test_status
+        );
+        println!(
+            "Performance / Power: {}",
+            assessment.performance_power_status
+        );
+        for recommendation in &assessment.recommendations {
+            println!("Recommendation: {}", recommendation);
+        }
     }
 
-    println!("RAM Total: {:.2} GB", hardware.memory.total_gb);
-    println!("RAM Used: {:.2} GB", hardware.memory.used_gb);
-    println!("RAM Available: {:.2} GB", hardware.memory.available_gb);
+    println!("RAM Total: {} GB", measurement(hardware.memory.total_gb, 2));
+    println!("RAM Used: {} GB", measurement(hardware.memory.used_gb, 2));
+    println!(
+        "RAM Available: {} GB",
+        measurement(hardware.memory.available_gb, 2)
+    );
+}
+
+fn measurement(value: Option<f64>, precision: usize) -> String {
+    value
+        .map(|value| format!("{value:.precision$}"))
+        .unwrap_or_else(|| "Unavailable".to_string())
 }
 
 fn print_json() {
-    let hardware = HardwareInfo {
-        cpu: hardware::cpu::read(),
-        gpu: hardware::gpu::read(),
-        memory: hardware::memory::read(),
-        storage: hardware::storage::read(),
-        network: hardware::network::read(),
-    };
-
-    let assessment = assess(
-        &hardware.cpu,
-        hardware.gpu.as_ref(),
-        &hardware.memory,
-        hardware.storage.as_ref(),
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&dbus::collect_state()).unwrap()
     );
-
-    let fingerprint = hardware_fingerprint(
-        &hardware.cpu,
-        hardware.gpu.as_ref(),
-        &hardware.memory,
-        hardware.storage.as_ref(),
-    );
-
-    let hardware_change_status = assess_hardware_change(&fingerprint);
-    let power = PowerInfo::read();
-
-        let storage_diagnostics = assess_storage(hardware.storage.as_ref());
-    let system = hardware::system::read();
-    let normalized_state = NormalizedHardwareState::from_assessment(
-        &hardware.cpu,
-        &hardware.memory,
-        &assessment,
-        hardware.gpu.as_ref(),
-        hardware.storage.as_ref(),
-        &hardware.network,
-        &storage_diagnostics,
-            &power,
-        hardware_change_status,
-        &system,
-    );
-
-    println!("{}", serde_json::to_string_pretty(&normalized_state).unwrap());
 }
 
 fn print_monitor_json() {
@@ -305,9 +365,9 @@ fn print_monitor_json() {
         "gpu_memory_clock_mhz": gpu.and_then(|value| value.memory_clock_mhz),
         "memory_used_gb": hardware.memory.used_gb,
         "memory_total_gb": hardware.memory.total_gb,
-        "storage_used_gb": storage.map(|value| value.used_gb),
+        "storage_used_gb": storage.and_then(|value| value.used_gb),
         "storage_capacity_gb": storage.map(|value| value.capacity_gb),
-        "storage_available_gb": storage.map(|value| value.available_gb),
+        "storage_available_gb": storage.and_then(|value| value.available_gb),
         "storage_temperature_c": storage.and_then(|value| value.temperature_c),
         "network_download_mbps": hardware.network.download_mbps,
         "network_upload_mbps": hardware.network.upload_mbps,
@@ -332,7 +392,7 @@ fn print_monitor_data() {
 
     println!(
         "{:.1} {:.1} {:.0} {:.1} {:.0} {:.0} {:.2} {:.2} {:.1} {:.0} {:.2} {:.2} {:.2} {:.2} {:.2} {:.1} {:.2} {:.2} {:.1}",
-        hardware.cpu.usage_percent,
+        hardware.cpu.usage_percent.unwrap_or(0.0),
         hardware.cpu.temperature_c.unwrap_or(0.0),
         hardware.cpu.frequency_ghz.unwrap_or(0.0) * 1000.0,
         gpu.and_then(|value| value.usage_percent).unwrap_or(0.0),
@@ -343,23 +403,21 @@ fn print_monitor_data() {
         gpu.and_then(|value| value.vram_total_gb).unwrap_or(0.0),
         gpu.and_then(|value| value.temperature_c).unwrap_or(0.0),
         gpu.and_then(|value| value.memory_clock_mhz).unwrap_or(0.0),
-        hardware.memory.used_gb,
-        hardware.memory.total_gb,
-        storage.map(|value| value.used_gb).unwrap_or(0.0),
+        hardware.memory.used_gb.unwrap_or(0.0),
+        hardware.memory.total_gb.unwrap_or(0.0),
+        storage.and_then(|value| value.used_gb).unwrap_or(0.0),
         storage.map(|value| value.capacity_gb).unwrap_or(0.0),
-        storage.map(|value| value.available_gb).unwrap_or(0.0),
+        storage.and_then(|value| value.available_gb).unwrap_or(0.0),
         storage.and_then(|value| value.temperature_c).unwrap_or(0.0),
-        hardware.network.download_mbps,
-        hardware.network.upload_mbps,
+        hardware.network.download_mbps.unwrap_or(0.0) / 8.388608,
+        hardware.network.upload_mbps.unwrap_or(0.0) / 8.388608,
         hardware.network.ping_ms.unwrap_or(0.0),
     );
     io::stdout().flush().ok();
 }
 
-
 fn run_dbus_service() {
-    let runtime = tokio::runtime::Runtime::new()
-        .expect("failed to create Tokio runtime");
+    let runtime = tokio::runtime::Runtime::new().expect("failed to create Tokio runtime");
 
     runtime.block_on(async {
         let service = dbus::HardwareService;

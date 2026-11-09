@@ -71,9 +71,12 @@ pub fn assess_storage(storage: Option<&StorageInfo>) -> StorageDiagnostics {
         None => return unavailable_storage_diagnostics("storage device unavailable"),
     };
 
-    let output = match Command::new("pkexec")
-        .args(["/usr/libexec/zethropol/zethropol-diagnostics-helper", device_path])
-        .output() {
+    // Inventory reads must never open an authorization dialog. Restricted SMART
+    // data stays unavailable; elevated diagnostics belong to an explicit action.
+    let output = match Command::new("smartctl")
+        .args(["-a", "-j", device_path])
+        .output()
+    {
         Ok(output) => output,
         Err(_) => return unavailable_storage_diagnostics("smartctl unavailable"),
     };
@@ -83,9 +86,19 @@ pub fn assess_storage(storage: Option<&StorageInfo>) -> StorageDiagnostics {
         Err(_) => return unavailable_storage_diagnostics("smartctl JSON unavailable"),
     };
 
-    let health_status = match (data.smart_status, data.nvme_smart_health_information_log.as_ref()) {
-        (Some(status), Some(health)) if status.passed && health.critical_warning == 0 => "ok: SMART health passed".to_string(),
-        (_, Some(health)) if health.critical_warning != 0 => format!("warning: SMART critical warning 0x{:02x}", health.critical_warning),
+    let health_status = match (
+        data.smart_status,
+        data.nvme_smart_health_information_log.as_ref(),
+    ) {
+        (Some(status), health)
+            if status.passed && health.is_none_or(|h| h.critical_warning == 0) =>
+        {
+            "ok: SMART health passed".to_string()
+        }
+        (_, Some(health)) if health.critical_warning != 0 => format!(
+            "warning: SMART critical warning 0x{:02x}",
+            health.critical_warning
+        ),
         (Some(_), _) => "warning: SMART health failed".to_string(),
         _ => "unknown: SMART health unavailable".to_string(),
     };
@@ -106,13 +119,29 @@ pub fn assess_storage(storage: Option<&StorageInfo>) -> StorageDiagnostics {
 
     let error_log_status = match (error_log_entries, data.nvme_error_information_log.as_ref()) {
         (Some(0), _) => "ok: no error log entries".to_string(),
-        (Some(value), Some(log)) if log.table.iter().all(|entry| entry.status_field.status_code == 2) => format!("info: {value} NVMe error log entries recorded; entries report Invalid Field in Command"),
-        (Some(value), Some(log)) => format!("info: {value} NVMe error log entries recorded; latest status: {}", log.table.first().map(|entry| entry.status_field.string.as_str()).unwrap_or("unavailable")),
+        (Some(value), Some(log))
+            if log
+                .table
+                .iter()
+                .all(|entry| entry.status_field.status_code == 2) =>
+        {
+            format!(
+                "info: {value} NVMe error log entries recorded; entries report Invalid Field in Command"
+            )
+        }
+        (Some(value), Some(log)) => format!(
+            "info: {value} NVMe error log entries recorded; latest status: {}",
+            log.table
+                .first()
+                .map(|entry| entry.status_field.string.as_str())
+                .unwrap_or("unavailable")
+        ),
         (Some(value), None) => format!("info: {value} NVMe error log entries recorded"),
         (None, _) => "unknown: error log count unavailable".to_string(),
     };
 
-    let self_test_status = data.nvme_self_test_log
+    let self_test_status = data
+        .nvme_self_test_log
         .map(|value| value.current_self_test_operation.string)
         .unwrap_or_else(|| "unknown: self-test status unavailable".to_string());
 
