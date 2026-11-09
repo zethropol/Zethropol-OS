@@ -121,6 +121,8 @@ IFS= read -r answer
         QTest::addColumn<QString>("state");
         QTest::newRow("cancelled") << 4 << QString("cancelled");
         QTest::newRow("official-failure") << 5 << QString("error");
+        QTest::newRow("auth-failure") << 2 << QString("error");
+        QTest::newRow("reboot-failure") << 6 << QString("error");
         QTest::newRow("interrupted") << 130 << QString("error");
     }
 
@@ -213,6 +215,44 @@ IFS= read -r answer
         QVERIFY(!installer.output().contains("unsubmitted-private-input"));
         QVERIFY(input->property("text").toString().isEmpty());
         QCOMPARE(installer.status(), "finished");
+    }
+
+    void progressStageAndRebootMessageAreReported()
+    {
+        script("updater", R"SH(
+printf '==> Paketler Güncelleniyor...\n'
+/bin/sleep 0.2
+printf '==> Yeniden başlatma gerekiyor:\nŞimdi yeniden başlatmak ister misiniz? [e/H] '
+IFS= read -r ans
+printf 'Yeniden başlatma gerçekleştirilmedi.\n'
+)SH");
+        UpdateScanner scanner;
+        QSignalSpy scanned(&scanner, &UpdateScanner::scanFinished);
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 1, 5000);
+        UpdateInstaller installer(&scanner);
+        setup(installer);
+        QSignalSpy finished(&installer, &UpdateInstaller::sessionFinished);
+        installer.start();
+        QTRY_VERIFY_WITH_TIMEOUT(installer.message().contains("yeniden başlatma", Qt::CaseInsensitive), 5000);
+        installer.sendInput("h");
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+        QCOMPARE(installer.status(), "finished");
+        QVERIFY(installer.message().contains("yeniden başlatmanız gerekir"));
+    }
+
+    void successfulUpdateReportsCleanCompletion()
+    {
+        script("updater", "printf '==> Güncelleme uygulandı\\n'\nexit 0\n");
+        UpdateScanner scanner;
+        QSignalSpy scanned(&scanner, &UpdateScanner::scanFinished);
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 1, 5000);
+        UpdateInstaller installer(&scanner);
+        setup(installer);
+        QSignalSpy finished(&installer, &UpdateInstaller::sessionFinished);
+        installer.start();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+        QCOMPARE(installer.status(), "finished");
+        QVERIFY(installer.message().contains("başarıyla"));
     }
 };
 

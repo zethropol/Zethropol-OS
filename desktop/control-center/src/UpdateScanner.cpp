@@ -171,12 +171,16 @@ void UpdateScanner::finish(int index, QProcess *process, int exitCode,
     m_processes.removeOne(process);
     const auto output = QString::fromUtf8(process->readAllStandardOutput());
     const auto error = QString::fromUtf8(process->readAllStandardError()).trimmed();
+    const bool noUpdates = (index == 0 && exitCode == 2 && output.trimmed().isEmpty())
+                        || (index == 1 && exitCode == 1 && output.trimmed().isEmpty() && error.isEmpty());
     if (process->property("timedOut").toBool()) {
         update(index, "error", "Tarama zaman aşımına uğradı. Yeniden tarayabilirsiniz.");
     } else if (exitStatus != QProcess::NormalExit
-               || (exitCode != 0 && !(index == 0 && exitCode == 2 && output.trimmed().isEmpty()))) {
-        update(index, "error", "Tarama tamamlanamadı: "
-               + (error.isEmpty() ? QString("Araç çıkış kodu: %1").arg(exitCode) : error.left(1500)));
+               || (exitCode != 0 && !noUpdates)) {
+        const QString reason = !error.isEmpty() ? error.left(1500)
+            : (!output.trimmed().isEmpty() ? output.trimmed().left(1500)
+                                           : QString("Araç çıkış kodu: %1").arg(exitCode));
+        update(index, "error", "Tarama tamamlanamadı: " + reason);
     } else {
         QVariantList packages;
         bool unparsed = false;

@@ -349,7 +349,7 @@ Item {
             }
             Label {
                 color: reportPage.reportText
-                text: "Kurulum çıktısını bu sekmede izleyecek; paket seçimi, yönetici parolası ve bakım sorularını yanıt alanından cevaplayacaksınız. Ek temizlik işlemlerini kabul edebilir veya reddedebilirsiniz. İşlem bitince rapor otomatik yenilenir."
+                text: "Kurulum çıktısını bu sekmede izleyecek; yönetici parolası, onay ve bakım sorularını yanıt alanından cevaplayacaksınız. Ek temizlik işlemlerini kabul edebilir veya reddedebilirsiniz. İşlem bitince rapor otomatik yenilenir."
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
             }

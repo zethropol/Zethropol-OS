@@ -40,7 +40,7 @@ private slots:
         previousPath = qgetenv("PATH");
         qputenv("PATH", directory.path().toUtf8());
         script("checkupdates", "exit 2\n");
-        script("paru", "exit 0\n");
+        script("paru", "exit 1\n");
         script("flatpak", "exit 0\n");
     }
 
@@ -134,6 +134,29 @@ private slots:
         QVERIFY(report(scanner, 0)["detail"].toString().contains("zaman aşımı"));
         QCOMPARE(report(scanner, 1)["state"].toString(), "error");
         QVERIFY(!scanner.busy());
+    }
+
+    void aurNoUpdatesExitCodeOneIsHandledAsCleanCompletion()
+    {
+        script("paru", "exit 1\n");
+        UpdateScanner scanner;
+        configure(scanner);
+        QSignalSpy finished(&scanner, &UpdateScanner::scanFinished);
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+        QCOMPARE(report(scanner, 1)["state"].toString(), "complete");
+        QCOMPARE(report(scanner, 1)["detail"].toString(), "Güncelleme bulunamadı.");
+        QVERIFY(report(scanner, 1)["packages"].toList().isEmpty());
+    }
+
+    void aurRealErrorExitCodeOneDisplaysErrorMessage()
+    {
+        script("paru", "printf 'aur connection refused\\n' >&2\nexit 1\n");
+        UpdateScanner scanner;
+        configure(scanner);
+        QSignalSpy finished(&scanner, &UpdateScanner::scanFinished);
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+        QCOMPARE(report(scanner, 1)["state"].toString(), "error");
+        QVERIFY(report(scanner, 1)["detail"].toString().contains("aur connection refused"));
     }
 };
 
