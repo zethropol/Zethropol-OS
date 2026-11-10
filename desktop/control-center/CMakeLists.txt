@@ -24,6 +24,7 @@ set(CONTROL_CENTER_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/src/SecurityService.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ServiceService.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ApplicationService.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ProcessService.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/NotificationService.cpp
 )
 
@@ -43,6 +44,7 @@ qt_add_qml_module(control_center
     QML_FILES
         qml/Main.qml
         qml/HardwarePage.qml
+        qml/ProcessesPage.qml
         qml/UpdateReport.qml
         qml/SystemState.qml
 )
@@ -87,7 +89,7 @@ if(BUILD_TESTING)
         ${ZETHROPOL_DBUS_SRCS})
     qt_add_resources(control_center_hardware_test "hardware_test_qml"
         PREFIX "/Zethropol/ControlCenter"
-        FILES qml/Main.qml qml/SystemState.qml qml/HardwarePage.qml qml/UpdateReport.qml)
+        FILES qml/Main.qml qml/SystemState.qml qml/HardwarePage.qml qml/ProcessesPage.qml qml/UpdateReport.qml)
     target_include_directories(control_center_hardware_test PRIVATE src)
     target_link_libraries(control_center_hardware_test PRIVATE
         Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::DBus Qt6::Test)
@@ -101,4 +103,15 @@ if(BUILD_TESTING)
     set_tests_properties(control_center_hardware_test PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
         TIMEOUT 90)
+
+
+    qt_add_executable(control_center_process_service_test
+        tests/ProcessServiceTest.cpp
+        src/ProcessService.cpp
+        src/ProcessService.h)
+    target_include_directories(control_center_process_service_test PRIVATE src)
+    target_link_libraries(control_center_process_service_test PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME control_center_process_service_test
+             COMMAND control_center_process_service_test)
+
 endif()

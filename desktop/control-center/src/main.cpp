@@ -10,6 +10,7 @@
 #include "SecurityService.h"
 #include "ServiceService.h"
 #include "ApplicationService.h"
+#include "ProcessService.h"
 #include "NotificationService.h"
 #include "core/zethropol_power_client.h"
 #include "core/zethropol_monitoring_client.h"
@@ -30,6 +31,7 @@ int main(int argc, char *argv[])
     SecurityService securityService;
     ServiceService serviceService;
     ApplicationService applicationService;
+    ProcessService processService;
     NotificationService notificationService;
     ZethropolPowerClient powerClient;
     ZethropolMonitoringClient monitoringClient;
@@ -41,6 +43,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("SecurityBridge"), &securityService);
     engine.rootContext()->setContextProperty(QStringLiteral("ServiceBridge"), &serviceService);
     engine.rootContext()->setContextProperty(QStringLiteral("ApplicationBridge"), &applicationService);
+    engine.rootContext()->setContextProperty(QStringLiteral("ProcessBridge"), &processService);
     engine.rootContext()->setContextProperty(QStringLiteral("NotificationBridge"), &notificationService);
     engine.rootContext()->setContextProperty(QStringLiteral("PowerBridge"), &powerClient);
     engine.rootContext()->setContextProperty(QStringLiteral("MonitoringBridge"), &monitoringClient);

@@ -146,7 +146,7 @@ ApplicationWindow {
                 }
 
                 Repeater {
-                    model: ["Overview", "Hardware", "Diagnostics", "System", "Performance", "Power", "Updates", "Recovery", "Security", "Services", "Applications"]
+                    model: ["Overview", "Hardware", "Diagnostics", "System", "Performance", "Power", "Updates", "Recovery", "Security", "Services", "Applications", "Processes"]
 
                     delegate: Button {
                         text: modelData
@@ -2152,6 +2152,8 @@ ApplicationWindow {
                             }
                         }
                     }
+
+                    ProcessesPage {}
                 }
             }
         }
