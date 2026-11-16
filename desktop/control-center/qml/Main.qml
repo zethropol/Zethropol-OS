@@ -1406,12 +1406,38 @@ ApplicationWindow {
                                     spacing: 12
 
                                     Label {
+                                        objectName: "recoveryListLoadingLabel"
+                                        visible: RecoveryBridge.checking
+                                        text: "Loading snapshots..."
+                                        opacity: 0.7
+                                    }
+
+                                    Label {
+                                        objectName: "recoveryListErrorLabel"
+                                        visible: !RecoveryBridge.checking && !RecoveryBridge.available
+                                        text: (RecoveryBridge.statusTitle !== "" ? RecoveryBridge.statusTitle : "Recovery snapshots unavailable")
+                                              + (RecoveryBridge.statusMessage !== "" ? " — " + RecoveryBridge.statusMessage : "")
+                                        opacity: 0.75
+                                        wrapMode: Text.Wrap
+                                        Layout.fillWidth: true
+                                    }
+
+                                    Label {
                                         text: "Recovery Events"
                                         font.pixelSize: 18
                                         font.bold: true
                                     }
 
+                                    Label {
+                                        objectName: "recoveryEventsEmptyLabel"
+                                        visible: !RecoveryBridge.checking && RecoveryBridge.available && RecoveryBridge.recoveryEvents.length === 0
+                                        text: "No recovery events found"
+                                        opacity: 0.6
+                                    }
+
                                     ListView {
+                                        objectName: "recoveryEventsList"
+                                        visible: RecoveryBridge.available && RecoveryBridge.recoveryEvents.length > 0
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: Math.min(contentHeight, 240)
                                         clip: true
@@ -1485,7 +1511,16 @@ ApplicationWindow {
                                         font.bold: true
                                     }
 
+                                    Label {
+                                        objectName: "recoveryPointsEmptyLabel"
+                                        visible: !RecoveryBridge.checking && RecoveryBridge.available && RecoveryBridge.recoveryPoints.length === 0
+                                        text: "No standalone recovery points found"
+                                        opacity: 0.6
+                                    }
+
                                     ListView {
+                                        objectName: "recoveryPointsList"
+                                        visible: RecoveryBridge.available && RecoveryBridge.recoveryPoints.length > 0
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: Math.min(contentHeight, 220)
                                         clip: true

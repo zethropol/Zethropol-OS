@@ -113,23 +113,45 @@ ZethropolRecoveryClient::ZethropolRecoveryClient(QObject *parent) : QObject(pare
         QDBusConnection::systemBus().connect("org.zethropol.Recovery", "/org/zethropol/Recovery", "org.zethropol.Recovery.v1", "recovery_state_changed", this, SLOT(handleRecoverySignal(QVariantList)));
         refreshState();
         refreshRecoveryPoints();
+    } else {
+        m_lastError = m_interface->lastError().message();
+        if (m_lastError.isEmpty())
+            m_lastError = QStringLiteral("Recovery D-Bus service (org.zethropol.Recovery) is unavailable.");
     }
 }
 void ZethropolRecoveryClient::refreshState() {
-    if (!m_interface || !m_interface->isValid()) return;
+    if (!m_interface || !m_interface->isValid()) {
+        m_lastError = QStringLiteral("Recovery D-Bus interface is unavailable.");
+        emit errorOccurred(m_lastError);
+        return;
+    }
     QDBusMessage reply = m_interface->call("GetState");
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         const QVariantMap envelope = unwrapDbusValue(reply.arguments().at(0)).toMap();
         m_state = unwrapDbusValue(envelope.value("data")).toMap();
+        m_lastError.clear();
         emit stateChanged();
+    } else if (reply.type() == QDBusMessage::ErrorMessage) {
+        m_lastError = reply.errorMessage();
+        emit errorOccurred(m_lastError);
     }
 }
 void ZethropolRecoveryClient::refreshRecoveryPoints() {
-    if (!m_interface || !m_interface->isValid()) return;
+    if (!m_interface || !m_interface->isValid()) {
+        m_lastError = QStringLiteral("Recovery D-Bus interface is unavailable.");
+        emit errorOccurred(m_lastError);
+        return;
+    }
     QDBusMessage reply = m_interface->call("ListRecoveryPoints");
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         m_recoveryPoints = unwrapDbusValue(reply.arguments().at(0)).toList();
+        m_lastError.clear();
         emit recoveryPointsChanged();
+    } else if (reply.type() == QDBusMessage::ErrorMessage) {
+        m_recoveryPoints.clear();
+        m_lastError = reply.errorMessage();
+        emit recoveryPointsChanged();
+        emit errorOccurred(m_lastError);
     }
 }
 void ZethropolRecoveryClient::createRecoveryPoint(const QString &name, const QString &description) {

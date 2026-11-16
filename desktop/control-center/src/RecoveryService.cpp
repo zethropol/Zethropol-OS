@@ -538,9 +538,58 @@ void RecoveryService::applyStateMap(const QVariantMap &data)
     QString message = data.value(QStringLiteral("statusMessage")).toString().trimmed();
 
     if (m_available) {
-        m_snapshots = dbusValueToVariant(data.value(QStringLiteral("snapshots"))).toList();
-        m_recoveryEvents = dbusValueToVariant(data.value(QStringLiteral("recoveryEvents"))).toList();
-        m_recoveryPoints = dbusValueToVariant(data.value(QStringLiteral("recoveryPoints"))).toList();
+        QVariantList rawSnapshots = dbusValueToVariant(data.value(QStringLiteral("snapshots"))).toList();
+        QVariantList rawEvents = dbusValueToVariant(data.value(QStringLiteral("recoveryEvents"))).toList();
+        QVariantList rawPoints = dbusValueToVariant(data.value(QStringLiteral("recoveryPoints"))).toList();
+
+        QSet<int> seenSnapshotIds;
+        QVariantList dedupSnapshots;
+        for (const QVariant &v : rawSnapshots) {
+            const QVariantMap item = v.toMap();
+            if (!item.contains(QStringLiteral("id")))
+                continue;
+            bool ok = false;
+            const int id = item.value(QStringLiteral("id")).toInt(&ok);
+            if (!ok || id < 0 || seenSnapshotIds.contains(id))
+                continue;
+            seenSnapshotIds.insert(id);
+            dedupSnapshots.append(item);
+        }
+
+        QSet<QString> seenEvents;
+        QVariantList dedupEvents;
+        for (const QVariant &v : rawEvents) {
+            const QVariantMap ev = v.toMap();
+            bool preOk = false;
+            bool postOk = false;
+            const int preId = ev.value(QStringLiteral("preId")).toInt(&preOk);
+            const int postId = ev.value(QStringLiteral("postId")).toInt(&postOk);
+            if (!preOk || !postOk || preId < 0 || postId < 0)
+                continue;
+            const QString key = QStringLiteral("%1:%2").arg(preId).arg(postId);
+            if (seenEvents.contains(key))
+                continue;
+            seenEvents.insert(key);
+            dedupEvents.append(ev);
+        }
+
+        QSet<int> seenPointIds;
+        QVariantList dedupPoints;
+        for (const QVariant &v : rawPoints) {
+            const QVariantMap pt = v.toMap();
+            if (!pt.contains(QStringLiteral("id")))
+                continue;
+            bool ok = false;
+            const int id = pt.value(QStringLiteral("id")).toInt(&ok);
+            if (!ok || id < 0 || seenPointIds.contains(id))
+                continue;
+            seenPointIds.insert(id);
+            dedupPoints.append(pt);
+        }
+
+        m_snapshots = dedupSnapshots;
+        m_recoveryEvents = dedupEvents;
+        m_recoveryPoints = dedupPoints;
         m_snapshotCount = data.contains(QStringLiteral("snapshotCount"))
             ? data.value(QStringLiteral("snapshotCount")).toInt()
             : m_snapshots.size();

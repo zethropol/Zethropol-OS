@@ -768,6 +768,334 @@ echo '{"root":[{"number":0,"type":"single","description":"current"}]}'
                 qmlErrors.append(warning.toString());
         QVERIFY2(qmlErrors.isEmpty(), qPrintable(qmlErrors.join(QLatin1Char('\n'))));
     }
+
+    // --- 03.2.03 Snapshot Listing Verification Scenarios (1..11) ---
+
+    void listScenario1_multipleValidSnapshotsListed()
+    {
+        QTemporaryDir dir;
+        const EnvPaths paths = setupStandardFixture(dir);
+        startRecoveryDaemon(paths.envFile);
+
+        RecoveryService recovery;
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
+        QVERIFY(recovery.available());
+        QCOMPARE(recovery.detectionStatus(), QStringLiteral("installed_and_configured"));
+        QCOMPARE(recovery.snapshotCount(), 4);
+        QCOMPARE(recovery.currentSnapshotId(), 0);
+        QCOMPARE(recovery.recoveryEvents().size(), 1);
+        QCOMPARE(recovery.recoveryPoints().size(), 1);
+        QCOMPARE(recovery.recoveryPoints().first().toMap().value(QStringLiteral("id")).toInt(), 25);
+
+        ZethropolRecoveryClient client;
+        QVERIFY(client.lastError().isEmpty());
+        QCOMPARE(client.recoveryPoints().size(), 3); // IDs 21, 22, 25
+    }
+
+    void listScenario2_emptySnapshotListNotFake()
+    {
+        QTemporaryDir dir;
+        EnvPaths paths = setupStandardFixture(dir);
+        paths.snapperBin = writeScript(
+            dir,
+            QStringLiteral("bin/snapper"),
+            QByteArrayLiteral("echo '{\"root\":[]}'\nexit 0\n"));
+        updateEnvFile(paths);
+        startRecoveryDaemon(paths.envFile);
+
+        RecoveryService recovery;
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
+        QVERIFY(recovery.available());
+        QCOMPARE(recovery.detectionStatus(), QStringLiteral("installed_and_configured"));
+        QCOMPARE(recovery.snapshotCount(), 0);
+        QVERIFY(recovery.snapshots().isEmpty());
+        QVERIFY(recovery.recoveryEvents().isEmpty());
+        QVERIFY(recovery.recoveryPoints().isEmpty());
+
+        ZethropolRecoveryClient client;
+        QVERIFY(client.lastError().isEmpty());
+        QVERIFY(client.recoveryPoints().isEmpty());
+    }
+
+    void listScenario3_malformedOrMissingJsonErrorsNotEmpty()
+    {
+        QTemporaryDir dir;
+        EnvPaths paths = setupStandardFixture(dir);
+        paths.snapperBin = writeScript(
+            dir,
+            QStringLiteral("bin/snapper"),
+            QByteArrayLiteral("printf '{\"wrong_key\": []}'\nexit 0\n"));
+        updateEnvFile(paths);
+        startRecoveryDaemon(paths.envFile);
+
+        RecoveryService recovery;
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
+        QVERIFY(!recovery.available());
+        QCOMPARE(recovery.detectionStatus(), QStringLiteral("invalid_configuration"));
+        QVERIFY(recovery.snapshots().isEmpty());
+
+        ZethropolRecoveryClient client;
+        QVERIFY(!client.lastError().isEmpty());
+        QVERIFY(client.recoveryPoints().isEmpty());
+    }
+
+    void listScenario4_snapperNonZeroExitCodeNotTreatedAsEmpty()
+    {
+        QTemporaryDir dir;
+        EnvPaths paths = setupStandardFixture(dir);
+        paths.snapperBin = writeScript(
+            dir,
+            QStringLiteral("bin/snapper"),
+            QByteArrayLiteral("echo 'IO error (query default id failed).' >&2\nexit 1\n"));
+        updateEnvFile(paths);
+        startRecoveryDaemon(paths.envFile);
+
+        RecoveryService recovery;
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
+        QVERIFY(!recovery.available());
+        QCOMPARE(recovery.detectionStatus(), QStringLiteral("invalid_configuration"));
+        QVERIFY(!recovery.statusMessage().isEmpty());
+    }
+
+    void listScenario5_permissionDeniedDistinctFromEmptyAndNoPkexec()
+    {
+        QTemporaryDir dir;
+        EnvPaths paths = setupStandardFixture(dir);
+        paths.snapperBin = writeScript(
+            dir,
+            QStringLiteral("bin/snapper"),
+            QByteArrayLiteral("echo 'Failure (error.no_permissions).' >&2\nexit 1\n"));
+        updateEnvFile(paths);
+        startRecoveryDaemon(paths.envFile);
+
+        QTemporaryDir emptyPathDir;
+        const QString pkexecLog = dir.filePath(QStringLiteral("pkexec.log"));
+        writeScript(emptyPathDir,
+                    QStringLiteral("pkexec"),
+                    "echo called >> '" + pkexecLog.toUtf8() + "'\nexit 1\n");
+        const QByteArray oldPath = qgetenv("PATH");
+        qputenv("PATH", emptyPathDir.path().toUtf8());
+        const auto restorePath = qScopeGuard([&] { qputenv("PATH", oldPath); });
+
+        RecoveryService recovery;
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
+        QVERIFY(!recovery.available());
+        QVERIFY(recovery.permissionRequired());
+        QCOMPARE(recovery.detectionStatus(), QStringLiteral("permission_denied"));
+
+        ZethropolRecoveryClient client;
+        QVERIFY(!client.lastError().isEmpty());
+        QVERIFY(!QFile::exists(pkexecLog));
+    }
+
+    void listScenario6_missingSnapperConfigDistinctFromEmpty()
+    {
+        QTemporaryDir dir;
+        EnvPaths paths = setupStandardFixture(dir);
+        QFile::remove(dir.filePath(QStringLiteral("etc/snapper/configs/root")));
+        writeFile(dir, QStringLiteral("etc/conf.d/snapper"), QByteArrayLiteral("SNAPPER_CONFIGS=\"\"\n"));
+        updateEnvFile(paths);
+        startRecoveryDaemon(paths.envFile);
+
+        RecoveryService recovery;
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
+        QVERIFY(!recovery.available());
+        QCOMPARE(recovery.detectionStatus(), QStringLiteral("installed_not_configured"));
+
+        ZethropolRecoveryClient client;
+        QVERIFY(!client.lastError().isEmpty());
+    }
+
+    void listScenario7_backendUnavailableDistinctFromEmpty()
+    {
+        stopRecoveryDaemon();
+        RecoveryService recovery;
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
+        QVERIFY(!recovery.available());
+        QCOMPARE(recovery.detectionStatus(), QStringLiteral("backend_unavailable"));
+        QVERIFY(recovery.statusMessage().contains(QStringLiteral("org.zethropol.Recovery")));
+
+        ZethropolRecoveryClient client;
+        QVERIFY(!client.lastError().isEmpty());
+    }
+
+    void listScenario8_duplicateInvalidOrMissingFieldsHandledSafely()
+    {
+        QTemporaryDir dir;
+        EnvPaths paths = setupStandardFixture(dir);
+        paths.snapperBin = writeScript(
+            dir,
+            QStringLiteral("bin/snapper"),
+            QByteArrayLiteral(R"(cat << 'EOF'
+{
+  "root": [
+    {"number": 0, "description": "current"},
+    {"number": 41, "type": 999, "date": null, "userdata": "invalid"},
+    {"number": 41, "type": "single", "description": "Duplicate ID 41"},
+    {"number": 42, "type": "single", "description": "Valid entry"}
+  ]
+}
+EOF
+)"));
+        updateEnvFile(paths);
+        startRecoveryDaemon(paths.envFile);
+
+        RecoveryService recovery;
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
+        QVERIFY(recovery.available());
+        QCOMPARE(recovery.snapshotCount(), 3); // 0, 41, 42 (duplicate 41 dropped)
+        QCOMPARE(recovery.recoveryPoints().size(), 2);
+        QCOMPARE(recovery.recoveryPoints().at(0).toMap().value(QStringLiteral("id")).toInt(), 41);
+        QCOMPARE(recovery.recoveryPoints().at(1).toMap().value(QStringLiteral("id")).toInt(), 42);
+    }
+
+    void listScenario9_consecutiveRefreshesAndAsyncErrorRecovery()
+    {
+        QTemporaryDir dir;
+        EnvPaths paths = setupStandardFixture(dir);
+        startRecoveryDaemon(paths.envFile);
+
+        RecoveryService recovery;
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
+        QCOMPARE(recovery.snapshotCount(), 4);
+
+        // Consecutive refresh calls must not hang or duplicate entries
+        recovery.refresh();
+        recovery.refresh();
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
+        QCOMPARE(recovery.snapshotCount(), 4);
+        QCOMPARE(recovery.recoveryPoints().size(), 1);
+
+        // Simulate transient backend failure then recovery
+        stopRecoveryDaemon();
+        recovery.refresh();
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
+        QCOMPARE(recovery.detectionStatus(), QStringLiteral("backend_unavailable"));
+        QVERIFY(!recovery.available());
+        QVERIFY(recovery.snapshots().isEmpty());
+
+        startRecoveryDaemon(paths.envFile);
+        recovery.refresh();
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
+        QCOMPARE(recovery.detectionStatus(), QStringLiteral("installed_and_configured"));
+        QVERIFY(recovery.available());
+        QCOMPARE(recovery.snapshotCount(), 4);
+    }
+
+    void listScenario10_dbusAndQmlListConsistency()
+    {
+        QTemporaryDir dir;
+        EnvPaths paths = setupStandardFixture(dir);
+        startRecoveryDaemon(paths.envFile);
+
+        HardwareServiceClient hardware;
+        UpdateScanner scanner;
+        UpdateInstaller installer(&scanner);
+        RecoveryService recovery;
+        SecurityService security;
+        ServiceService services;
+        ApplicationService applications;
+        ProcessService processes;
+        NotificationService notifications;
+        ZethropolPowerClient power;
+        ZethropolMonitoringClient monitoring;
+
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
+        QVERIFY(recovery.available());
+
+        QQmlApplicationEngine engine;
+        QSignalSpy warnings(&engine, &QQmlEngine::warnings);
+        for (const auto &pair : QList<QPair<QString, QObject *>>{
+                 {QStringLiteral("HardwareBridge"), &hardware},
+                 {QStringLiteral("UpdateBridge"), &scanner},
+                 {QStringLiteral("UpdateInstallBridge"), &installer},
+                 {QStringLiteral("RecoveryBridge"), &recovery},
+                 {QStringLiteral("SecurityBridge"), &security},
+                 {QStringLiteral("ServiceBridge"), &services},
+                 {QStringLiteral("ApplicationBridge"), &applications},
+                 {QStringLiteral("ProcessBridge"), &processes},
+                 {QStringLiteral("NotificationBridge"), &notifications},
+                 {QStringLiteral("PowerBridge"), &power},
+                 {QStringLiteral("MonitoringBridge"), &monitoring}}) {
+            engine.rootContext()->setContextProperty(pair.first, pair.second);
+        }
+
+        engine.load(QUrl(QStringLiteral("qrc:/Zethropol/ControlCenter/qml/Main.qml")));
+        QVERIFY(!engine.rootObjects().isEmpty());
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+        QVERIFY(window);
+        auto *pages = window->findChild<QQuickItem *>(QStringLiteral("controlCenterPages"));
+        QVERIFY(pages);
+        QVERIFY(pages->setProperty("currentIndex", 7));
+        QTest::qWait(40);
+
+        auto *eventsList = window->findChild<QQuickItem *>(QStringLiteral("recoveryEventsList"));
+        auto *pointsList = window->findChild<QQuickItem *>(QStringLiteral("recoveryPointsList"));
+        auto *pointsEmpty = window->findChild<QQuickItem *>(QStringLiteral("recoveryPointsEmptyLabel"));
+        auto *listError = window->findChild<QQuickItem *>(QStringLiteral("recoveryListErrorLabel"));
+        QVERIFY(eventsList);
+        QVERIFY(pointsList);
+        QVERIFY(pointsEmpty);
+        QVERIFY(listError);
+
+        QCOMPARE(eventsList->property("count").toInt(), 1);
+        QCOMPARE(pointsList->property("count").toInt(), 1);
+        QVERIFY(pointsList->isVisible());
+        QVERIFY(!pointsEmpty->isVisible());
+        QVERIFY(!listError->isVisible());
+
+        // Switch to empty snapshot list -> empty label visible, list hidden
+        paths.snapperBin = writeScript(
+            dir,
+            QStringLiteral("bin/snapper"),
+            QByteArrayLiteral("echo '{\"root\":[]}'\nexit 0\n"));
+        updateEnvFile(paths);
+        recovery.refresh();
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
+        QTest::qWait(30);
+        QVERIFY(recovery.available());
+        QCOMPARE(pointsList->property("count").toInt(), 0);
+        QVERIFY(pointsEmpty->isVisible());
+        QVERIFY(!listError->isVisible());
+
+        // Switch to error state -> error label visible, empty label hidden
+        stopRecoveryDaemon();
+        recovery.refresh();
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
+        QTest::qWait(30);
+        QVERIFY(!recovery.available());
+        QVERIFY(listError->isVisible());
+        QVERIFY(!pointsEmpty->isVisible());
+
+        QStringList qmlErrors;
+        for (const auto &signal : warnings)
+            for (const auto &warning : qvariant_cast<QList<QQmlError>>(signal.first()))
+                qmlErrors.append(warning.toString());
+        QVERIFY2(qmlErrors.isEmpty(), qPrintable(qmlErrors.join(QLatin1Char('\n'))));
+    }
+
+    void listScenario11_refreshAfterSnapshotCreationRegression()
+    {
+        QTemporaryDir dir;
+        const EnvPaths paths = setupStandardFixture(dir);
+        startRecoveryDaemon(paths.envFile);
+
+        RecoveryService recovery;
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
+        QCOMPARE(recovery.snapshotCount(), 4);
+        QCOMPARE(recovery.recoveryPoints().size(), 1);
+
+        recovery.requestCreateRecoveryPoint(QStringLiteral("Post-create list check"));
+        recovery.confirmCreateRecoveryPoint();
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.actionBusy(), 5000);
+        QCOMPARE(recovery.lastOperationCode(), QStringLiteral("ok"));
+        QCOMPARE(recovery.lastCreatedSnapshotId(), 26);
+
+        QTRY_COMPARE_WITH_TIMEOUT(recovery.snapshotCount(), 5, 5000);
+        QCOMPARE(recovery.recoveryPoints().size(), 2);
+        QCOMPARE(recovery.recoveryPoints().at(0).toMap().value(QStringLiteral("id")).toInt(), 25);
+        QCOMPARE(recovery.recoveryPoints().at(1).toMap().value(QStringLiteral("id")).toInt(), 26);
+    }
 };
 
 QTEST_MAIN(RecoveryTest)

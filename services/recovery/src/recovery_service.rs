@@ -550,6 +550,7 @@ fn parse_snapper_json(
     };
 
     let mut snapshots = Vec::new();
+    let mut seen_ids = HashSet::new();
     let mut current_id = 0i32;
 
     for entry in entries {
@@ -560,10 +561,12 @@ fn parse_snapper_json(
             Some(JsonVal::Number(n)) if *n >= 0 => *n as i32,
             _ => return Err("Snapshot entry is missing a valid 'number' field.".to_string()),
         };
+        if !seen_ids.insert(number) {
+            continue;
+        }
         let snap_type = match obj.get("type") {
             Some(JsonVal::Str(s)) => s.clone(),
-            Some(JsonVal::Null) | None => String::new(),
-            _ => return Err("Snapshot entry has invalid 'type' field.".to_string()),
+            _ => String::new(),
         };
         let description = match obj.get("description") {
             Some(JsonVal::Str(s)) => s.clone(),
@@ -601,7 +604,7 @@ fn parse_snapper_json(
             }
         }
 
-        if description == "current" {
+        if description == "current" || (number == 0 && current_id == 0) {
             current_id = number;
         }
 
@@ -1573,27 +1576,6 @@ impl RecoveryManager {
             cancelled_operations: Arc::new(Mutex::new(HashSet::new())),
         }
     }
-
-    fn inspect_current_state(&self) -> DetectionReport {
-        let cfg = DetectionConfig::from_env();
-        detect_recovery_state(&cfg)
-    }
-
-    fn get_snapper_snapshots(&self) -> Vec<RecoveryPoint> {
-        let report = self.inspect_current_state();
-        report
-            .snapshots
-            .into_iter()
-            .filter(|s| s.id > 0)
-            .map(|s| RecoveryPoint {
-                id: s.id as u32,
-                name: format!("Snapshot-{}", s.id),
-                created_at: s.date,
-                description: s.description,
-                is_current: s.is_current,
-            })
-            .collect()
-    }
 }
 
 #[interface(name = "org.zethropol.Recovery.v1")]
@@ -1618,7 +1600,31 @@ impl RecoveryManager {
     }
 
     async fn list_recovery_points(&self) -> Result<Vec<RecoveryPoint>, zbus::fdo::Error> {
-        Ok(self.get_snapper_snapshots())
+        let report = tokio::task::spawn_blocking(|| {
+            let cfg = DetectionConfig::from_env();
+            detect_recovery_state(&cfg)
+        })
+        .await
+        .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+
+        match report.status {
+            DetectionStatus::InstalledAndConfigured => Ok(report
+                .snapshots
+                .into_iter()
+                .filter(|s| s.id > 0)
+                .map(|s| RecoveryPoint {
+                    id: s.id as u32,
+                    name: format!("Snapshot-{}", s.id),
+                    created_at: s.date,
+                    description: s.description,
+                    is_current: s.is_current,
+                })
+                .collect()),
+            DetectionStatus::PermissionDenied => {
+                Err(zbus::fdo::Error::AccessDenied(report.status_message))
+            }
+            _ => Err(zbus::fdo::Error::Failed(report.status_message)),
+        }
     }
 
     async fn get_operation_state(
@@ -2235,5 +2241,41 @@ echo '{"root":[{"number":0,"type":"single","description":"current"}]}'
         cfg.pkcheck_bin = fx.write_exec("bin/pkcheck", "echo 'dismissed by user' >&2\nexit 2\n");
         let err_cancel = check_polkit_authorization(&cfg, ":1.10").unwrap_err();
         assert_eq!(err_cancel.0, "cancelled");
+    }
+
+    #[test]
+    fn list_deduplicates_ids_and_handles_missing_optional_fields() {
+        let json = r#"{
+          "root": [
+            {"number": 0, "description": "current"},
+            {"number": 5, "type": 123, "date": null, "userdata": "bad"},
+            {"number": 5, "type": "single", "description": "duplicate should be ignored"},
+            {"number": 6, "type": "pre", "description": "pre-only"},
+            {"number": 7, "type": "post", "pre-number": 6, "description": "post-pair"},
+            {"number": 7, "type": "post", "pre-number": 6, "description": "dup-post"}
+          ]
+        }"#;
+        let (snaps, events, points, current_id) = parse_snapper_json(json, "root").unwrap();
+        assert_eq!(current_id, 0);
+        assert_eq!(snaps.len(), 4);
+        assert_eq!(events.len(), 1);
+        assert_eq!(points.len(), 1);
+        assert_eq!(points[0].id, 5);
+        assert_eq!(points[0].snapshot_type, "");
+        assert_eq!(points[0].date, "");
+    }
+
+    #[test]
+    fn list_empty_snapshots_returns_empty_not_fake() {
+        let fx = TestFixture::new();
+        let mut cfg = fx.base_config();
+        cfg.snapper_bin = fx.write_exec("bin/snapper", "echo '{\"root\":[]}'\nexit 0\n");
+        let report = detect_recovery_state(&cfg);
+        assert_eq!(report.status, DetectionStatus::InstalledAndConfigured);
+        assert!(report.available);
+        assert_eq!(report.snapshot_count, 0);
+        assert!(report.snapshots.is_empty());
+        assert!(report.recovery_events.is_empty());
+        assert!(report.recovery_points.is_empty());
     }
 }
