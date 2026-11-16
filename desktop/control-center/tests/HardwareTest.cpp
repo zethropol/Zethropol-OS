@@ -5,6 +5,7 @@
 #include "SecurityService.h"
 #include "ServiceService.h"
 #include "ApplicationService.h"
+#include "ProcessService.h"
 #include "NotificationService.h"
 #include "core/zethropol_power_client.h"
 #include "core/zethropol_monitoring_client.h"
@@ -64,8 +65,12 @@ class HardwareTest : public QObject {
             {"motherboard", QVariantMap{{"model", "Fixture Board"}}}};
     }
     void startRealService() {
-        QVERIFY2(QFile::exists(HARDWARE_BINARY), "Build services/hardware with cargo build --offline --locked first");
-        service.setProgram(HARDWARE_BINARY);
+        // The binary path may be overridden (e.g. when target/ is read-only).
+        const QString binary = qEnvironmentVariableIsSet("ZETHROPOL_HARDWARE_SERVICE_BINARY")
+            ? qEnvironmentVariable("ZETHROPOL_HARDWARE_SERVICE_BINARY")
+            : QStringLiteral(HARDWARE_BINARY);
+        QVERIFY2(QFile::exists(binary), "Build services/hardware with cargo build --offline --locked first");
+        service.setProgram(binary);
         service.setArguments({"--dbus-service"});
         service.start();
         QVERIFY(service.waitForStarted());
@@ -212,6 +217,7 @@ private:
         SecurityService security;
         ServiceService services;
         ApplicationService applications;
+        ProcessService processes;
         NotificationService notifications;
         ZethropolPowerClient power;
         ZethropolMonitoringClient monitoring;
@@ -220,7 +226,8 @@ private:
         for (const auto &pair : QList<QPair<QString, QObject *>>{
                  {"HardwareBridge", &client}, {"UpdateBridge", &scanner}, {"UpdateInstallBridge", &installer},
                  {"RecoveryBridge", &recovery}, {"SecurityBridge", &security}, {"ServiceBridge", &services},
-                 {"ApplicationBridge", &applications}, {"NotificationBridge", &notifications},
+                 {"ApplicationBridge", &applications}, {"ProcessBridge", &processes},
+                 {"NotificationBridge", &notifications},
                  {"PowerBridge", &power}, {"MonitoringBridge", &monitoring}})
             engine.rootContext()->setContextProperty(pair.first, pair.second);
         engine.load(QUrl(QStringLiteral("qrc:/Zethropol/ControlCenter/qml/Main.qml")));
@@ -229,8 +236,10 @@ private:
         QVERIFY(window);
         auto *pages = window->findChild<QQuickItem *>("controlCenterPages");
         QVERIFY(pages);
-        QCOMPARE(pages->property("count").toInt(), 11);
-        for (int index = 0; index < 11; ++index) {
+        // Overview, Hardware, Diagnostics, System, Performance, Power, Updates,
+        // Recovery, Security, Services, Applications, Processes.
+        QCOMPARE(pages->property("count").toInt(), 12);
+        for (int index = 0; index < 12; ++index) {
             QVERIFY(pages->setProperty("currentIndex", index));
             QTest::qWait(35);
             QCOMPARE(pages->property("currentIndex").toInt(), index);
