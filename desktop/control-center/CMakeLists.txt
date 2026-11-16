@@ -114,4 +114,24 @@ if(BUILD_TESTING)
     add_test(NAME control_center_process_service_test
              COMMAND control_center_process_service_test)
 
+    qt_add_executable(control_center_recovery_test
+        tests/RecoveryTest.cpp
+        ${CONTROL_CENTER_SRCS}
+        ${ZETHROPOL_DBUS_SRCS})
+    qt_add_resources(control_center_recovery_test "recovery_test_qml"
+        PREFIX "/Zethropol/ControlCenter"
+        FILES qml/Main.qml qml/SystemState.qml qml/HardwarePage.qml qml/ProcessesPage.qml qml/UpdateReport.qml)
+    target_include_directories(control_center_recovery_test PRIVATE src)
+    target_link_libraries(control_center_recovery_test PRIVATE
+        Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::DBus Qt6::Test)
+    target_compile_definitions(control_center_recovery_test PRIVATE
+        RECOVERY_BINARY="${CMAKE_CURRENT_SOURCE_DIR}/../../services/recovery/target/debug/recovery")
+    add_dependencies(control_center_recovery_test control_center)
+    add_test(NAME control_center_recovery_test
+        COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/tests/hardware-private-bus.sh
+            $<TARGET_FILE:control_center_recovery_test>)
+    set_tests_properties(control_center_recovery_test PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+        TIMEOUT 90)
+
 endif()

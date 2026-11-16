@@ -1193,8 +1193,9 @@ ApplicationWindow {
                                 }
 
                                 Button {
+                                    objectName: "recoveryRefreshButton"
                                     text: RecoveryBridge.checking ? "Checking..." : "Refresh"
-                                    enabled: !RecoveryBridge.checking
+                                    enabled: !RecoveryBridge.checking && !RecoveryBridge.actionBusy
                                     onClicked: RecoveryBridge.refresh()
                                 }
                             }
@@ -1205,27 +1206,92 @@ ApplicationWindow {
 
                                 TextField {
                                     id: recoveryDescriptionField
+                                    objectName: "recoveryDescriptionInput"
                                     Layout.fillWidth: true
                                     placeholderText: "Recovery point description"
-                                    enabled: !RecoveryBridge.actionBusy
+                                    enabled: !RecoveryBridge.actionBusy && !RecoveryBridge.checking
                                 }
 
                                 Button {
+                                    objectName: "createRecoveryPointButton"
                                     text: RecoveryBridge.actionBusy
                                           ? "Creating..."
                                           : "Create Recovery Point"
-                                    enabled: !RecoveryBridge.actionBusy
-                                    onClicked: RecoveryBridge.createRecoveryPoint(
+                                    enabled: !RecoveryBridge.actionBusy && !RecoveryBridge.checking
+                                    onClicked: RecoveryBridge.requestCreateRecoveryPoint(
                                         recoveryDescriptionField.text)
+                                }
+
+                                Button {
+                                    objectName: "cancelRecoveryOperationButton"
+                                    visible: RecoveryBridge.actionBusy
+                                    text: "Cancel"
+                                    onClicked: RecoveryBridge.cancelActiveOperation()
                                 }
                             }
 
                             Label {
+                                objectName: "recoveryActionStatusLabel"
                                 visible: RecoveryBridge.actionStatus !== ""
                                 text: RecoveryBridge.actionStatus
                                 opacity: 0.8
                                 wrapMode: Text.Wrap
                                 Layout.fillWidth: true
+                            }
+
+                            Dialog {
+                                id: recoveryCreateConfirmDialog
+                                objectName: "recoveryCreateConfirmation"
+                                title: "Create Recovery Point"
+                                modal: true
+                                visible: RecoveryBridge.confirmationPending
+                                anchors.centerIn: Overlay.overlay
+                                width: 440
+                                closePolicy: Popup.NoAutoClose
+
+                                contentItem: ColumnLayout {
+                                    spacing: 10
+
+                                    Label {
+                                        text: "Create a new Btrfs recovery snapshot for configuration '"
+                                              + (RecoveryBridge.configName !== "" ? RecoveryBridge.configName : "root")
+                                              + "' (" + RecoveryBridge.filesystem + ")?"
+                                        wrapMode: Text.WordWrap
+                                        Layout.fillWidth: true
+                                    }
+
+                                    Label {
+                                        text: "Description: " + RecoveryBridge.pendingDescription
+                                        font.bold: true
+                                        wrapMode: Text.WordWrap
+                                        Layout.fillWidth: true
+                                    }
+
+                                    Label {
+                                        text: "Administrator authorization (Polkit) is required to create a system snapshot."
+                                        opacity: 0.7
+                                        wrapMode: Text.WordWrap
+                                        Layout.fillWidth: true
+                                    }
+                                }
+
+                                footer: DialogButtonBox {
+                                    Button {
+                                        objectName: "cancelCreateRecoveryPoint"
+                                        text: "Cancel"
+                                        onClicked: RecoveryBridge.cancelCreateRecoveryPoint()
+                                    }
+
+                                    Button {
+                                        objectName: "confirmCreateRecoveryPoint"
+                                        text: "Create Recovery Point"
+                                        enabled: RecoveryBridge.confirmationPending && !RecoveryBridge.actionBusy
+                                        onClicked: {
+                                            RecoveryBridge.confirmCreateRecoveryPoint()
+                                            recoveryDescriptionField.text = ""
+                                        }
+                                    }
+                                }
                             }
 
                             Rectangle {
@@ -1240,27 +1306,34 @@ ApplicationWindow {
                                     spacing: 6
 
                                     Label {
+                                        objectName: "recoveryStatusTitle"
                                         text: RecoveryBridge.checking
                                               ? "Checking recovery information..."
-                                              : (RecoveryBridge.permissionRequired
-                                                 ? "Authorization required"
-                                                 : (RecoveryBridge.available
-                                                    ? "Recovery is available"
-                                                    : "Recovery information unavailable"))
+                                              : (RecoveryBridge.statusTitle !== ""
+                                                 ? RecoveryBridge.statusTitle
+                                                 : (RecoveryBridge.permissionRequired
+                                                    ? "Authorization required"
+                                                    : (RecoveryBridge.available
+                                                       ? "Recovery is available"
+                                                       : "Recovery information unavailable")))
                                         font.pixelSize: 20
                                         font.bold: true
                                     }
 
                                     Label {
+                                        objectName: "recoveryStatusMessage"
                                         text: RecoveryBridge.permissionRequired
                                               ? "Administrator permission is required to read Snapper snapshots"
                                               : RecoveryBridge.available
                                                 ? RecoveryBridge.filesystem + " · "
                                                   + RecoveryBridge.snapshotTool + " · "
                                                   + RecoveryBridge.snapshotCount + " snapshots"
-                                                : "No recovery snapshot information is currently available"
+                                                : (RecoveryBridge.statusMessage !== ""
+                                                   ? RecoveryBridge.statusMessage
+                                                   : "No recovery snapshot information is currently available")
                                         opacity: 0.7
                                         wrapMode: Text.Wrap
+                                        Layout.fillWidth: true
                                     }
                                 }
                             }
