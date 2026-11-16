@@ -40,6 +40,9 @@ class RecoveryService : public QObject
     Q_PROPERTY(int lastCreatedSnapshotId READ lastCreatedSnapshotId NOTIFY stateChanged)
     Q_PROPERTY(bool confirmationPending READ confirmationPending NOTIFY stateChanged)
     Q_PROPERTY(QString pendingDescription READ pendingDescription NOTIFY stateChanged)
+    Q_PROPERTY(bool preflightBusy READ preflightBusy NOTIFY stateChanged)
+    Q_PROPERTY(int selectedRollbackPointId READ selectedRollbackPointId NOTIFY stateChanged)
+    Q_PROPERTY(QVariantMap preflightResult READ preflightResult NOTIFY stateChanged)
 
 public:
     explicit RecoveryService(QObject *parent = nullptr);
@@ -71,6 +74,9 @@ public:
     int lastCreatedSnapshotId() const;
     bool confirmationPending() const;
     QString pendingDescription() const;
+    bool preflightBusy() const;
+    int selectedRollbackPointId() const;
+    QVariantMap preflightResult() const;
 
     void setLocalFallbackEnabled(bool enabled);
     void setOperationTimeoutMs(int timeoutMs);
@@ -89,6 +95,7 @@ public slots:
     void confirmCreateRecoveryPoint();
     void cancelCreateRecoveryPoint();
     void cancelActiveOperation();
+    void preflightRollback(int pointId);
     void createRecoveryPoint(const QString &description);
     void deleteRecoveryPoint(int snapshotId);
 
@@ -99,6 +106,7 @@ private slots:
     void handleDbusReply(QDBusPendingCallWatcher *watcher);
     void handleDbusStateChanged(const QVariantMap &state);
     void handleCreateReply(QDBusPendingCallWatcher *watcher);
+    void handlePreflightReply(QDBusPendingCallWatcher *watcher);
     void pollOperationState();
     void handleOperationStateReply(QDBusPendingCallWatcher *watcher);
     void readOutput();
@@ -152,6 +160,9 @@ private:
     int m_lastCreatedSnapshotId = 0;
     bool m_confirmationPending = false;
     QString m_pendingDescription;
+    bool m_preflightBusy = false;
+    int m_selectedRollbackPointId = 0;
+    QVariantMap m_preflightResult;
 
     bool m_localFallbackEnabled = false;
     QString m_snapperBinary = QStringLiteral("/usr/bin/snapper");

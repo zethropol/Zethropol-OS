@@ -25,11 +25,16 @@ pub struct OpState {
 pub struct DetectionConfig {
     pub snapper_bin: PathBuf,
     pub pkcheck_bin: PathBuf,
+    pub btrfs_bin: PathBuf,
+    pub limine_sync_bin: PathBuf,
     pub sysconf_file: PathBuf,
     pub configs_dir: PathBuf,
     pub mountinfo_file: PathBuf,
     pub fstab_file: PathBuf,
     pub snapshots_dir: PathBuf,
+    pub limine_conf_file: PathBuf,
+    pub esp_dir: PathBuf,
+    pub polkit_policy_file: PathBuf,
     pub command_timeout: Duration,
 }
 
@@ -38,11 +43,18 @@ impl Default for DetectionConfig {
         Self {
             snapper_bin: PathBuf::from("/usr/bin/snapper"),
             pkcheck_bin: PathBuf::from("/usr/bin/pkcheck"),
+            btrfs_bin: PathBuf::from("/usr/bin/btrfs"),
+            limine_sync_bin: PathBuf::from("/usr/bin/limine-snapper-sync"),
             sysconf_file: PathBuf::from("/etc/conf.d/snapper"),
             configs_dir: PathBuf::from("/etc/snapper/configs"),
             mountinfo_file: PathBuf::from("/proc/self/mountinfo"),
             fstab_file: PathBuf::from("/etc/fstab"),
             snapshots_dir: PathBuf::from("/.snapshots"),
+            limine_conf_file: PathBuf::from("/etc/limine-snapper-sync.conf"),
+            esp_dir: PathBuf::from("/boot"),
+            polkit_policy_file: PathBuf::from(
+                "/usr/share/polkit-1/actions/org.zethropol.recovery.policy",
+            ),
             command_timeout: Duration::from_secs(4),
         }
     }
@@ -80,6 +92,12 @@ impl DetectionConfig {
         if let Some(v) = get_var("ZETHROPOL_RECOVERY_PKCHECK_BIN") {
             cfg.pkcheck_bin = PathBuf::from(v);
         }
+        if let Some(v) = get_var("ZETHROPOL_RECOVERY_BTRFS_BIN") {
+            cfg.btrfs_bin = PathBuf::from(v);
+        }
+        if let Some(v) = get_var("ZETHROPOL_RECOVERY_LIMINE_SYNC_BIN") {
+            cfg.limine_sync_bin = PathBuf::from(v);
+        }
         if let Some(v) = get_var("ZETHROPOL_RECOVERY_SYSCONF_FILE") {
             cfg.sysconf_file = PathBuf::from(v);
         }
@@ -94,6 +112,15 @@ impl DetectionConfig {
         }
         if let Some(v) = get_var("ZETHROPOL_RECOVERY_SNAPSHOTS_DIR") {
             cfg.snapshots_dir = PathBuf::from(v);
+        }
+        if let Some(v) = get_var("ZETHROPOL_RECOVERY_LIMINE_CONF") {
+            cfg.limine_conf_file = PathBuf::from(v);
+        }
+        if let Some(v) = get_var("ZETHROPOL_RECOVERY_ESP_DIR") {
+            cfg.esp_dir = PathBuf::from(v);
+        }
+        if let Some(v) = get_var("ZETHROPOL_RECOVERY_POLKIT_POLICY_FILE") {
+            cfg.polkit_policy_file = PathBuf::from(v);
         }
         if let Some(v) = get_var("ZETHROPOL_RECOVERY_TIMEOUT_MS") {
             if let Ok(ms) = v.parse::<u64>() {
@@ -1188,6 +1215,14 @@ pub fn check_polkit_authorization(
     config: &DetectionConfig,
     sender: &str,
 ) -> Result<(), (String, String)> {
+    check_polkit_action(config, sender, "org.zethropol.recovery.modify")
+}
+
+pub fn check_polkit_action(
+    config: &DetectionConfig,
+    sender: &str,
+    action_id: &str,
+) -> Result<(), (String, String)> {
     if sender.trim().is_empty() {
         return Err((
             "invalid-caller".to_string(),
@@ -1206,7 +1241,7 @@ pub fn check_polkit_authorization(
         &pkcheck_bin,
         &[
             "--action-id",
-            "org.zethropol.recovery.modify",
+            action_id,
             "--system-bus-name",
             sender,
             "--allow-user-interaction",
@@ -1387,6 +1422,697 @@ pub fn execute_verified_snapshot_creation(
         }
         Ok(_) => unreachable!(),
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PreflightCheck {
+    pub id: String,
+    pub title: String,
+    pub status: String, // "pass", "blocked", "unknown"
+    pub reason: String,
+    pub remediation: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct RollbackPreflightReport {
+    pub point_id: u32,
+    pub overall_status: String, // "ready", "blocked", "unknown"
+    pub can_proceed: bool,
+    pub rollback_execution_enabled: bool,
+    pub requires_confirmation: bool,
+    pub requires_authorization: bool,
+    pub polkit_action: String,
+    pub snapshot_config: String,
+    pub filesystem: String,
+    pub root_subvolume: String,
+    pub snapshot_subvolume_path: String,
+    pub snapshot_subvolume_id: String,
+    pub limine_status: String,
+    pub summary: String,
+    pub checks: Vec<PreflightCheck>,
+}
+
+fn check_record(id: &str, title: &str, status: &str, reason: String, remediation: &str) -> PreflightCheck {
+    PreflightCheck {
+        id: id.to_string(),
+        title: title.to_string(),
+        status: status.to_string(),
+        reason,
+        remediation: remediation.to_string(),
+    }
+}
+
+fn verify_snapshot_btrfs_subvolume(
+    config: &DetectionConfig,
+    point_id: u32,
+) -> (String, String, String, Option<String>) {
+    let snap_dir = config.snapshots_dir.join(point_id.to_string());
+    let subvol_path = snap_dir.join("snapshot");
+    let subvol_path_str = subvol_path.to_string_lossy().to_string();
+
+    match fs::metadata(&subvol_path) {
+        Ok(meta) if meta.is_dir() => {}
+        Ok(_) => {
+            return (
+                "blocked".to_string(),
+                subvol_path_str,
+                String::new(),
+                Some("Snapshot subvolume path exists but is not a directory.".to_string()),
+            );
+        }
+        Err(e) if e.kind() == ErrorKind::PermissionDenied => {
+            return (
+                "blocked".to_string(),
+                subvol_path_str,
+                String::new(),
+                Some("Permission denied when accessing snapshot subvolume directory.".to_string()),
+            );
+        }
+        Err(_) => {
+            return (
+                "blocked".to_string(),
+                subvol_path_str,
+                String::new(),
+                Some(format!(
+                    "Snapshot subvolume directory '{}' is missing.",
+                    subvol_path.display()
+                )),
+            );
+        }
+    }
+
+    let Some(btrfs_bin) = resolve_snapper_binary(&config.btrfs_bin) else {
+        return (
+            "unknown".to_string(),
+            subvol_path_str,
+            String::new(),
+            Some("btrfs command is unavailable to verify subvolume ID.".to_string()),
+        );
+    };
+
+    match run_command_with_timeout(
+        &btrfs_bin,
+        &["subvolume", "show", &subvol_path_str],
+        config.command_timeout,
+    ) {
+        Ok((0, stdout, _)) => {
+            let mut subvol_id = String::new();
+            for line in stdout.lines() {
+                let trimmed = line.trim();
+                if let Some(rest) = trimmed.strip_prefix("Subvolume ID:") {
+                    subvol_id = rest.trim().to_string();
+                    break;
+                }
+            }
+            if subvol_id.is_empty() || !subvol_id.chars().all(|c| c.is_ascii_digit()) {
+                return (
+                    "blocked".to_string(),
+                    subvol_path_str,
+                    String::new(),
+                    Some("btrfs subvolume show did not report a valid numeric Subvolume ID.".to_string()),
+                );
+            }
+            ("pass".to_string(), subvol_path_str, subvol_id, None)
+        }
+        Ok((_, stdout, stderr)) => {
+            let lower = format!("{}\n{}", stderr, stdout).to_ascii_lowercase();
+            if lower.contains("permission denied") || lower.contains("operation not permitted") {
+                (
+                    "blocked".to_string(),
+                    subvol_path_str,
+                    String::new(),
+                    Some("Permission denied while querying Btrfs subvolume metadata.".to_string()),
+                )
+            } else {
+                (
+                    "blocked".to_string(),
+                    subvol_path_str,
+                    String::new(),
+                    Some("Target path is not a valid Btrfs subvolume.".to_string()),
+                )
+            }
+        }
+        Err(_) => (
+            "unknown".to_string(),
+            subvol_path_str,
+            String::new(),
+            Some("Timed out or failed while executing btrfs subvolume show.".to_string()),
+        ),
+    }
+}
+
+fn check_limine_integration(config: &DetectionConfig) -> (String, String, String) {
+    let sync_bin = resolve_snapper_binary(&config.limine_sync_bin);
+    if sync_bin.is_none() {
+        return (
+            "unknown".to_string(),
+            "limine-snapper-sync executable was not found.".to_string(),
+            "Install and configure limine-snapper-sync before attempting rollback.".to_string(),
+        );
+    }
+
+    match fs::read_to_string(&config.limine_conf_file) {
+        Ok(content) => {
+            if content.trim().is_empty() {
+                return (
+                    "blocked".to_string(),
+                    format!("Limine sync configuration '{}' is empty.", config.limine_conf_file.display()),
+                    "Verify /etc/limine-snapper-sync.conf contains valid settings.".to_string(),
+                );
+            }
+        }
+        Err(e) if e.kind() == ErrorKind::PermissionDenied => {
+            return (
+                "blocked".to_string(),
+                "Permission denied reading /etc/limine-snapper-sync.conf.".to_string(),
+                "Ensure Limine configuration permissions allow inspection.".to_string(),
+            );
+        }
+        Err(_) => {
+            return (
+                "unknown".to_string(),
+                format!("Limine sync configuration '{}' was not found.", config.limine_conf_file.display()),
+                "Verify /etc/limine-snapper-sync.conf exists before rollback.".to_string(),
+            );
+        }
+    }
+
+    let limine_boot_cfg = config.esp_dir.join("limine.conf");
+    let limine_alt_cfg = config.esp_dir.join("limine/limine.conf");
+    match fs::metadata(&config.esp_dir) {
+        Ok(meta) if meta.is_dir() => {
+            let has_cfg = limine_boot_cfg.is_file() || limine_alt_cfg.is_file();
+            if !has_cfg {
+                return (
+                    "unknown".to_string(),
+                    format!(
+                        "Limine boot menu file (limine.conf) was not found under '{}'.",
+                        config.esp_dir.display()
+                    ),
+                    "Verify the EFI/boot partition is mounted and contains limine.conf.".to_string(),
+                );
+            }
+            (
+                "pass".to_string(),
+                format!("Limine sync tool, configuration, and '{}' are verified.", config.esp_dir.display()),
+                "No action required.".to_string(),
+            )
+        }
+        Ok(_) => (
+            "blocked".to_string(),
+            format!("ESP path '{}' is not a directory.", config.esp_dir.display()),
+            "Verify boot partition mount configuration.".to_string(),
+        ),
+        Err(e) if e.kind() == ErrorKind::PermissionDenied => (
+            "blocked".to_string(),
+            format!("Permission denied accessing boot directory '{}'.", config.esp_dir.display()),
+            "Boot partition inspection requires read access.".to_string(),
+        ),
+        Err(_) => (
+            "unknown".to_string(),
+            format!("Boot/ESP directory '{}' is not mounted or inaccessible.", config.esp_dir.display()),
+            "Ensure /boot is mounted and limine.conf is verifiable.".to_string(),
+        ),
+    }
+}
+
+pub fn run_rollback_preflight(
+    config: &DetectionConfig,
+    point_id: u32,
+    active_operation_running: bool,
+) -> RollbackPreflightReport {
+    let initial_report = detect_recovery_state(config);
+    let mut checks = Vec::new();
+
+    // 1. Snapper & root config
+    let c1 = if initial_report.snapper_installed
+        && initial_report.configured
+        && initial_report.config_name == "root"
+        && initial_report.status != DetectionStatus::InvalidConfiguration
+        && initial_report.status != DetectionStatus::InstalledNotConfigured
+    {
+        check_record(
+            "snapper_and_root_config",
+            "Snapper and root configuration",
+            "pass",
+            "Snapper is installed and 'root' configuration is valid.".to_string(),
+            "No action required.",
+        )
+    } else if initial_report.status == DetectionStatus::PermissionDenied {
+        check_record(
+            "snapper_and_root_config",
+            "Snapper and root configuration",
+            "blocked",
+            initial_report.status_message.clone(),
+            "Administrator permission is required to inspect Snapper configuration.",
+        )
+    } else {
+        check_record(
+            "snapper_and_root_config",
+            "Snapper and root configuration",
+            "blocked",
+            initial_report.status_message.clone(),
+            "Ensure Snapper is installed and a valid 'root' configuration for '/' exists.",
+        )
+    };
+    checks.push(c1);
+
+    // 2. Btrfs root filesystem
+    let c2 = if initial_report.filesystem.eq_ignore_ascii_case("Btrfs") {
+        check_record(
+            "btrfs_root_filesystem",
+            "Btrfs root filesystem",
+            "pass",
+            format!("Root filesystem is Btrfs (subvolume '{}').", initial_report.root_subvolume),
+            "No action required.",
+        )
+    } else {
+        check_record(
+            "btrfs_root_filesystem",
+            "Btrfs root filesystem",
+            "blocked",
+            format!("Root filesystem is '{}', not Btrfs.", initial_report.filesystem),
+            "Btrfs root filesystem is required for Snapper rollback.",
+        )
+    };
+    checks.push(c2);
+
+    // 3. Target snapshot exists in real Snapper list
+    let target_snapshot = if point_id > 0 && initial_report.status == DetectionStatus::InstalledAndConfigured {
+        initial_report.snapshots.iter().find(|s| s.id == point_id as i32).cloned()
+    } else {
+        None
+    };
+
+    let c3 = if point_id == 0 {
+        check_record(
+            "snapshot_exists",
+            "Target snapshot exists",
+            "blocked",
+            "Snapshot ID #0 represents the active system and cannot be a rollback target.".to_string(),
+            "Select a valid non-current snapshot ID (> 0).",
+        )
+    } else if initial_report.status != DetectionStatus::InstalledAndConfigured {
+        check_record(
+            "snapshot_exists",
+            "Target snapshot exists",
+            "blocked",
+            format!("Cannot verify snapshot #{}: {}", point_id, initial_report.status_message),
+            "Resolve Snapper backend or permission issues first.",
+        )
+    } else if target_snapshot.is_some() {
+        check_record(
+            "snapshot_exists",
+            "Target snapshot exists",
+            "pass",
+            format!("Snapshot #{} is present in Snapper list.", point_id),
+            "No action required.",
+        )
+    } else {
+        check_record(
+            "snapshot_exists",
+            "Target snapshot exists",
+            "blocked",
+            format!("Snapshot #{} was not found in Snapper 'root' list.", point_id),
+            "Refresh the snapshot list and choose an existing snapshot ID.",
+        )
+    };
+    checks.push(c3);
+
+    // 4. Snapshot belongs to root configuration
+    let c4 = if target_snapshot.is_some() && initial_report.config_name == "root" {
+        // Also verify info.xml if present does not reference a mismatched config/subvolume
+        let info_xml = config.snapshots_dir.join(point_id.to_string()).join("info.xml");
+        if let Ok(xml) = fs::read_to_string(&info_xml) {
+            if xml.contains("<subvol>") && !xml.contains("<subvol>/</subvol>") && !xml.contains("<subvol>/@</subvol>") {
+                check_record(
+                    "snapshot_belongs_to_root",
+                    "Snapshot belongs to root configuration",
+                    "blocked",
+                    format!("Snapshot #{} metadata references a non-root subvolume.", point_id),
+                    "Select a snapshot created by the 'root' configuration.",
+                )
+            } else {
+                check_record(
+                    "snapshot_belongs_to_root",
+                    "Snapshot belongs to root configuration",
+                    "pass",
+                    format!("Snapshot #{} belongs to Snapper 'root' configuration.", point_id),
+                    "No action required.",
+                )
+            }
+        } else {
+            check_record(
+                "snapshot_belongs_to_root",
+                "Snapshot belongs to root configuration",
+                "pass",
+                format!("Snapshot #{} is listed under Snapper 'root' configuration.", point_id),
+                "No action required.",
+            )
+        }
+    } else {
+        check_record(
+            "snapshot_belongs_to_root",
+            "Snapshot belongs to root configuration",
+            "blocked",
+            format!("Snapshot #{} could not be confirmed under 'root' configuration.", point_id),
+            "Ensure target snapshot belongs to the 'root' configuration.",
+        )
+    };
+    checks.push(c4);
+
+    // 5. Snapshot Btrfs subvolume path and ID verified
+    let (subvol_status, subvol_path, subvol_id, subvol_err) = if target_snapshot.is_some() {
+        verify_snapshot_btrfs_subvolume(config, point_id)
+    } else {
+        (
+            "blocked".to_string(),
+            config.snapshots_dir.join(point_id.to_string()).join("snapshot").to_string_lossy().to_string(),
+            String::new(),
+            Some("Target snapshot is unavailable for subvolume verification.".to_string()),
+        )
+    };
+    let c5 = if subvol_status == "pass" {
+        check_record(
+            "snapshot_subvolume_verified",
+            "Snapshot Btrfs subvolume verified",
+            "pass",
+            format!("Verified Btrfs subvolume '{}' (ID {}).", subvol_path, subvol_id),
+            "No action required.",
+        )
+    } else {
+        check_record(
+            "snapshot_subvolume_verified",
+            "Snapshot Btrfs subvolume verified",
+            &subvol_status,
+            subvol_err.unwrap_or_else(|| "Subvolume verification failed.".to_string()),
+            "Ensure the snapshot subvolume exists and btrfs-progs can inspect it.",
+        )
+    };
+    checks.push(c5);
+
+    // 6. Snapshot consistency and accessibility
+    let c6 = if target_snapshot.is_none() {
+        check_record(
+            "snapshot_consistency_accessible",
+            "Snapshot consistency and accessibility",
+            "blocked",
+            "Target snapshot is missing or unreadable.".to_string(),
+            "Select an accessible snapshot.",
+        )
+    } else {
+        let subvol_dir = Path::new(&subvol_path);
+        match fs::read_dir(subvol_dir) {
+            Ok(_) => check_record(
+                "snapshot_consistency_accessible",
+                "Snapshot consistency and accessibility",
+                "pass",
+                format!("Snapshot directory '{}' is readable and consistent.", subvol_path),
+                "No action required.",
+            ),
+            Err(e) if e.kind() == ErrorKind::PermissionDenied => check_record(
+                "snapshot_consistency_accessible",
+                "Snapshot consistency and accessibility",
+                "blocked",
+                format!("Permission denied reading snapshot directory '{}'.", subvol_path),
+                "Administrator authorization is required to access snapshot contents.",
+            ),
+            Err(_) => check_record(
+                "snapshot_consistency_accessible",
+                "Snapshot consistency and accessibility",
+                "blocked",
+                format!("Snapshot directory '{}' is missing or corrupted.", subvol_path),
+                "Do not roll back to an incomplete or unreadable snapshot.",
+            ),
+        }
+    };
+    checks.push(c6);
+
+    // 7. Snapshot type and state eligibility
+    let c7 = match &target_snapshot {
+        Some(snap) if snap.is_current || snap.id == 0 => check_record(
+            "snapshot_type_and_state_eligible",
+            "Snapshot type and state eligibility",
+            "blocked",
+            "Cannot roll back to the currently active snapshot.".to_string(),
+            "Choose a historical snapshot instead of the current system state.",
+        ),
+        Some(snap) if matches!(snap.snapshot_type.as_str(), "single" | "pre" | "post") => check_record(
+            "snapshot_type_and_state_eligible",
+            "Snapshot type and state eligibility",
+            "pass",
+            format!("Snapshot #{} (type '{}') is eligible for rollback.", snap.id, snap.snapshot_type),
+            "No action required.",
+        ),
+        Some(snap) => check_record(
+            "snapshot_type_and_state_eligible",
+            "Snapshot type and state eligibility",
+            "blocked",
+            format!("Snapshot #{} has unsupported type '{}'.", snap.id, snap.snapshot_type),
+            "Choose a 'single', 'pre', or 'post' snapshot.",
+        ),
+        None => check_record(
+            "snapshot_type_and_state_eligible",
+            "Snapshot type and state eligibility",
+            "blocked",
+            "Target snapshot is unavailable for eligibility check.".to_string(),
+            "Select an existing snapshot.",
+        ),
+    };
+    checks.push(c7);
+
+    // 8. System, active operations, and recovery records preservation
+    let c8 = if active_operation_running {
+        check_record(
+            "system_and_recovery_preservation",
+            "Root subvolume and recovery preservation",
+            "blocked",
+            "Another recovery operation is currently in progress.".to_string(),
+            "Wait for the active recovery operation to finish before preflight.",
+        )
+    } else if initial_report.status == DetectionStatus::InstalledAndConfigured
+        && !initial_report.root_subvolume.is_empty()
+    {
+        check_record(
+            "system_and_recovery_preservation",
+            "Root subvolume and recovery preservation",
+            "pass",
+            format!(
+                "Current root subvolume '{}' and {} recovery records can be preserved.",
+                initial_report.root_subvolume, initial_report.snapshot_count
+            ),
+            "No action required.",
+        )
+    } else {
+        check_record(
+            "system_and_recovery_preservation",
+            "Root subvolume and recovery preservation",
+            "blocked",
+            "Root subvolume state or recovery metadata could not be verified.".to_string(),
+            "Ensure root subvolume and Snapper metadata are healthy.",
+        )
+    };
+    checks.push(c8);
+
+    // 9. Limine / boot integration
+    let (limine_status, limine_reason, limine_rem) = check_limine_integration(config);
+    checks.push(check_record(
+        "limine_boot_integration",
+        "Limine and boot integration",
+        &limine_status,
+        limine_reason,
+        &limine_rem,
+    ));
+
+    // 10. Authorization and explicit confirmation requirements
+    let polkit_defined = fs::read_to_string(&config.polkit_policy_file)
+        .map(|s| s.contains("org.zethropol.recovery.rollback"))
+        .unwrap_or(false)
+        || resolve_snapper_binary(&config.pkcheck_bin).is_some();
+    let c10 = if polkit_defined {
+        check_record(
+            "authorization_and_confirmation",
+            "Authorization and user confirmation",
+            "pass",
+            "Polkit action 'org.zethropol.recovery.rollback' and explicit user confirmation are enforced.".to_string(),
+            "Rollback requires administrator authentication and explicit confirmation when enabled.",
+        )
+    } else {
+        check_record(
+            "authorization_and_confirmation",
+            "Authorization and user confirmation",
+            "unknown",
+            "Polkit policy or pkcheck helper could not be verified.".to_string(),
+            "Ensure Polkit policy 'org.zethropol.recovery.rollback' is installed.",
+        )
+    };
+    checks.push(c10);
+
+    // TOCTOU re-check: verify snapshot state did not change during preflight
+    if initial_report.status == DetectionStatus::InstalledAndConfigured && target_snapshot.is_some() {
+        let final_report = detect_recovery_state(config);
+        let still_exists = final_report.status == DetectionStatus::InstalledAndConfigured
+            && final_report.snapshots.iter().any(|s| s.id == point_id as i32 && !s.is_current);
+        if !still_exists {
+            checks.push(check_record(
+                "state_consistency_recheck",
+                "Preflight state consistency",
+                "blocked",
+                format!(
+                    "System state or target snapshot #{} changed during preflight verification.",
+                    point_id
+                ),
+                "Refresh snapshots and re-run preflight.",
+            ));
+        }
+    }
+
+    let has_blocked = checks.iter().any(|c| c.status == "blocked");
+    let has_unknown = checks.iter().any(|c| c.status == "unknown");
+
+    let (overall_status, can_proceed, summary) = if has_blocked {
+        (
+            "blocked".to_string(),
+            false,
+            format!("Rollback preflight for snapshot #{} is blocked.", point_id),
+        )
+    } else if has_unknown {
+        (
+            "unknown".to_string(),
+            false,
+            format!(
+                "Rollback preflight for snapshot #{} is incomplete (unverified conditions).",
+                point_id
+            ),
+        )
+    } else {
+        (
+            "ready".to_string(),
+            true,
+            format!(
+                "Preflight passed for snapshot #{}. No rollback was executed; execution remains disabled in this stage.",
+                point_id
+            ),
+        )
+    };
+
+    RollbackPreflightReport {
+        point_id,
+        overall_status,
+        can_proceed,
+        rollback_execution_enabled: false,
+        requires_confirmation: true,
+        requires_authorization: true,
+        polkit_action: "org.zethropol.recovery.rollback".to_string(),
+        snapshot_config: initial_report.config_name,
+        filesystem: initial_report.filesystem,
+        root_subvolume: initial_report.root_subvolume,
+        snapshot_subvolume_path: subvol_path,
+        snapshot_subvolume_id: subvol_id,
+        limine_status,
+        summary,
+        checks,
+    }
+}
+
+pub fn encode_preflight_envelope(report: &RollbackPreflightReport) -> HashMap<String, OwnedValue> {
+    let mut data: HashMap<String, OwnedValue> = HashMap::new();
+    data.insert("pointId".to_string(), OwnedValue::from(report.point_id));
+    data.insert(
+        "overallStatus".to_string(),
+        OwnedValue::from(Str::from(report.overall_status.clone())),
+    );
+    data.insert("canProceed".to_string(), OwnedValue::from(report.can_proceed));
+    data.insert(
+        "rollbackExecutionEnabled".to_string(),
+        OwnedValue::from(report.rollback_execution_enabled),
+    );
+    data.insert(
+        "requiresConfirmation".to_string(),
+        OwnedValue::from(report.requires_confirmation),
+    );
+    data.insert(
+        "requiresAuthorization".to_string(),
+        OwnedValue::from(report.requires_authorization),
+    );
+    data.insert(
+        "polkitAction".to_string(),
+        OwnedValue::from(Str::from(report.polkit_action.clone())),
+    );
+    data.insert(
+        "snapshotConfig".to_string(),
+        OwnedValue::from(Str::from(report.snapshot_config.clone())),
+    );
+    data.insert(
+        "filesystem".to_string(),
+        OwnedValue::from(Str::from(report.filesystem.clone())),
+    );
+    data.insert(
+        "rootSubvolume".to_string(),
+        OwnedValue::from(Str::from(report.root_subvolume.clone())),
+    );
+    data.insert(
+        "snapshotSubvolumePath".to_string(),
+        OwnedValue::from(Str::from(report.snapshot_subvolume_path.clone())),
+    );
+    data.insert(
+        "snapshotSubvolumeId".to_string(),
+        OwnedValue::from(Str::from(report.snapshot_subvolume_id.clone())),
+    );
+    data.insert(
+        "limineStatus".to_string(),
+        OwnedValue::from(Str::from(report.limine_status.clone())),
+    );
+    data.insert(
+        "summary".to_string(),
+        OwnedValue::from(Str::from(report.summary.clone())),
+    );
+
+    let check_vals: Vec<OwnedValue> = report
+        .checks
+        .iter()
+        .map(|c| {
+            let mut m: HashMap<String, OwnedValue> = HashMap::new();
+            m.insert("id".to_string(), OwnedValue::from(Str::from(c.id.clone())));
+            m.insert(
+                "title".to_string(),
+                OwnedValue::from(Str::from(c.title.clone())),
+            );
+            m.insert(
+                "status".to_string(),
+                OwnedValue::from(Str::from(c.status.clone())),
+            );
+            m.insert(
+                "reason".to_string(),
+                OwnedValue::from(Str::from(c.reason.clone())),
+            );
+            m.insert(
+                "remediation".to_string(),
+                OwnedValue::from(Str::from(c.remediation.clone())),
+            );
+            OwnedValue::from(m)
+        })
+        .collect();
+    if let Ok(arr) = OwnedValue::try_from(Array::from(check_vals)) {
+        data.insert("checks".to_string(), arr);
+    }
+
+    let code = match report.overall_status.as_str() {
+        "ready" => "ok",
+        "unknown" => "not-available",
+        _ => "failed",
+    };
+
+    let mut envelope: HashMap<String, OwnedValue> = HashMap::new();
+    envelope.insert("success".to_string(), OwnedValue::from(true));
+    envelope.insert("code".to_string(), OwnedValue::from(Str::from(code)));
+    envelope.insert(
+        "message".to_string(),
+        OwnedValue::from(Str::from(report.summary.clone())),
+    );
+    envelope.insert("operationId".to_string(), OwnedValue::from(Str::from("")));
+    envelope.insert("data".to_string(), OwnedValue::from(data));
+    envelope
 }
 
 fn snapshot_to_owned(record: &SnapshotRecord) -> OwnedValue {
@@ -1887,65 +2613,73 @@ impl RecoveryManager {
         })
     }
 
+    async fn preflight_rollback(
+        &self,
+        point_id: u32,
+    ) -> Result<HashMap<String, OwnedValue>, zbus::fdo::Error> {
+        let active_running = self.active_operation.lock().unwrap().is_some();
+        let report = tokio::task::spawn_blocking(move || {
+            let cfg = DetectionConfig::from_env();
+            run_rollback_preflight(&cfg, point_id, active_running)
+        })
+        .await
+        .map_err(|e| zbus::fdo::Error::Failed(e.to_string()))?;
+
+        Ok(encode_preflight_envelope(&report))
+    }
+
     async fn rollback_to_point(
         &self,
-        #[zbus(header)] _header: zbus::message::Header<'_>,
+        #[zbus(header)] header: zbus::message::Header<'_>,
         point_id: u32,
     ) -> Result<OperationResult, zbus::fdo::Error> {
-        let operation_id = uuid::Uuid::new_v4().to_string();
+        let sender_name = match header.sender() {
+            Some(sender) => sender.to_string(),
+            None => {
+                return Ok(OperationResult {
+                    success: false,
+                    code: "invalid-caller".to_string(),
+                    message: "D-Bus caller identity is unavailable.".to_string(),
+                    operation_id: String::new(),
+                    data: HashMap::new(),
+                });
+            }
+        };
 
+        let cfg = DetectionConfig::from_env();
+        if let Err((code, msg)) =
+            check_polkit_action(&cfg, &sender_name, "org.zethropol.recovery.rollback")
         {
-            let mut ops = self.operations.lock().unwrap();
-            ops.insert(
-                operation_id.clone(),
-                OpState {
-                    status: "running".to_string(),
-                    code: "running".to_string(),
-                    message: format!(
-                        "Initiating Btrfs system rollback to snapshot ID {}...",
-                        point_id
-                    ),
-                    snapshot_id: None,
-                },
-            );
+            return Ok(OperationResult {
+                success: false,
+                code,
+                message: msg,
+                operation_id: String::new(),
+                data: HashMap::new(),
+            });
         }
 
-        let ops_clone = Arc::clone(&self.operations);
-        let op_id_clone = operation_id.clone();
+        let active_running = self.active_operation.lock().unwrap().is_some();
+        let preflight = run_rollback_preflight(&cfg, point_id, active_running);
+        if !preflight.can_proceed {
+            return Ok(OperationResult {
+                success: false,
+                code: "failed".to_string(),
+                message: preflight.summary,
+                operation_id: String::new(),
+                data: HashMap::new(),
+            });
+        }
 
-        tokio::spawn(async move {
-            let status = Command::new("snapper")
-                .args(["rollback", &point_id.to_string()])
-                .status();
-
-            let _sync_status = Command::new("limine-snapper-sync").status();
-
-            let mut ops = ops_clone.lock().unwrap();
-            if let Some(state) = ops.get_mut(&op_id_clone) {
-                if matches!(status, Ok(s) if s.success()) {
-                    state.status = "ok".to_string();
-                    state.code = "ok".to_string();
-                    state.message = format!(
-                        "System successfully rolled back to snapshot {}. Boot sync complete. Please reboot.",
-                        point_id
-                    );
-                } else {
-                    state.status = "failed".to_string();
-                    state.code = "failed".to_string();
-                    state.message =
-                        "Rollback routine failed during Btrfs subvolume switch.".to_string();
-                }
-            }
-        });
-
+        // Rollback execution is intentionally disabled in stage 03.2.04 (preflight verification only).
         Ok(OperationResult {
-            success: true,
-            code: "ok".to_string(),
+            success: false,
+            code: "unsupported".to_string(),
             message: format!(
-                "System rollback routine triggered for point ID {}. Reboot recommended.",
+                "Preflight passed for snapshot #{}, but rollback execution is disabled in this verification stage.",
                 point_id
             ),
-            operation_id,
+            operation_id: String::new(),
             data: HashMap::new(),
         })
     }
@@ -2085,14 +2819,34 @@ EOF
 "#,
             );
 
+            let btrfs_bin = self.write_exec(
+                "bin/btrfs",
+                "echo '@/.snapshots/12/snapshot'\necho '        Subvolume ID:           272'\nexit 0\n",
+            );
+            let limine_sync_bin = self.write_exec("bin/limine-snapper-sync", "exit 0\n");
+            let limine_conf_file = self.write("etc/limine-snapper-sync.conf", "LIMIT_USAGE_PERCENT=85\n");
+            let esp_dir = self.path("boot");
+            fs::create_dir_all(&esp_dir).unwrap();
+            self.write("boot/limine.conf", "timeout: 5\n");
+            let polkit_policy_file = self.write(
+                "polkit/org.zethropol.recovery.policy",
+                "<action id=\"org.zethropol.recovery.rollback\"/>\n",
+            );
+            fs::create_dir_all(snapshots_dir.join("12/snapshot")).unwrap();
+
             DetectionConfig {
                 snapper_bin,
                 pkcheck_bin,
+                btrfs_bin,
+                limine_sync_bin,
                 sysconf_file: sysconf,
                 configs_dir,
                 mountinfo_file: mountinfo,
                 fstab_file: fstab,
                 snapshots_dir,
+                limine_conf_file,
+                esp_dir,
+                polkit_policy_file,
                 command_timeout: Duration::from_secs(2),
             }
         }
@@ -2277,5 +3031,30 @@ echo '{"root":[{"number":0,"type":"single","description":"current"}]}'
         assert!(report.snapshots.is_empty());
         assert!(report.recovery_events.is_empty());
         assert!(report.recovery_points.is_empty());
+    }
+
+    #[test]
+    fn preflight_all_checks_pass_and_limine_missing_returns_unknown() {
+        let fx = TestFixture::new();
+        let mut cfg = fx.base_config();
+        let ok = run_rollback_preflight(&cfg, 12, false);
+        assert_eq!(ok.overall_status, "ready");
+        assert!(ok.can_proceed);
+        assert!(!ok.rollback_execution_enabled);
+        assert_eq!(ok.snapshot_subvolume_id, "272");
+        assert_eq!(ok.checks.len(), 10);
+
+        // Missing limine.conf must yield "unknown" and canProceed=false
+        fs::remove_file(fx.path("boot/limine.conf")).unwrap();
+        let unk = run_rollback_preflight(&cfg, 12, false);
+        assert_eq!(unk.overall_status, "unknown");
+        assert!(!unk.can_proceed);
+        assert_eq!(unk.limine_status, "unknown");
+
+        // Target #0 (active system) must be blocked
+        cfg.esp_dir = fx.path("boot");
+        let blk = run_rollback_preflight(&cfg, 0, false);
+        assert_eq!(blk.overall_status, "blocked");
+        assert!(!blk.can_proceed);
     }
 }

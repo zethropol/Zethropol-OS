@@ -1522,7 +1522,7 @@ ApplicationWindow {
                                         objectName: "recoveryPointsList"
                                         visible: RecoveryBridge.available && RecoveryBridge.recoveryPoints.length > 0
                                         Layout.fillWidth: true
-                                        Layout.preferredHeight: Math.min(contentHeight, 220)
+                                        Layout.preferredHeight: Math.min(Math.max(contentHeight, 88), 220)
                                         clip: true
                                         spacing: 8
                                         model: RecoveryBridge.recoveryPoints
@@ -1585,6 +1585,15 @@ ApplicationWindow {
                                                 }
 
                                                 Button {
+                                                    objectName: "preflightRecoveryPointButton"
+                                                    Layout.preferredWidth: 110
+                                                    Layout.alignment: Qt.AlignVCenter
+                                                    text: RecoveryBridge.preflightBusy && RecoveryBridge.selectedRollbackPointId === modelData.id ? "Checking..." : "Preflight"
+                                                    enabled: !RecoveryBridge.preflightBusy && !RecoveryBridge.actionBusy
+                                                    onClicked: RecoveryBridge.preflightRollback(modelData.id)
+                                                }
+
+                                                Button {
                                                     Layout.preferredWidth: 120
                                                     Layout.alignment: Qt.AlignVCenter
                                                     text: RecoveryBridge.actionBusy ? "Busy..." : "Delete"
@@ -1598,6 +1607,79 @@ ApplicationWindow {
                                             visible: RecoveryBridge.available && RecoveryBridge.recoveryPoints.length === 0
                                             text: "No standalone recovery points found"
                                             opacity: 0.6
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        objectName: "recoveryPreflightPanel"
+                                        visible: RecoveryBridge.preflightBusy || RecoveryBridge.selectedRollbackPointId > 0
+                                        color: rootWindow.palette.alternateBase
+                                        Layout.fillWidth: true
+                                        implicitHeight: preflightColumn.implicitHeight + 28
+                                        radius: 10
+                                        border.width: 1
+                                        border.color: rootWindow.palette.mid
+
+                                        ColumnLayout {
+                                            id: preflightColumn
+                                            anchors.fill: parent
+                                            anchors.margins: 14
+                                            spacing: 8
+
+                                            Label {
+                                                objectName: "recoveryPreflightStatusLabel"
+                                                font.pixelSize: 16
+                                                font.bold: true
+                                                text: RecoveryBridge.preflightBusy
+                                                      ? "Running rollback preflight for #" + RecoveryBridge.selectedRollbackPointId + "..."
+                                                      : ("Rollback Preflight (#" + RecoveryBridge.selectedRollbackPointId + "): "
+                                                         + (RecoveryBridge.preflightResult.overallStatus === "ready"
+                                                            ? "Ready (Preflight Only)"
+                                                            : (RecoveryBridge.preflightResult.overallStatus === "unknown"
+                                                               ? "Incomplete / Unknown"
+                                                               : "Blocked")))
+                                            }
+
+                                            Label {
+                                                objectName: "recoveryPreflightSummaryLabel"
+                                                text: RecoveryBridge.preflightResult.summary || ""
+                                                wrapMode: Text.Wrap
+                                                Layout.fillWidth: true
+                                                opacity: 0.85
+                                            }
+
+                                            Label {
+                                                visible: !RecoveryBridge.preflightBusy
+                                                text: "Rollback execution is disabled in this verification stage. Explicit confirmation and administrator authorization are required."
+                                                wrapMode: Text.Wrap
+                                                Layout.fillWidth: true
+                                                opacity: 0.65
+                                                font.pixelSize: 12
+                                            }
+
+                                            Repeater {
+                                                model: RecoveryBridge.preflightResult.checks || []
+                                                delegate: ColumnLayout {
+                                                    Layout.fillWidth: true
+                                                    spacing: 2
+
+                                                    Label {
+                                                        text: "[" + String(modelData.status || "").toUpperCase() + "] " + (modelData.title || "")
+                                                        font.bold: true
+                                                        wrapMode: Text.Wrap
+                                                        Layout.fillWidth: true
+                                                    }
+
+                                                    Label {
+                                                        text: (modelData.reason || "")
+                                                              + (modelData.status !== "pass" && modelData.remediation ? " — " + modelData.remediation : "")
+                                                        opacity: 0.75
+                                                        wrapMode: Text.Wrap
+                                                        Layout.fillWidth: true
+                                                        font.pixelSize: 12
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }

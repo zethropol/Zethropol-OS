@@ -140,11 +140,16 @@ private:
     struct EnvPaths {
         QString snapperBin;
         QString pkcheckBin;
+        QString btrfsBin;
+        QString limineSyncBin;
         QString sysconfFile;
         QString configsDir;
         QString mountinfoFile;
         QString fstabFile;
         QString snapshotsDir;
+        QString limineConfFile;
+        QString espDir;
+        QString polkitPolicyFile;
         QString envFile;
         QString createdStateFile;
         QString createLogFile;
@@ -175,11 +180,30 @@ private:
             QStringLiteral("etc/snapper/configs/root"),
             QByteArrayLiteral("SUBVOLUME=\"/\"\nFSTYPE=\"btrfs\"\nALLOW_USERS=\"\"\n"));
         paths.snapshotsDir = dir.filePath(QStringLiteral(".snapshots"));
-        QDir().mkpath(paths.snapshotsDir);
+        QDir().mkpath(paths.snapshotsDir + QStringLiteral("/25/snapshot"));
         paths.pkcheckBin = writeScript(
             dir,
             QStringLiteral("bin/pkcheck"),
             QByteArrayLiteral("exit 0\n"));
+        paths.btrfsBin = writeScript(
+            dir,
+            QStringLiteral("bin/btrfs"),
+            QByteArrayLiteral("echo '@/.snapshots/25/snapshot'\necho '        Subvolume ID:           275'\nexit 0\n"));
+        paths.limineSyncBin = writeScript(
+            dir,
+            QStringLiteral("bin/limine-snapper-sync"),
+            QByteArrayLiteral("exit 0\n"));
+        paths.limineConfFile = writeFile(
+            dir,
+            QStringLiteral("etc/limine-snapper-sync.conf"),
+            QByteArrayLiteral("LIMIT_USAGE_PERCENT=85\n"));
+        paths.espDir = dir.filePath(QStringLiteral("boot"));
+        QDir().mkpath(paths.espDir);
+        writeFile(dir, QStringLiteral("boot/limine.conf"), QByteArrayLiteral("timeout: 5\n"));
+        paths.polkitPolicyFile = writeFile(
+            dir,
+            QStringLiteral("polkit/org.zethropol.recovery.policy"),
+            QByteArrayLiteral("<action id=\"org.zethropol.recovery.rollback\"/>\n"));
 
         const QByteArray snapperScript =
             "CREATED_FILE='" + paths.createdStateFile.toUtf8() + "'\n"
@@ -219,11 +243,16 @@ private:
         QByteArray content;
         content += "ZETHROPOL_RECOVERY_SNAPPER_BIN=" + paths.snapperBin.toUtf8() + "\n";
         content += "ZETHROPOL_RECOVERY_PKCHECK_BIN=" + paths.pkcheckBin.toUtf8() + "\n";
+        content += "ZETHROPOL_RECOVERY_BTRFS_BIN=" + paths.btrfsBin.toUtf8() + "\n";
+        content += "ZETHROPOL_RECOVERY_LIMINE_SYNC_BIN=" + paths.limineSyncBin.toUtf8() + "\n";
         content += "ZETHROPOL_RECOVERY_SYSCONF_FILE=" + paths.sysconfFile.toUtf8() + "\n";
         content += "ZETHROPOL_RECOVERY_CONFIGS_DIR=" + paths.configsDir.toUtf8() + "\n";
         content += "ZETHROPOL_RECOVERY_MOUNTINFO_FILE=" + paths.mountinfoFile.toUtf8() + "\n";
         content += "ZETHROPOL_RECOVERY_FSTAB_FILE=" + paths.fstabFile.toUtf8() + "\n";
         content += "ZETHROPOL_RECOVERY_SNAPSHOTS_DIR=" + paths.snapshotsDir.toUtf8() + "\n";
+        content += "ZETHROPOL_RECOVERY_LIMINE_CONF=" + paths.limineConfFile.toUtf8() + "\n";
+        content += "ZETHROPOL_RECOVERY_ESP_DIR=" + paths.espDir.toUtf8() + "\n";
+        content += "ZETHROPOL_RECOVERY_POLKIT_POLICY_FILE=" + paths.polkitPolicyFile.toUtf8() + "\n";
         content += "ZETHROPOL_RECOVERY_TIMEOUT_MS=" + QByteArray::number(paths.timeoutMs) + "\n";
         QFile file(paths.envFile);
         if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
@@ -1095,6 +1124,324 @@ EOF
         QCOMPARE(recovery.recoveryPoints().size(), 2);
         QCOMPARE(recovery.recoveryPoints().at(0).toMap().value(QStringLiteral("id")).toInt(), 25);
         QCOMPARE(recovery.recoveryPoints().at(1).toMap().value(QStringLiteral("id")).toInt(), 26);
+    }
+
+    // --- 03.2.04 Rollback Preflight Verification Scenarios (1..12) ---
+
+    void preflightScenario1_validSnapshotReadyReadOnly()
+    {
+        QTemporaryDir dir;
+        const EnvPaths paths = setupStandardFixture(dir);
+        startRecoveryDaemon(paths.envFile);
+
+        RecoveryService recovery;
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
+        recovery.preflightRollback(25);
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.preflightBusy(), 5000);
+
+        const QVariantMap res = recovery.preflightResult();
+        QCOMPARE(res.value(QStringLiteral("overallStatus")).toString(), QStringLiteral("ready"));
+        QVERIFY(res.value(QStringLiteral("canProceed")).toBool());
+        QVERIFY(!res.value(QStringLiteral("rollbackExecutionEnabled")).toBool());
+        QVERIFY(res.value(QStringLiteral("requiresConfirmation")).toBool());
+        QVERIFY(res.value(QStringLiteral("requiresAuthorization")).toBool());
+        QCOMPARE(res.value(QStringLiteral("snapshotSubvolumeId")).toString(), QStringLiteral("275"));
+        QCOMPARE(res.value(QStringLiteral("checks")).toList().size(), 10);
+
+        // Verify RollbackToPoint never executes real rollback in this stage
+        const QDBusMessage rbMsg = QDBusMessage::createMethodCall(
+            QStringLiteral("org.zethropol.Recovery"),
+            QStringLiteral("/org/zethropol/Recovery"),
+            QStringLiteral("org.zethropol.Recovery.v1"),
+            QStringLiteral("RollbackToPoint"))
+            << static_cast<uint>(25);
+        const QDBusMessage rbReply = QDBusConnection::systemBus().call(rbMsg, QDBus::Block, 3000);
+        QCOMPARE(rbReply.type(), QDBusMessage::ReplyMessage);
+        const QVariantList args = rbReply.arguments();
+        QVERIFY(!args.isEmpty());
+        QVERIFY(!args.at(0).toBool());
+        QCOMPARE(args.at(1).toString(), QStringLiteral("unsupported"));
+    }
+
+    void preflightScenario2_invalidOrMissingSnapshotIdBlocked()
+    {
+        QTemporaryDir dir;
+        const EnvPaths paths = setupStandardFixture(dir);
+        startRecoveryDaemon(paths.envFile);
+
+        RecoveryService recovery;
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
+
+        // ID 0 (current active system)
+        recovery.preflightRollback(0);
+        QCOMPARE(recovery.preflightResult().value(QStringLiteral("overallStatus")).toString(), QStringLiteral("blocked"));
+        QVERIFY(!recovery.preflightResult().value(QStringLiteral("canProceed")).toBool());
+
+        // Non-existent ID 999
+        recovery.preflightRollback(999);
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.preflightBusy(), 5000);
+        QCOMPARE(recovery.preflightResult().value(QStringLiteral("overallStatus")).toString(), QStringLiteral("blocked"));
+        QVERIFY(!recovery.preflightResult().value(QStringLiteral("canProceed")).toBool());
+    }
+
+    void preflightScenario3_snapperNotInstalledBlocked()
+    {
+        QTemporaryDir dir;
+        EnvPaths paths = setupStandardFixture(dir);
+        paths.snapperBin = dir.filePath(QStringLiteral("bin/missing-snapper"));
+        updateEnvFile(paths);
+        startRecoveryDaemon(paths.envFile);
+
+        RecoveryService recovery;
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
+        recovery.preflightRollback(25);
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.preflightBusy(), 5000);
+        QCOMPARE(recovery.preflightResult().value(QStringLiteral("overallStatus")).toString(), QStringLiteral("blocked"));
+        QVERIFY(!recovery.preflightResult().value(QStringLiteral("canProceed")).toBool());
+    }
+
+    void preflightScenario4_missingOrInvalidRootConfigBlocked()
+    {
+        QTemporaryDir dir;
+        EnvPaths paths = setupStandardFixture(dir);
+        writeFile(dir,
+                  QStringLiteral("etc/snapper/configs/root"),
+                  QByteArrayLiteral("SUBVOLUME=\"/home\"\nFSTYPE=\"btrfs\"\n"));
+        updateEnvFile(paths);
+        startRecoveryDaemon(paths.envFile);
+
+        RecoveryService recovery;
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
+        recovery.preflightRollback(25);
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.preflightBusy(), 5000);
+        QCOMPARE(recovery.preflightResult().value(QStringLiteral("overallStatus")).toString(), QStringLiteral("blocked"));
+        QVERIFY(!recovery.preflightResult().value(QStringLiteral("canProceed")).toBool());
+    }
+
+    void preflightScenario5_nonBtrfsRootFilesystemBlocked()
+    {
+        QTemporaryDir dir;
+        EnvPaths paths = setupStandardFixture(dir);
+        paths.mountinfoFile = writeFile(
+            dir,
+            QStringLiteral("mountinfo"),
+            QByteArrayLiteral("36 1 8:1 / / rw,relatime - ext4 /dev/sda1 rw\n"));
+        paths.fstabFile = writeFile(dir, QStringLiteral("fstab"), QByteArrayLiteral("UUID=1 / ext4 defaults 0 1\n"));
+        updateEnvFile(paths);
+        startRecoveryDaemon(paths.envFile);
+
+        RecoveryService recovery;
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
+        recovery.preflightRollback(25);
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.preflightBusy(), 5000);
+        QCOMPARE(recovery.preflightResult().value(QStringLiteral("overallStatus")).toString(), QStringLiteral("blocked"));
+        QCOMPARE(recovery.preflightResult().value(QStringLiteral("filesystem")).toString(), QStringLiteral("ext4"));
+        QVERIFY(!recovery.preflightResult().value(QStringLiteral("canProceed")).toBool());
+    }
+
+    void preflightScenario6_snapshotBelongsToOtherConfigBlocked()
+    {
+        QTemporaryDir dir;
+        const EnvPaths paths = setupStandardFixture(dir);
+        // info.xml inside snapshot 25 claims a different subvolume (/home)
+        writeFile(dir,
+                  QStringLiteral(".snapshots/25/info.xml"),
+                  QByteArrayLiteral("<snapshot><type>single</type><num>25</num><subvol>/@home</subvol></snapshot>\n"));
+        startRecoveryDaemon(paths.envFile);
+
+        RecoveryService recovery;
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
+        recovery.preflightRollback(25);
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.preflightBusy(), 5000);
+        QCOMPARE(recovery.preflightResult().value(QStringLiteral("overallStatus")).toString(), QStringLiteral("blocked"));
+        QVERIFY(!recovery.preflightResult().value(QStringLiteral("canProceed")).toBool());
+    }
+
+    void preflightScenario7_snapshotSubvolumeMissingOrInaccessibleBlocked()
+    {
+        QTemporaryDir dir;
+        const EnvPaths paths = setupStandardFixture(dir);
+        QDir(paths.snapshotsDir + QStringLiteral("/25/snapshot")).removeRecursively();
+        startRecoveryDaemon(paths.envFile);
+
+        RecoveryService recovery;
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
+        recovery.preflightRollback(25);
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.preflightBusy(), 5000);
+        QCOMPARE(recovery.preflightResult().value(QStringLiteral("overallStatus")).toString(), QStringLiteral("blocked"));
+        QVERIFY(!recovery.preflightResult().value(QStringLiteral("canProceed")).toBool());
+    }
+
+    void preflightScenario8_permissionDeniedBlocked()
+    {
+        QTemporaryDir dir;
+        EnvPaths paths = setupStandardFixture(dir);
+        paths.snapperBin = writeScript(
+            dir,
+            QStringLiteral("bin/snapper"),
+            QByteArrayLiteral("echo 'Failure (error.no_permissions).' >&2\nexit 1\n"));
+        updateEnvFile(paths);
+        startRecoveryDaemon(paths.envFile);
+
+        RecoveryService recovery;
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
+        recovery.preflightRollback(25);
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.preflightBusy(), 5000);
+        QCOMPARE(recovery.preflightResult().value(QStringLiteral("overallStatus")).toString(), QStringLiteral("blocked"));
+        QVERIFY(!recovery.preflightResult().value(QStringLiteral("canProceed")).toBool());
+    }
+
+    void preflightScenario9_backendUnavailableBlocked()
+    {
+        stopRecoveryDaemon();
+        RecoveryService recovery;
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
+        recovery.preflightRollback(25);
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.preflightBusy(), 5000);
+        QCOMPARE(recovery.preflightResult().value(QStringLiteral("overallStatus")).toString(), QStringLiteral("blocked"));
+        QVERIFY(!recovery.preflightResult().value(QStringLiteral("canProceed")).toBool());
+    }
+
+    void preflightScenario10_limineOrBootUnverifiedUnknown()
+    {
+        QTemporaryDir dir;
+        const EnvPaths paths = setupStandardFixture(dir);
+        QFile::remove(dir.filePath(QStringLiteral("boot/limine.conf")));
+        startRecoveryDaemon(paths.envFile);
+
+        RecoveryService recovery;
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
+        recovery.preflightRollback(25);
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.preflightBusy(), 5000);
+
+        const QVariantMap res = recovery.preflightResult();
+        QCOMPARE(res.value(QStringLiteral("overallStatus")).toString(), QStringLiteral("unknown"));
+        QCOMPARE(res.value(QStringLiteral("limineStatus")).toString(), QStringLiteral("unknown"));
+        QVERIFY(!res.value(QStringLiteral("canProceed")).toBool());
+    }
+
+    void preflightScenario11_stateChangesDuringPreflightBlocked()
+    {
+        QTemporaryDir dir;
+        EnvPaths paths = setupStandardFixture(dir);
+        const QString counterFile = dir.filePath(QStringLiteral("snapper_list_count.txt"));
+        // First list call returns snapshot #25; second list call (TOCTOU re-check) drops #25
+        paths.snapperBin = writeScript(
+            dir,
+            QStringLiteral("bin/snapper"),
+            "CNT_FILE='" + counterFile.toUtf8() + "'\n"
+            "N=0\n"
+            "if [ -f \"$CNT_FILE\" ]; then N=$(cat \"$CNT_FILE\"); fi\n"
+            "N=$((N + 1))\n"
+            "echo \"$N\" > \"$CNT_FILE\"\n"
+            "if [ \"$N\" -le 2 ]; then\n"
+            "  echo '{\"root\":[{\"number\":0,\"type\":\"single\",\"description\":\"current\"},{\"number\":25,\"type\":\"single\",\"description\":\"Volatile point\"}]}'\n"
+            "else\n"
+            "  echo '{\"root\":[{\"number\":0,\"type\":\"single\",\"description\":\"current\"}]}'\n"
+            "fi\n");
+        updateEnvFile(paths);
+        startRecoveryDaemon(paths.envFile);
+
+        RecoveryService recovery;
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
+        QCOMPARE(recovery.snapshotCount(), 2); // N=1
+
+        // Preflight does initial check (N=2, #25 present) and final re-check (N=3, #25 gone) -> blocked!
+        recovery.preflightRollback(25);
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.preflightBusy(), 5000);
+        QCOMPARE(recovery.preflightResult().value(QStringLiteral("overallStatus")).toString(), QStringLiteral("blocked"));
+        QVERIFY(!recovery.preflightResult().value(QStringLiteral("canProceed")).toBool());
+    }
+
+    void preflightScenario12_dbusAndControlCenterUiConsistency()
+    {
+        QTemporaryDir dir;
+        const EnvPaths paths = setupStandardFixture(dir);
+        startRecoveryDaemon(paths.envFile);
+
+        HardwareServiceClient hardware;
+        UpdateScanner scanner;
+        UpdateInstaller installer(&scanner);
+        RecoveryService recovery;
+        SecurityService security;
+        ServiceService services;
+        ApplicationService applications;
+        ProcessService processes;
+        NotificationService notifications;
+        ZethropolPowerClient power;
+        ZethropolMonitoringClient monitoring;
+
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
+        QVERIFY(recovery.available());
+
+        QQmlApplicationEngine engine;
+        QSignalSpy warnings(&engine, &QQmlEngine::warnings);
+        for (const auto &pair : QList<QPair<QString, QObject *>>{
+                 {QStringLiteral("HardwareBridge"), &hardware},
+                 {QStringLiteral("UpdateBridge"), &scanner},
+                 {QStringLiteral("UpdateInstallBridge"), &installer},
+                 {QStringLiteral("RecoveryBridge"), &recovery},
+                 {QStringLiteral("SecurityBridge"), &security},
+                 {QStringLiteral("ServiceBridge"), &services},
+                 {QStringLiteral("ApplicationBridge"), &applications},
+                 {QStringLiteral("ProcessBridge"), &processes},
+                 {QStringLiteral("NotificationBridge"), &notifications},
+                 {QStringLiteral("PowerBridge"), &power},
+                 {QStringLiteral("MonitoringBridge"), &monitoring}}) {
+            engine.rootContext()->setContextProperty(pair.first, pair.second);
+        }
+
+        engine.load(QUrl(QStringLiteral("qrc:/Zethropol/ControlCenter/qml/Main.qml")));
+        QVERIFY(!engine.rootObjects().isEmpty());
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+        QVERIFY(window);
+        auto *pages = window->findChild<QQuickItem *>(QStringLiteral("controlCenterPages"));
+        QVERIFY(pages);
+        QVERIFY(pages->setProperty("currentIndex", 7));
+        QTest::qWait(40);
+
+        auto *pointsList = window->findChild<QQuickItem *>(QStringLiteral("recoveryPointsList"));
+        QVERIFY(pointsList);
+        QMetaObject::invokeMethod(pointsList, "forceLayout");
+        QTest::qWait(50);
+
+        auto findVisualChild = [](auto &self, QQuickItem *root, const QString &name) -> QQuickItem * {
+            if (!root)
+                return nullptr;
+            if (root->objectName() == name)
+                return root;
+            for (QQuickItem *child : root->childItems()) {
+                if (QQuickItem *found = self(self, child, name))
+                    return found;
+            }
+            return nullptr;
+        };
+
+        QQuickItem *preflightBtn = nullptr;
+        QTRY_VERIFY_WITH_TIMEOUT((preflightBtn = findVisualChild(findVisualChild, pointsList, QStringLiteral("preflightRecoveryPointButton"))) != nullptr, 3000);
+        auto *preflightPanel = window->findChild<QQuickItem *>(QStringLiteral("recoveryPreflightPanel"));
+        auto *preflightStatus = window->findChild<QQuickItem *>(QStringLiteral("recoveryPreflightStatusLabel"));
+        auto *preflightSummary = window->findChild<QQuickItem *>(QStringLiteral("recoveryPreflightSummaryLabel"));
+        QVERIFY(preflightBtn);
+        QVERIFY(preflightPanel);
+        QVERIFY(preflightStatus);
+        QVERIFY(preflightSummary);
+        QVERIFY(!preflightPanel->isVisible());
+
+        // Click Preflight for snapshot #25
+        QMetaObject::invokeMethod(preflightBtn, "clicked");
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.preflightBusy(), 5000);
+        QTest::qWait(30);
+
+        QVERIFY(preflightPanel->isVisible());
+        QVERIFY(preflightStatus->property("text").toString().contains(QStringLiteral("Ready (Preflight Only)")));
+        QVERIFY(preflightSummary->property("text").toString().contains(QStringLiteral("No rollback was executed")));
+
+        QStringList qmlErrors;
+        for (const auto &signal : warnings)
+            for (const auto &warning : qvariant_cast<QList<QQmlError>>(signal.first()))
+                qmlErrors.append(warning.toString());
+        QVERIFY2(qmlErrors.isEmpty(), qPrintable(qmlErrors.join(QLatin1Char('\n'))));
     }
 };
 

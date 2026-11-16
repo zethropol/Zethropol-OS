@@ -94,6 +94,26 @@ QVariant dbusValueToVariant(const QVariant &value)
                     {QStringLiteral("description"), description},
                     {QStringLiteral("is_current"), isCurrent}
                 });
+            } else if (argument.currentType() == QDBusArgument::MapType) {
+                const bool isStringMap = argument.currentSignature() == QStringLiteral("a{ss}");
+                QVariantMap innerMap;
+                argument.beginMap();
+                while (!argument.atEnd()) {
+                    argument.beginMapEntry();
+                    QString k;
+                    if (isStringMap) {
+                        QString s;
+                        argument >> k >> s;
+                        innerMap.insert(k, s);
+                    } else {
+                        QDBusVariant w;
+                        argument >> k >> w;
+                        innerMap.insert(k, dbusValueToVariant(w.variant()));
+                    }
+                    argument.endMapEntry();
+                }
+                argument.endMap();
+                list.append(innerMap);
             } else {
                 QDBusVariant item;
                 argument >> item;
@@ -288,6 +308,9 @@ QString RecoveryService::lastOperationCode() const { return m_lastOperationCode;
 int RecoveryService::lastCreatedSnapshotId() const { return m_lastCreatedSnapshotId; }
 bool RecoveryService::confirmationPending() const { return m_confirmationPending; }
 QString RecoveryService::pendingDescription() const { return m_pendingDescription; }
+bool RecoveryService::preflightBusy() const { return m_preflightBusy; }
+int RecoveryService::selectedRollbackPointId() const { return m_selectedRollbackPointId; }
+QVariantMap RecoveryService::preflightResult() const { return m_preflightResult; }
 
 void RecoveryService::setLocalFallbackEnabled(bool enabled)
 {
@@ -1445,6 +1468,95 @@ void RecoveryService::cancelActiveOperation()
             << opId;
         QDBusConnection::systemBus().asyncCall(msg, 1000);
     }
+}
+
+void RecoveryService::preflightRollback(int pointId)
+{
+    if (m_preflightBusy)
+        return;
+
+    m_selectedRollbackPointId = pointId;
+
+    if (pointId <= 0) {
+        m_preflightResult = QVariantMap{
+            {QStringLiteral("pointId"), pointId},
+            {QStringLiteral("overallStatus"), QStringLiteral("blocked")},
+            {QStringLiteral("canProceed"), false},
+            {QStringLiteral("rollbackExecutionEnabled"), false},
+            {QStringLiteral("summary"), QStringLiteral("Snapshot ID must be a positive integer (> 0).")},
+            {QStringLiteral("checks"), QVariantList{}}
+        };
+        emit stateChanged();
+        return;
+    }
+
+    const QDBusConnection connection = QDBusConnection::systemBus();
+    if (!connection.isConnected()) {
+        m_preflightResult = QVariantMap{
+            {QStringLiteral("pointId"), pointId},
+            {QStringLiteral("overallStatus"), QStringLiteral("blocked")},
+            {QStringLiteral("canProceed"), false},
+            {QStringLiteral("rollbackExecutionEnabled"), false},
+            {QStringLiteral("summary"), QStringLiteral("System D-Bus connection is unavailable for rollback preflight.")},
+            {QStringLiteral("checks"), QVariantList{}}
+        };
+        emit stateChanged();
+        return;
+    }
+
+    m_preflightBusy = true;
+    m_preflightResult.clear();
+    emit stateChanged();
+
+    const QDBusMessage msg = QDBusMessage::createMethodCall(
+        QStringLiteral("org.zethropol.Recovery"),
+        QStringLiteral("/org/zethropol/Recovery"),
+        QStringLiteral("org.zethropol.Recovery.v1"),
+        QStringLiteral("PreflightRollback"))
+        << static_cast<uint>(pointId);
+
+    auto *watcher = new QDBusPendingCallWatcher(connection.asyncCall(msg, 4000), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, &RecoveryService::handlePreflightReply);
+}
+
+void RecoveryService::handlePreflightReply(QDBusPendingCallWatcher *watcher)
+{
+    if (!watcher)
+        return;
+    watcher->deleteLater();
+    m_preflightBusy = false;
+
+    QDBusPendingReply<QVariantMap> reply = *watcher;
+    if (reply.isError()) {
+        m_preflightResult = QVariantMap{
+            {QStringLiteral("pointId"), m_selectedRollbackPointId},
+            {QStringLiteral("overallStatus"), QStringLiteral("blocked")},
+            {QStringLiteral("canProceed"), false},
+            {QStringLiteral("rollbackExecutionEnabled"), false},
+            {QStringLiteral("summary"), QStringLiteral("Recovery D-Bus service is unreachable for rollback preflight.")},
+            {QStringLiteral("checks"), QVariantList{}}
+        };
+        emit stateChanged();
+        return;
+    }
+
+    const QVariantMap envelope = dbusValueToVariant(reply.value()).toMap();
+    const QVariantMap data = dbusValueToVariant(envelope.value(QStringLiteral("data"))).toMap();
+    if (data.isEmpty() || !data.contains(QStringLiteral("overallStatus"))) {
+        m_preflightResult = QVariantMap{
+            {QStringLiteral("pointId"), m_selectedRollbackPointId},
+            {QStringLiteral("overallStatus"), QStringLiteral("unknown")},
+            {QStringLiteral("canProceed"), false},
+            {QStringLiteral("rollbackExecutionEnabled"), false},
+            {QStringLiteral("summary"), QStringLiteral("Rollback preflight returned incomplete verification data.")},
+            {QStringLiteral("checks"), QVariantList{}}
+        };
+        emit stateChanged();
+        return;
+    }
+
+    m_preflightResult = data;
+    emit stateChanged();
 }
 
 void RecoveryService::deleteRecoveryPoint(int snapshotId)
