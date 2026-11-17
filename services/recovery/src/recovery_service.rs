@@ -50,6 +50,8 @@ pub struct DetectionConfig {
     pub snapshots_dir: PathBuf,
     pub limine_conf_file: PathBuf,
     pub esp_dir: PathBuf,
+    pub modules_dir: PathBuf,
+    pub running_kernel: Option<String>,
     pub polkit_policy_file: PathBuf,
     pub command_timeout: Duration,
 }
@@ -68,6 +70,8 @@ impl Default for DetectionConfig {
             snapshots_dir: PathBuf::from("/.snapshots"),
             limine_conf_file: PathBuf::from("/etc/limine-snapper-sync.conf"),
             esp_dir: PathBuf::from("/boot"),
+            modules_dir: PathBuf::from("/usr/lib/modules"),
+            running_kernel: None,
             polkit_policy_file: PathBuf::from(
                 "/usr/share/polkit-1/actions/org.zethropol.recovery.policy",
             ),
@@ -134,6 +138,15 @@ impl DetectionConfig {
         }
         if let Some(v) = get_var("ZETHROPOL_RECOVERY_ESP_DIR") {
             cfg.esp_dir = PathBuf::from(v);
+        }
+        if let Some(v) = get_var("ZETHROPOL_RECOVERY_MODULES_DIR") {
+            cfg.modules_dir = PathBuf::from(v);
+        }
+        if let Some(v) = get_var("ZETHROPOL_RECOVERY_RUNNING_KERNEL") {
+            let trimmed = v.trim();
+            if !trimmed.is_empty() {
+                cfg.running_kernel = Some(trimmed.to_string());
+            }
         }
         if let Some(v) = get_var("ZETHROPOL_RECOVERY_POLKIT_POLICY_FILE") {
             cfg.polkit_policy_file = PathBuf::from(v);
@@ -1793,23 +1806,239 @@ fn verify_snapshot_btrfs_subvolume(
     }
 }
 
-fn check_limine_integration(config: &DetectionConfig) -> (String, String, String) {
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LimineEntry {
+    title: String,
+    kernel_path: String,
+    module_paths: Vec<String>,
+}
+
+fn resolve_esp_relative_path(esp_dir: &Path, raw_uri: &str) -> Option<PathBuf> {
+    let trimmed = raw_uri.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let rel = if let Some(rest) = trimmed.strip_prefix("boot:///") {
+        rest
+    } else if let Some(rest) = trimmed.strip_prefix("boot://") {
+        rest
+    } else {
+        trimmed.trim_start_matches('/')
+    };
+    if rel.is_empty() {
+        return None;
+    }
+    let rel_path = Path::new(rel);
+    if rel_path.components().any(|c| {
+        matches!(
+            c,
+            std::path::Component::ParentDir
+                | std::path::Component::RootDir
+                | std::path::Component::Prefix(_)
+        )
+    }) {
+        return None;
+    }
+    Some(esp_dir.join(rel_path))
+}
+
+fn parse_limine_entries(content: &str) -> Vec<LimineEntry> {
+    let mut entries = Vec::new();
+    let mut current: Option<LimineEntry> = None;
+
+    for raw_line in content.lines() {
+        let trimmed = raw_line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if trimmed.starts_with('/') && !trimmed.contains(':') {
+            if let Some(entry) = current.take() {
+                entries.push(entry);
+            }
+            current = Some(LimineEntry {
+                title: trimmed.trim_start_matches('/').trim().to_string(),
+                kernel_path: String::new(),
+                module_paths: Vec::new(),
+            });
+            continue;
+        }
+
+        if let Some(ref mut entry) = current {
+            if let Some((key, val)) = trimmed.split_once(':') {
+                let k = key.trim().to_ascii_lowercase();
+                let v = val.trim().to_string();
+                match k.as_str() {
+                    "kernel_path" | "image_path" | "path" => {
+                        if entry.kernel_path.is_empty() {
+                            entry.kernel_path = v;
+                        }
+                    }
+                    "module_path" => {
+                        if !v.is_empty() {
+                            entry.module_paths.push(v);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    if let Some(entry) = current {
+        entries.push(entry);
+    }
+    entries
+}
+
+fn is_non_empty_file(path: &Path) -> Result<bool, std::io::Error> {
+    let meta = fs::metadata(path)?;
+    Ok(meta.is_file() && meta.len() > 0)
+}
+
+fn verify_boot_mount(config: &DetectionConfig) -> (String, String, String) {
+    let mount_res = parse_mountinfo_entries(&config.mountinfo_file);
+    let fstab_res = parse_fstab_entries(&config.fstab_file);
+
+    if mount_res.is_err() && fstab_res.is_err() {
+        return (
+            "unknown".to_string(),
+            "Mount table and /etc/fstab could not be read to verify /boot.".to_string(),
+            "Ensure /proc/self/mountinfo and /etc/fstab are readable.".to_string(),
+        );
+    }
+
+    let mount_entries = mount_res.as_ref().ok();
+    let fstab_entries = fstab_res.as_ref().ok();
+
+    let mount_root = mount_entries.and_then(|list| list.iter().find(|e| e.mount_point == "/"));
+    let mount_boot = mount_entries.and_then(|list| list.iter().find(|e| e.mount_point == "/boot"));
+    let fstab_boot = fstab_entries.and_then(|list| list.iter().find(|e| e.mount_point == "/boot"));
+
+    let real_root_in_mountinfo = mount_root
+        .map(|r| !is_ephemeral_fs(&r.fstype))
+        .unwrap_or(false);
+
+    let effective_boot = if real_root_in_mountinfo {
+        let Some(mb) = mount_boot else {
+            return (
+                "blocked".to_string(),
+                "Boot partition (/boot) is not mounted in active mounts.".to_string(),
+                "Mount the /boot (ESP) partition before rollback preflight.".to_string(),
+            );
+        };
+        if let Some(fb) = fstab_boot {
+            if !mb.fstype.eq_ignore_ascii_case(&fb.fstype) {
+                return (
+                    "blocked".to_string(),
+                    format!(
+                        "/boot filesystem '{}' in mountinfo conflicts with '{}' in /etc/fstab.",
+                        mb.fstype, fb.fstype
+                    ),
+                    "Reconcile /boot mount configuration between mountinfo and /etc/fstab.".to_string(),
+                );
+            }
+        }
+        mb.clone()
+    } else if let Some(mb) = mount_boot {
+        mb.clone()
+    } else if let Some(fb) = fstab_boot {
+        fb.clone()
+    } else {
+        return (
+            "blocked".to_string(),
+            "No /boot partition mount or /etc/fstab entry was detected.".to_string(),
+            "Configure and mount /boot (ESP) before rollback.".to_string(),
+        );
+    };
+
+    if is_ephemeral_fs(&effective_boot.fstype) {
+        return (
+            "blocked".to_string(),
+            format!(
+                "/boot uses unexpected ephemeral filesystem '{}'.",
+                effective_boot.fstype
+            ),
+            "Mount a persistent EFI/boot filesystem at /boot.".to_string(),
+        );
+    }
+
+    if !matches!(
+        effective_boot.fstype.to_ascii_lowercase().as_str(),
+        "vfat" | "fat32" | "msdos" | "ext4" | "btrfs"
+    ) {
+        return (
+            "blocked".to_string(),
+            format!(
+                "/boot uses unexpected filesystem '{}'.",
+                effective_boot.fstype
+            ),
+            "Verify /boot uses a supported boot filesystem (e.g. vfat).".to_string(),
+        );
+    }
+
+    (
+        "pass".to_string(),
+        format!(
+            "Boot partition (/boot) is verified on '{}' filesystem.",
+            effective_boot.fstype
+        ),
+        "No action required.".to_string(),
+    )
+}
+
+fn validate_limine_sync_conf(content: &str) -> Result<(), String> {
+    if content.trim().is_empty() {
+        return Err("Limine sync configuration is empty.".to_string());
+    }
+    for raw_line in content.lines() {
+        let trimmed = raw_line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if let Some((k, v)) = trimmed.split_once('=') {
+            let key = k.trim();
+            let val = v.trim().trim_matches('"').trim_matches('\'');
+            if key == "RESTORE_METHOD"
+                && !matches!(val, "replace" | "rsync" | "snapper" | "opensuse")
+            {
+                return Err(format!(
+                    "Unsupported RESTORE_METHOD '{}' in limine-snapper-sync.conf.",
+                    val
+                ));
+            }
+            if key == "LIMIT_USAGE_PERCENT" {
+                let pct = val.parse::<u32>().ok().filter(|&p| (1..=99).contains(&p));
+                if pct.is_none() {
+                    return Err(format!(
+                        "Invalid LIMIT_USAGE_PERCENT '{}' in limine-snapper-sync.conf.",
+                        val
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn check_limine_integration(config: &DetectionConfig) -> (String, String, String, Vec<LimineEntry>) {
     let sync_bin = resolve_snapper_binary(&config.limine_sync_bin);
     if sync_bin.is_none() {
         return (
             "unknown".to_string(),
             "limine-snapper-sync executable was not found.".to_string(),
             "Install and configure limine-snapper-sync before attempting rollback.".to_string(),
+            Vec::new(),
         );
     }
 
     match fs::read_to_string(&config.limine_conf_file) {
         Ok(content) => {
-            if content.trim().is_empty() {
+            if let Err(err) = validate_limine_sync_conf(&content) {
                 return (
                     "blocked".to_string(),
-                    format!("Limine sync configuration '{}' is empty.", config.limine_conf_file.display()),
+                    err,
                     "Verify /etc/limine-snapper-sync.conf contains valid settings.".to_string(),
+                    Vec::new(),
                 );
             }
         }
@@ -1818,13 +2047,18 @@ fn check_limine_integration(config: &DetectionConfig) -> (String, String, String
                 "blocked".to_string(),
                 "Permission denied reading /etc/limine-snapper-sync.conf.".to_string(),
                 "Ensure Limine configuration permissions allow inspection.".to_string(),
+                Vec::new(),
             );
         }
         Err(_) => {
             return (
                 "unknown".to_string(),
-                format!("Limine sync configuration '{}' was not found.", config.limine_conf_file.display()),
+                format!(
+                    "Limine sync configuration '{}' was not found.",
+                    config.limine_conf_file.display()
+                ),
                 "Verify /etc/limine-snapper-sync.conf exists before rollback.".to_string(),
+                Vec::new(),
             );
         }
     }
@@ -1833,8 +2067,11 @@ fn check_limine_integration(config: &DetectionConfig) -> (String, String, String
     let limine_alt_cfg = config.esp_dir.join("limine/limine.conf");
     match fs::metadata(&config.esp_dir) {
         Ok(meta) if meta.is_dir() => {
-            let has_cfg = limine_boot_cfg.is_file() || limine_alt_cfg.is_file();
-            if !has_cfg {
+            let cfg_path = if limine_boot_cfg.is_file() {
+                limine_boot_cfg
+            } else if limine_alt_cfg.is_file() {
+                limine_alt_cfg
+            } else {
                 return (
                     "unknown".to_string(),
                     format!(
@@ -1842,28 +2079,355 @@ fn check_limine_integration(config: &DetectionConfig) -> (String, String, String
                         config.esp_dir.display()
                     ),
                     "Verify the EFI/boot partition is mounted and contains limine.conf.".to_string(),
+                    Vec::new(),
+                );
+            };
+
+            let cfg_content = match fs::read_to_string(&cfg_path) {
+                Ok(c) => c,
+                Err(e) if e.kind() == ErrorKind::PermissionDenied => {
+                    return (
+                        "blocked".to_string(),
+                        format!("Permission denied reading '{}'.", cfg_path.display()),
+                        "Administrator access is required to inspect Limine boot entries.".to_string(),
+                        Vec::new(),
+                    );
+                }
+                Err(_) => {
+                    return (
+                        "unknown".to_string(),
+                        format!("Could not read Limine configuration '{}'.", cfg_path.display()),
+                        "Verify limine.conf is readable.".to_string(),
+                        Vec::new(),
+                    );
+                }
+            };
+
+            let entries = parse_limine_entries(&cfg_content);
+            if entries.is_empty() {
+                return (
+                    "blocked".to_string(),
+                    "No boot entries were found in limine.conf.".to_string(),
+                    "Ensure limine.conf defines active and recovery boot entries.".to_string(),
+                    Vec::new(),
                 );
             }
+
+            let mut verified_entries = Vec::new();
+            for entry in entries {
+                if entry.kernel_path.is_empty() || entry.module_paths.is_empty() {
+                    return (
+                        "blocked".to_string(),
+                        format!(
+                            "Limine entry '{}' is missing kernel_path or initramfs module_path.",
+                            entry.title
+                        ),
+                        "Ensure every Limine boot entry specifies valid kernel and initramfs paths.".to_string(),
+                        Vec::new(),
+                    );
+                }
+
+                let Some(kernel_fs_path) =
+                    resolve_esp_relative_path(&config.esp_dir, &entry.kernel_path)
+                else {
+                    return (
+                        "blocked".to_string(),
+                        format!(
+                            "Limine entry '{}' has an invalid or unsafe kernel path '{}'.",
+                            entry.title, entry.kernel_path
+                        ),
+                        "Use valid boot:/// paths inside /boot.".to_string(),
+                        Vec::new(),
+                    );
+                };
+
+                match is_non_empty_file(&kernel_fs_path) {
+                    Ok(true) => {}
+                    Ok(false) | Err(_) => {
+                        return (
+                            "blocked".to_string(),
+                            format!(
+                                "Kernel file '{}' referenced by Limine entry '{}' is missing or empty.",
+                                kernel_fs_path.display(),
+                                entry.title
+                            ),
+                            "Repair or regenerate missing kernel images in /boot.".to_string(),
+                            Vec::new(),
+                        );
+                    }
+                }
+
+                for mod_uri in &entry.module_paths {
+                    let Some(mod_fs_path) = resolve_esp_relative_path(&config.esp_dir, mod_uri)
+                    else {
+                        return (
+                            "blocked".to_string(),
+                            format!(
+                                "Limine entry '{}' has an invalid initramfs path '{}'.",
+                                entry.title, mod_uri
+                            ),
+                            "Use valid boot:/// initramfs paths inside /boot.".to_string(),
+                            Vec::new(),
+                        );
+                    };
+                    match is_non_empty_file(&mod_fs_path) {
+                        Ok(true) => {}
+                        Ok(false) | Err(_) => {
+                            return (
+                                "blocked".to_string(),
+                                format!(
+                                    "Initramfs file '{}' referenced by Limine entry '{}' is missing or empty.",
+                                    mod_fs_path.display(),
+                                    entry.title
+                                ),
+                                "Regenerate initramfs before attempting rollback.".to_string(),
+                                Vec::new(),
+                            );
+                        }
+                    }
+                }
+
+                verified_entries.push(entry);
+            }
+
+            let has_primary = verified_entries.iter().any(|e| {
+                let lower = e.title.to_ascii_lowercase();
+                !lower.contains("fallback") && !lower.contains("snapshot")
+            });
+            let has_recovery_or_fallback = verified_entries.iter().any(|e| {
+                let lower = e.title.to_ascii_lowercase();
+                lower.contains("fallback")
+                    || lower.contains("snapshot")
+                    || lower.contains("recovery")
+                    || lower.contains("lts")
+            }) || verified_entries.len() >= 2;
+
+            if !has_primary {
+                return (
+                    "blocked".to_string(),
+                    "Active primary boot entry could not be verified in limine.conf.".to_string(),
+                    "Ensure an active primary boot entry is preserved in limine.conf.".to_string(),
+                    Vec::new(),
+                );
+            }
+            if !has_recovery_or_fallback {
+                return (
+                    "blocked".to_string(),
+                    "No alternative fallback or snapshot recovery boot entry was found in limine.conf.".to_string(),
+                    "Preserve at least one fallback or snapshot boot entry in limine.conf.".to_string(),
+                    Vec::new(),
+                );
+            }
+
             (
                 "pass".to_string(),
-                format!("Limine sync tool, configuration, and '{}' are verified.", config.esp_dir.display()),
+                format!(
+                    "Limine sync tool, configuration, and {} verified boot entries in '{}' are valid.",
+                    verified_entries.len(),
+                    config.esp_dir.display()
+                ),
                 "No action required.".to_string(),
+                verified_entries,
             )
         }
         Ok(_) => (
             "blocked".to_string(),
             format!("ESP path '{}' is not a directory.", config.esp_dir.display()),
             "Verify boot partition mount configuration.".to_string(),
+            Vec::new(),
         ),
         Err(e) if e.kind() == ErrorKind::PermissionDenied => (
             "blocked".to_string(),
-            format!("Permission denied accessing boot directory '{}'.", config.esp_dir.display()),
+            format!(
+                "Permission denied accessing boot directory '{}'.",
+                config.esp_dir.display()
+            ),
             "Boot partition inspection requires read access.".to_string(),
+            Vec::new(),
         ),
         Err(_) => (
             "unknown".to_string(),
-            format!("Boot/ESP directory '{}' is not mounted or inaccessible.", config.esp_dir.display()),
+            format!(
+                "Boot/ESP directory '{}' is not mounted or inaccessible.",
+                config.esp_dir.display()
+            ),
             "Ensure /boot is mounted and limine.conf is verifiable.".to_string(),
+            Vec::new(),
+        ),
+    }
+}
+
+fn resolve_running_kernel(config: &DetectionConfig) -> Option<String> {
+    if let Some(ref k) = config.running_kernel {
+        let trimmed = k.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    if let Ok((0, stdout, _)) = run_command_with_timeout(
+        Path::new("uname"),
+        &["-r"],
+        config.command_timeout,
+    ) {
+        let trimmed = stdout.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    fs::read_to_string("/proc/sys/kernel/osrelease")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+fn list_module_versions(dir: &Path) -> Result<Vec<String>, std::io::Error> {
+    let mut versions = Vec::new();
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        if entry.path().is_dir() {
+            if let Some(name) = entry.file_name().to_str() {
+                if !name.starts_with('.') {
+                    versions.push(name.to_string());
+                }
+            }
+        }
+    }
+    versions.sort();
+    Ok(versions)
+}
+
+fn verify_kernel_modules_compatibility(
+    config: &DetectionConfig,
+    point_id: u32,
+    limine_entries: &[LimineEntry],
+) -> (String, String, String) {
+    let Some(running_kernel) = resolve_running_kernel(config) else {
+        return (
+            "unknown".to_string(),
+            "Running kernel version could not be determined.".to_string(),
+            "Ensure uname or /proc/sys/kernel/osrelease is accessible.".to_string(),
+        );
+    };
+
+    let active_modules_path = config.modules_dir.join(&running_kernel);
+    if !active_modules_path.is_dir() {
+        return (
+            "blocked".to_string(),
+            format!(
+                "Active kernel modules directory '{}' is missing.",
+                active_modules_path.display()
+            ),
+            "Verify installed kernel modules match the running kernel.".to_string(),
+        );
+    }
+
+    if limine_entries.is_empty() {
+        return (
+            "unknown".to_string(),
+            "No verified Limine kernel entries are available to check module compatibility.".to_string(),
+            "Resolve Limine and /boot verification first.".to_string(),
+        );
+    }
+
+    let snap_root = config.snapshots_dir.join(point_id.to_string()).join("snapshot");
+    let snap_modules_usr = snap_root.join("usr/lib/modules");
+    let snap_modules_lib = snap_root.join("lib/modules");
+
+    let snap_versions = match list_module_versions(&snap_modules_usr) {
+        Ok(v) if !v.is_empty() => v,
+        Ok(_) => match list_module_versions(&snap_modules_lib) {
+            Ok(v) if !v.is_empty() => v,
+            Ok(_) => {
+                return (
+                    "blocked".to_string(),
+                    format!(
+                        "Target snapshot #{} contains no kernel module directories.",
+                        point_id
+                    ),
+                    "Do not roll back to a snapshot without verifiable kernel modules.".to_string(),
+                );
+            }
+            Err(_) => {
+                return (
+                    "blocked".to_string(),
+                    format!(
+                        "Target snapshot #{} has an empty kernel modules directory.",
+                        point_id
+                    ),
+                    "Do not roll back to an incomplete snapshot.".to_string(),
+                );
+            }
+        },
+        Err(e) if e.kind() == ErrorKind::PermissionDenied => {
+            return (
+                "blocked".to_string(),
+                format!(
+                    "Permission denied reading snapshot #{} kernel modules.",
+                    point_id
+                ),
+                "Administrator access is required to verify snapshot kernel compatibility.".to_string(),
+            );
+        }
+        Err(_) => match list_module_versions(&snap_modules_lib) {
+            Ok(v) if !v.is_empty() => v,
+            Err(e) if e.kind() == ErrorKind::PermissionDenied => {
+                return (
+                    "blocked".to_string(),
+                    format!(
+                        "Permission denied reading snapshot #{} kernel modules.",
+                        point_id
+                    ),
+                    "Administrator access is required to verify snapshot kernel compatibility.".to_string(),
+                );
+            }
+            _ => {
+                return (
+                    "unknown".to_string(),
+                    format!(
+                        "Snapshot #{} kernel modules directory could not be verified; /boot compatibility is unproven.",
+                        point_id
+                    ),
+                    "Ensure snapshot usr/lib/modules is readable before rollback.".to_string(),
+                );
+            }
+        },
+    };
+
+    let matched_version = snap_versions.iter().find(|ver| {
+        let ver_lower = ver.to_ascii_lowercase();
+        if *ver == &running_kernel {
+            return true;
+        }
+        limine_entries.iter().any(|entry| {
+            let combined = format!(
+                "{} {} {}",
+                entry.title.to_ascii_lowercase(),
+                entry.kernel_path.to_ascii_lowercase(),
+                entry.module_paths.join(" ").to_ascii_lowercase()
+            );
+            combined.contains(&ver_lower)
+                || (ver_lower.contains("-lts") && combined.contains("lts"))
+        })
+    });
+
+    match matched_version {
+        Some(ver) => (
+            "pass".to_string(),
+            format!(
+                "Snapshot #{} modules ('{}') match verified bootable kernel entries (running '{}').",
+                point_id, ver, running_kernel
+            ),
+            "No action required.".to_string(),
+        ),
+        None => (
+            "blocked".to_string(),
+            format!(
+                "Kernel/module mismatch: snapshot #{} has modules [{}], which do not match running kernel '{}' or verified /boot entries.",
+                point_id,
+                snap_versions.join(", "),
+                running_kernel
+            ),
+            "Ensure a matching kernel and initramfs are preserved in /boot for the target snapshot.".to_string(),
         ),
     }
 }
@@ -2157,8 +2721,19 @@ pub fn run_rollback_preflight(
         &home_rem,
     ));
 
-    // 10. Limine / boot integration
-    let (limine_status, limine_reason, limine_rem) = check_limine_integration(config);
+    // 10. Boot partition mount and filesystem
+    let (boot_status, boot_reason, boot_rem) = verify_boot_mount(config);
+    checks.push(check_record(
+        "boot_mount_verified",
+        "Boot partition mount and filesystem",
+        &boot_status,
+        boot_reason,
+        &boot_rem,
+    ));
+
+    // 11. Limine / boot integration
+    let (limine_status, limine_reason, limine_rem, limine_entries) =
+        check_limine_integration(config);
     checks.push(check_record(
         "limine_boot_integration",
         "Limine and boot integration",
@@ -2167,7 +2742,26 @@ pub fn run_rollback_preflight(
         &limine_rem,
     ));
 
-    // 10. Authorization and explicit confirmation requirements
+    // 12. Kernel, initramfs, and snapshot module compatibility
+    let (kmod_status, kmod_reason, kmod_rem) = if target_snapshot.is_some() {
+        verify_kernel_modules_compatibility(config, point_id, &limine_entries)
+    } else {
+        (
+            "blocked".to_string(),
+            "Target snapshot is unavailable for kernel module compatibility verification."
+                .to_string(),
+            "Select an existing snapshot before verifying kernel compatibility.".to_string(),
+        )
+    };
+    checks.push(check_record(
+        "kernel_modules_compatibility",
+        "Kernel, initramfs, and snapshot module compatibility",
+        &kmod_status,
+        kmod_reason,
+        &kmod_rem,
+    ));
+
+    // 13. Authorization and explicit confirmation requirements
     let polkit_defined = fs::read_to_string(&config.polkit_policy_file)
         .map(|s| s.contains(POLKIT_ACTION_ROLLBACK))
         .unwrap_or(false)
@@ -2191,21 +2785,33 @@ pub fn run_rollback_preflight(
     };
     checks.push(c10);
 
-    // TOCTOU re-check: verify snapshot state did not change during preflight
+    // TOCTOU re-check: verify snapshot and boot/Limine state did not change during preflight
     if initial_report.status == DetectionStatus::InstalledAndConfigured && target_snapshot.is_some() {
         let final_report = detect_recovery_state(config);
         let still_exists = final_report.status == DetectionStatus::InstalledAndConfigured
-            && final_report.snapshots.iter().any(|s| s.id == point_id as i32 && !s.is_current);
-        if !still_exists {
+            && final_report
+                .snapshots
+                .iter()
+                .any(|s| s.id == point_id as i32 && !s.is_current);
+        let (final_boot_status, _, _) = verify_boot_mount(config);
+        let (final_limine_status, _, _, final_entries) = check_limine_integration(config);
+        let (final_kmod_status, _, _) =
+            verify_kernel_modules_compatibility(config, point_id, &final_entries);
+
+        if !still_exists
+            || final_boot_status != boot_status
+            || final_limine_status != limine_status
+            || final_kmod_status != kmod_status
+        {
             checks.push(check_record(
                 "state_consistency_recheck",
                 "Preflight state consistency",
                 "blocked",
                 format!(
-                    "System state or target snapshot #{} changed during preflight verification.",
+                    "System, boot, or target snapshot #{} state changed during preflight verification.",
                     point_id
                 ),
-                "Refresh snapshots and re-run preflight.",
+                "Refresh snapshots and boot state, then re-run preflight.",
             ));
         }
     }
@@ -3072,6 +3678,7 @@ mod tests {
                 concat!(
                     "36 1 0:36 /@ / rw,noatime - btrfs /dev/nvme0n1p2 rw,subvolid=539,subvol=/@\n",
                     "37 36 0:36 /@home /home rw,noatime - btrfs /dev/nvme0n1p2 rw,subvolid=257,subvol=/@home\n",
+                    "38 36 259:1 / /boot rw,noatime - vfat /dev/nvme0n1p1 rw\n",
                 ),
             );
             let fstab = self.write(
@@ -3079,6 +3686,7 @@ mod tests {
                 concat!(
                     "UUID=1234 / btrfs subvol=/@,defaults 0 0\n",
                     "UUID=1234 /home btrfs subvol=/@home,defaults 0 0\n",
+                    "UUID=FB94-FF19 /boot vfat defaults,umask=0077 0 2\n",
                 ),
             );
             let sysconf = self.write("sysconf/snapper", "SNAPPER_CONFIGS=\"root\"\n");
@@ -3157,15 +3765,40 @@ EOF
                 "echo '@/.snapshots/12/snapshot'\necho '        Subvolume ID:           272'\nexit 0\n",
             );
             let limine_sync_bin = self.write_exec("bin/limine-snapper-sync", "exit 0\n");
-            let limine_conf_file = self.write("etc/limine-snapper-sync.conf", "LIMIT_USAGE_PERCENT=85\n");
+            let limine_conf_file = self.write(
+                "etc/limine-snapper-sync.conf",
+                "LIMIT_USAGE_PERCENT=85\nRESTORE_METHOD=replace\n",
+            );
             let esp_dir = self.path("boot");
             fs::create_dir_all(&esp_dir).unwrap();
-            self.write("boot/limine.conf", "timeout: 5\n");
+            self.write("boot/vmlinuz-linux-cachyos", "kernel-image");
+            self.write("boot/initramfs-linux-cachyos.img", "initramfs-image");
+            self.write(
+                "boot/initramfs-linux-cachyos-fallback.img",
+                "initramfs-fallback-image",
+            );
+            self.write(
+                "boot/limine.conf",
+                concat!(
+                    "timeout: 5\n",
+                    "/Zethropol OS (linux-cachyos)\n",
+                    "    protocol: linux\n",
+                    "    kernel_path: boot:///vmlinuz-linux-cachyos\n",
+                    "    module_path: boot:///initramfs-linux-cachyos.img\n",
+                    "/Zethropol OS (linux-cachyos-fallback)\n",
+                    "    protocol: linux\n",
+                    "    kernel_path: boot:///vmlinuz-linux-cachyos\n",
+                    "    module_path: boot:///initramfs-linux-cachyos-fallback.img\n",
+                ),
+            );
+            let modules_dir = self.path("usr/lib/modules");
+            fs::create_dir_all(modules_dir.join("7.3.4-1-cachyos")).unwrap();
             let polkit_policy_file = self.write(
                 "polkit/org.zethropol.recovery.policy",
                 "<action id=\"org.zethropol.recovery.rollback\"/>\n",
             );
-            fs::create_dir_all(snapshots_dir.join("12/snapshot")).unwrap();
+            fs::create_dir_all(snapshots_dir.join("12/snapshot/usr/lib/modules/7.3.4-1-cachyos"))
+                .unwrap();
 
             DetectionConfig {
                 snapper_bin,
@@ -3179,6 +3812,8 @@ EOF
                 snapshots_dir,
                 limine_conf_file,
                 esp_dir,
+                modules_dir,
+                running_kernel: Some("7.3.4-1-cachyos".to_string()),
                 polkit_policy_file,
                 command_timeout: Duration::from_secs(2),
             }
@@ -3375,7 +4010,7 @@ echo '{"root":[{"number":0,"type":"single","description":"current"}]}'
         assert!(ok.can_proceed);
         assert!(!ok.rollback_execution_enabled);
         assert_eq!(ok.snapshot_subvolume_id, "272");
-        assert_eq!(ok.checks.len(), 11);
+        assert_eq!(ok.checks.len(), 13);
 
         // Missing limine.conf must yield "unknown" and canProceed=false
         fs::remove_file(fx.path("boot/limine.conf")).unwrap();
@@ -3618,6 +4253,7 @@ echo '{"root":[{"number":0,"type":"single","description":"current"},{"number":12
             concat!(
                 "36 1 0:36 /@ / rw,noatime - btrfs /dev/nvme0n1p2 rw,subvolid=539,subvol=/@\n",
                 "37 36 259:3 / /home rw,noatime - ext4 /dev/nvme0n1p3 rw\n",
+                "38 36 259:1 / /boot rw,noatime - vfat /dev/nvme0n1p1 rw\n",
             ),
         );
         cfg.fstab_file = fx.write(
@@ -3625,6 +4261,7 @@ echo '{"root":[{"number":0,"type":"single","description":"current"},{"number":12
             concat!(
                 "UUID=1234 / btrfs subvol=/@,defaults 0 0\n",
                 "UUID=5678 /home ext4 defaults 0 2\n",
+                "UUID=FB94-FF19 /boot vfat defaults,umask=0077 0 2\n",
             ),
         );
         let ext4_ok = run_rollback_preflight(&cfg, 12, false);
@@ -3768,5 +4405,267 @@ echo '{"root":[{"number":0,"type":"single","description":"current"},{"number":12
         let report = run_rollback_preflight(&cfg, 12, false);
         assert!(!report.can_proceed);
         assert!(!report.rollback_execution_enabled);
+    }
+
+    #[test]
+    fn boot_1_valid_limine_kernel_initramfs_layout_passes() {
+        let fx = TestFixture::new();
+        let cfg = fx.base_config();
+        let report = run_rollback_preflight(&cfg, 12, false);
+        assert_eq!(report.overall_status, "ready");
+        assert!(report.can_proceed);
+        assert!(!report.rollback_execution_enabled);
+        for id in [
+            "boot_mount_verified",
+            "limine_boot_integration",
+            "kernel_modules_compatibility",
+        ] {
+            let chk = report.checks.iter().find(|c| c.id == id).unwrap();
+            assert_eq!(chk.status, "pass", "check {} should pass", id);
+        }
+    }
+
+    #[test]
+    fn boot_2_missing_kernel_file_blocks_preflight() {
+        let fx = TestFixture::new();
+        let cfg = fx.base_config();
+        fs::remove_file(fx.path("boot/vmlinuz-linux-cachyos")).unwrap();
+        let report = run_rollback_preflight(&cfg, 12, false);
+        assert_eq!(report.overall_status, "blocked");
+        assert!(!report.can_proceed);
+        assert_eq!(report.limine_status, "blocked");
+    }
+
+    #[test]
+    fn boot_3_missing_or_empty_initramfs_blocks_preflight() {
+        let fx = TestFixture::new();
+        let cfg = fx.base_config();
+        // Empty initramfs
+        fx.write("boot/initramfs-linux-cachyos.img", "");
+        let empty_rep = run_rollback_preflight(&cfg, 12, false);
+        assert_eq!(empty_rep.overall_status, "blocked");
+        assert!(!empty_rep.can_proceed);
+        assert_eq!(empty_rep.limine_status, "blocked");
+
+        // Missing initramfs
+        fs::remove_file(fx.path("boot/initramfs-linux-cachyos.img")).unwrap();
+        let missing_rep = run_rollback_preflight(&cfg, 12, false);
+        assert_eq!(missing_rep.overall_status, "blocked");
+        assert!(!missing_rep.can_proceed);
+    }
+
+    #[test]
+    fn boot_4_invalid_or_traversal_limine_path_blocks_preflight() {
+        let fx = TestFixture::new();
+        let cfg = fx.base_config();
+        fx.write(
+            "boot/limine.conf",
+            concat!(
+                "/Zethropol OS\n",
+                "    kernel_path: boot:///../../etc/passwd\n",
+                "    module_path: boot:///initramfs-linux-cachyos.img\n",
+                "/Zethropol OS (fallback)\n",
+                "    kernel_path: boot:///vmlinuz-linux-cachyos\n",
+                "    module_path: boot:///initramfs-linux-cachyos-fallback.img\n",
+            ),
+        );
+        let report = run_rollback_preflight(&cfg, 12, false);
+        assert_eq!(report.overall_status, "blocked");
+        assert!(!report.can_proceed);
+        assert_eq!(report.limine_status, "blocked");
+    }
+
+    #[test]
+    fn boot_5_kernel_modules_version_mismatch_blocks_preflight() {
+        let fx = TestFixture::new();
+        let cfg = fx.base_config();
+        fs::remove_dir_all(fx.path(".snapshots/12/snapshot/usr/lib/modules/7.3.4-1-cachyos"))
+            .unwrap();
+        fs::create_dir_all(fx.path(".snapshots/12/snapshot/usr/lib/modules/6.12.1-old")).unwrap();
+
+        let report = run_rollback_preflight(&cfg, 12, false);
+        assert_eq!(report.overall_status, "blocked");
+        assert!(!report.can_proceed);
+        let chk = report
+            .checks
+            .iter()
+            .find(|c| c.id == "kernel_modules_compatibility")
+            .unwrap();
+        assert_eq!(chk.status, "blocked");
+    }
+
+    #[test]
+    fn boot_6_unmounted_or_unexpected_boot_filesystem_blocks_preflight() {
+        let fx = TestFixture::new();
+        let mut cfg = fx.base_config();
+
+        // /boot missing from mountinfo while / is real
+        cfg.mountinfo_file = fx.write(
+            "mountinfo",
+            concat!(
+                "36 1 0:36 /@ / rw,noatime - btrfs /dev/nvme0n1p2 rw,subvolid=539,subvol=/@\n",
+                "37 36 0:36 /@home /home rw,noatime - btrfs /dev/nvme0n1p2 rw,subvolid=257,subvol=/@home\n",
+            ),
+        );
+        let missing_boot = run_rollback_preflight(&cfg, 12, false);
+        assert_eq!(missing_boot.overall_status, "blocked");
+        assert!(!missing_boot.can_proceed);
+
+        // /boot mounted on tmpfs
+        cfg.mountinfo_file = fx.write(
+            "mountinfo",
+            concat!(
+                "36 1 0:36 /@ / rw,noatime - btrfs /dev/nvme0n1p2 rw,subvolid=539,subvol=/@\n",
+                "37 36 0:36 /@home /home rw,noatime - btrfs /dev/nvme0n1p2 rw,subvolid=257,subvol=/@home\n",
+                "38 36 0:54 / /boot rw,noatime - tmpfs tmpfs rw\n",
+            ),
+        );
+        let tmpfs_boot = run_rollback_preflight(&cfg, 12, false);
+        assert_eq!(tmpfs_boot.overall_status, "blocked");
+        assert!(!tmpfs_boot.can_proceed);
+    }
+
+    #[test]
+    fn boot_7_missing_active_primary_entry_blocks_preflight() {
+        let fx = TestFixture::new();
+        let cfg = fx.base_config();
+        fx.write(
+            "boot/limine.conf",
+            concat!(
+                "/Zethropol OS (fallback)\n",
+                "    kernel_path: boot:///vmlinuz-linux-cachyos\n",
+                "    module_path: boot:///initramfs-linux-cachyos-fallback.img\n",
+                "/Snapshot 12\n",
+                "    kernel_path: boot:///vmlinuz-linux-cachyos\n",
+                "    module_path: boot:///initramfs-linux-cachyos.img\n",
+            ),
+        );
+        let report = run_rollback_preflight(&cfg, 12, false);
+        assert_eq!(report.overall_status, "blocked");
+        assert!(!report.can_proceed);
+        assert_eq!(report.limine_status, "blocked");
+    }
+
+    #[test]
+    fn boot_8_missing_alternative_recovery_entry_blocks_preflight() {
+        let fx = TestFixture::new();
+        let cfg = fx.base_config();
+        fx.write(
+            "boot/limine.conf",
+            concat!(
+                "/Zethropol OS (linux-cachyos)\n",
+                "    kernel_path: boot:///vmlinuz-linux-cachyos\n",
+                "    module_path: boot:///initramfs-linux-cachyos.img\n",
+            ),
+        );
+        let report = run_rollback_preflight(&cfg, 12, false);
+        assert_eq!(report.overall_status, "blocked");
+        assert!(!report.can_proceed);
+        assert_eq!(report.limine_status, "blocked");
+    }
+
+    #[test]
+    fn boot_9_missing_limine_sync_or_invalid_conf_fails_safely() {
+        let fx = TestFixture::new();
+        let mut cfg = fx.base_config();
+
+        // Invalid RESTORE_METHOD -> blocked
+        fx.write(
+            "etc/limine-snapper-sync.conf",
+            "LIMIT_USAGE_PERCENT=85\nRESTORE_METHOD=invalid_mode\n",
+        );
+        let bad_conf = run_rollback_preflight(&cfg, 12, false);
+        assert_eq!(bad_conf.overall_status, "blocked");
+        assert!(!bad_conf.can_proceed);
+
+        // Missing limine-snapper-sync binary -> unknown (canProceed=false)
+        cfg.limine_sync_bin = fx.path("bin/missing-limine-snapper-sync");
+        let missing_bin = run_rollback_preflight(&cfg, 12, false);
+        assert_eq!(missing_bin.overall_status, "unknown");
+        assert!(!missing_bin.can_proceed);
+    }
+
+    #[test]
+    fn boot_10_unverifiable_snapshot_modules_prevents_ready() {
+        let fx = TestFixture::new();
+        let cfg = fx.base_config();
+        fs::remove_dir_all(fx.path(".snapshots/12/snapshot/usr/lib/modules")).unwrap();
+        let report = run_rollback_preflight(&cfg, 12, false);
+        assert_ne!(report.overall_status, "ready");
+        assert!(!report.can_proceed);
+        let chk = report
+            .checks
+            .iter()
+            .find(|c| c.id == "kernel_modules_compatibility")
+            .unwrap();
+        assert_eq!(chk.status, "unknown");
+    }
+
+    #[test]
+    fn boot_11_toctou_boot_or_snapshot_change_during_preflight_blocks() {
+        let fx = TestFixture::new();
+        let mut cfg = fx.base_config();
+        let limine_file = fx.path("boot/limine.conf");
+        let flag_file = fx.path("snapper-listed-once");
+        // On second `snapper list` invocation (TOCTOU re-check), remove limine.conf to simulate mid-preflight change
+        cfg.snapper_bin = fx.write_exec(
+            "bin/snapper",
+            &format!(
+                r#"if [ -f "{flag}" ]; then
+  rm -f "{limine}"
+else
+  touch "{flag}"
+fi
+cat << 'EOF'
+{{
+  "root": [
+    {{"number":0,"type":"single","date":"","user":"root","cleanup":"","description":"current","userdata":{{}}}},
+    {{"number":12,"type":"single","date":"2026-11-16 12:00:00","user":"root","cleanup":"number","description":"Manual pre-change","userdata":{{"zethropol":"manual"}}}}
+  ]
+}}
+EOF
+"#,
+                flag = flag_file.display(),
+                limine = limine_file.display()
+            ),
+        );
+
+        let report = run_rollback_preflight(&cfg, 12, false);
+        assert_eq!(report.overall_status, "blocked");
+        assert!(!report.can_proceed);
+        let recheck = report
+            .checks
+            .iter()
+            .find(|c| c.id == "state_consistency_recheck")
+            .unwrap();
+        assert_eq!(recheck.status, "blocked");
+    }
+
+    #[test]
+    fn boot_12_dbus_preflight_envelope_matches_control_center_contract() {
+        let fx = TestFixture::new();
+        let cfg = fx.base_config();
+        let report = run_rollback_preflight(&cfg, 12, false);
+        let envelope = encode_preflight_envelope(&report);
+
+        assert_eq!(
+            envelope.get("code").and_then(|v| v.downcast_ref::<String>().ok()),
+            Some("ok".to_string())
+        );
+        let data_val = envelope.get("data").unwrap();
+        let data_dict: HashMap<String, OwnedValue> = data_val.try_clone().unwrap().try_into().unwrap();
+        assert_eq!(
+            data_dict.get("overallStatus").and_then(|v| v.downcast_ref::<String>().ok()),
+            Some("ready".to_string())
+        );
+        assert_eq!(
+            data_dict.get("canProceed").and_then(|v| v.downcast_ref::<bool>().ok()),
+            Some(true)
+        );
+        assert_eq!(
+            data_dict.get("rollbackExecutionEnabled").and_then(|v| v.downcast_ref::<bool>().ok()),
+            Some(false)
+        );
+        assert!(data_dict.contains_key("checks"));
     }
 }
