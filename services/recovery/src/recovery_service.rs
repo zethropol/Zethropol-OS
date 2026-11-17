@@ -7194,4 +7194,336 @@ echo '{"root":[{"number":0,"type":"single","description":"current"},{"number":15
         assert_eq!(uncertain.repair_class, RepairSafetyClass::Blocked);
         assert!(!uncertain.plan_ready);
     }
+
+    #[tokio::test]
+    async fn pre_update_5_snapper_failure_or_bad_btrfs_transitions_to_completed_failed() {
+        let fx = TestFixture::new();
+        let mut cfg = fx.base_config();
+        let snap_dir = fx.path(".snapshots");
+        fs::create_dir_all(snap_dir.join("15/snapshot/usr/lib/modules/7.3.4-1-cachyos")).unwrap();
+
+        // 1. Snapper create fails with exit code 1 -> reservation transitions to CompletedFailed (not stuck in Creating)
+        cfg.snapper_bin = fx.write_exec(
+            "bin/snapper",
+            r#"if [ "$3" = "create" ]; then
+  echo "snapper create failed" >&2
+  exit 1
+fi
+echo '{"root":[{"number":0,"type":"single","description":"current"},{"number":12,"type":"single","description":"Pre-change","userdata":{"zethropol":"manual"}}]}'
+"#,
+        );
+        let mgr = RecoveryManager::new();
+        let started = mgr.create_pre_update_recovery_point_with_caller(
+            &cfg,
+            Some(":1.42"),
+            "upd-500".to_string(),
+            "Snapper fail test".to_string(),
+            None,
+        );
+        assert!(started.success);
+        for _ in 0..50 {
+            let st = mgr.pre_update_reservation.lock().unwrap().as_ref().unwrap().state;
+            if st == PreUpdateReservationState::CompletedFailed {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert_eq!(
+            mgr.pre_update_reservation.lock().unwrap().as_ref().unwrap().state,
+            PreUpdateReservationState::CompletedFailed
+        );
+
+        // 2. Snapper create succeeds, but btrfs subvolume show fails -> CompletedFailed
+        cfg.snapper_bin = fx.write_exec(
+            "bin/snapper",
+            r#"if [ "$3" = "create" ]; then
+  echo "15"
+  exit 0
+fi
+echo '{"root":[{"number":0,"type":"single","description":"current"},{"number":15,"type":"single","description":"Pre-Update","userdata":{"zethropol":"pre-update","important":"yes"}}]}'
+"#,
+        );
+        cfg.btrfs_bin = fx.write_exec("bin/btrfs", "echo 'ERROR: not a subvolume' >&2\nexit 1\n");
+        let started2 = mgr.create_pre_update_recovery_point_with_caller(
+            &cfg,
+            Some(":1.42"),
+            "upd-501".to_string(),
+            "Bad btrfs test".to_string(),
+            None,
+        );
+        assert!(started2.success);
+        for _ in 0..50 {
+            let st = mgr.pre_update_reservation.lock().unwrap().as_ref().unwrap().state;
+            if st == PreUpdateReservationState::CompletedFailed {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        let op_state = mgr
+            .operations
+            .lock()
+            .unwrap()
+            .get(&started2.operation_id)
+            .unwrap()
+            .clone();
+        assert_eq!(op_state.code, "verification-failed");
+        assert_eq!(
+            mgr.pre_update_reservation.lock().unwrap().as_ref().unwrap().state,
+            PreUpdateReservationState::CompletedFailed
+        );
+    }
+
+    #[tokio::test]
+    async fn pre_update_6_concurrent_create_rejected_without_clobbering_reservation() {
+        let fx = TestFixture::new();
+        let mut cfg = fx.base_config();
+        let snap_dir = fx.path(".snapshots");
+        fs::create_dir_all(snap_dir.join("15/snapshot/usr/lib/modules/7.3.4-1-cachyos")).unwrap();
+        cfg.snapper_bin = fx.write_exec(
+            "bin/snapper",
+            r#"if [ "$3" = "create" ]; then
+  sleep 0.2
+  echo "15"
+  exit 0
+fi
+echo '{"root":[{"number":0,"type":"single","description":"current"},{"number":15,"type":"single","description":"Pre-Update","userdata":{"zethropol":"pre-update","important":"yes"}}]}'
+"#,
+        );
+
+        let mgr = RecoveryManager::new();
+        let first = mgr.create_pre_update_recovery_point_with_caller(
+            &cfg,
+            Some(":1.42"),
+            "upd-600".to_string(),
+            "First concurrent".to_string(),
+            None,
+        );
+        assert!(first.success);
+
+        // Concurrent manual CreateRecoveryPoint and concurrent CreatePreUpdateRecoveryPoint MUST both be rejected as busy
+        let second_manual = mgr.create_recovery_point_with_caller(
+            &cfg,
+            Some(":1.77"),
+            "Manual".to_string(),
+            "Concurrent manual".to_string(),
+            None,
+        );
+        assert!(!second_manual.success);
+        assert_eq!(second_manual.code, "busy");
+
+        let second_pre = mgr.create_pre_update_recovery_point_with_caller(
+            &cfg,
+            Some(":1.88"),
+            "upd-601".to_string(),
+            "Concurrent pre".to_string(),
+            None,
+        );
+        assert!(!second_pre.success);
+        assert_eq!(second_pre.code, "busy");
+
+        // Original reservation upd-600 must not be clobbered
+        assert_eq!(
+            mgr.pre_update_reservation
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .update_op_id,
+            "upd-600"
+        );
+
+        for _ in 0..50 {
+            if mgr.active_operation.lock().unwrap().is_none() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn pre_update_7_unrelated_sender_disconnect_does_not_orphan_owner_reservation() {
+        let fx = TestFixture::new();
+        let mut cfg = fx.base_config();
+        let snap_dir = fx.path(".snapshots");
+        fs::create_dir_all(snap_dir.join("15/snapshot/usr/lib/modules/7.3.4-1-cachyos")).unwrap();
+        cfg.snapper_bin = fx.write_exec(
+            "bin/snapper",
+            r#"if [ "$3" = "create" ]; then
+  echo "15"
+  exit 0
+fi
+echo '{"root":[{"number":0,"type":"single","description":"current"},{"number":15,"type":"single","description":"Pre-Update","userdata":{"zethropol":"pre-update","important":"yes"}}]}'
+"#,
+        );
+
+        let mgr = RecoveryManager::new();
+        assert!(mgr
+            .create_pre_update_recovery_point_with_caller(
+                &cfg,
+                Some(":1.42"),
+                "upd-700".to_string(),
+                "Owner disconnect test".to_string(),
+                None,
+            )
+            .success);
+        for _ in 0..50 {
+            if mgr.pre_update_reservation.lock().unwrap().as_ref().unwrap().state
+                == PreUpdateReservationState::VerifiedReady
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert!(mgr
+            .begin_pre_update_execution_with_caller(&cfg, Some(":1.42"), "upd-700".to_string(), 15)
+            .success);
+
+        // Unrelated peer :1.99 disconnects -> :1.42's ActiveUpdate reservation MUST stay ActiveUpdate
+        mgr.handle_dbus_disconnect(":1.99");
+        assert_eq!(
+            mgr.pre_update_reservation.lock().unwrap().as_ref().unwrap().state,
+            PreUpdateReservationState::ActiveUpdate
+        );
+    }
+
+    #[tokio::test]
+    async fn pre_update_8_toctou_between_create_and_verify_blocks_execution() {
+        let fx = TestFixture::new();
+        let mut cfg = fx.base_config();
+        let snap_dir = fx.path(".snapshots");
+        fs::create_dir_all(snap_dir.join("15/snapshot/usr/lib/modules/7.3.4-1-cachyos")).unwrap();
+        cfg.snapper_bin = fx.write_exec(
+            "bin/snapper",
+            r#"if [ "$3" = "create" ]; then
+  echo "15"
+  exit 0
+fi
+echo '{"root":[{"number":0,"type":"single","description":"current"},{"number":15,"type":"single","description":"Pre-Update","userdata":{"zethropol":"pre-update","important":"yes"}}]}'
+"#,
+        );
+
+        let mgr = RecoveryManager::new();
+        assert!(mgr
+            .create_pre_update_recovery_point_with_caller(
+                &cfg,
+                Some(":1.42"),
+                "upd-800".to_string(),
+                "TOCTOU test".to_string(),
+                None,
+            )
+            .success);
+        for _ in 0..50 {
+            if mgr.pre_update_reservation.lock().unwrap().as_ref().unwrap().state
+                == PreUpdateReservationState::VerifiedReady
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+
+        // Simulate TOCTOU change after create and before verify: btrfs subvolume ID changes (272 -> 999)
+        cfg.btrfs_bin = fx.write_exec(
+            "bin/btrfs",
+            "echo '@/.snapshots/15/snapshot'\necho '        Subvolume ID:           999'\nexit 0\n",
+        );
+        let verify_subvol_changed = mgr.verify_pre_update_snapshot_with_caller(
+            &cfg,
+            Some(":1.42"),
+            "upd-800".to_string(),
+            15,
+            false,
+        );
+        assert!(!verify_subvol_changed.success);
+        assert_eq!(verify_subvol_changed.code, "verification-failed");
+
+        // Restore btrfs subvolume ID, but break /home isolation before verify -> blocked
+        cfg.btrfs_bin = fx.write_exec(
+            "bin/btrfs",
+            "echo '@/.snapshots/15/snapshot'\necho '        Subvolume ID:           272'\nexit 0\n",
+        );
+        cfg.mountinfo_file = fx.write(
+            "mountinfo",
+            concat!(
+                "36 1 0:36 /@ / rw,noatime - btrfs /dev/nvme0n1p2 rw,subvolid=539,subvol=/@\n",
+                "38 36 259:1 / /boot rw,noatime - vfat /dev/nvme0n1p1 rw\n",
+            ),
+        );
+        let verify_home_lost = mgr.verify_pre_update_snapshot_with_caller(
+            &cfg,
+            Some(":1.42"),
+            "upd-800".to_string(),
+            15,
+            false,
+        );
+        assert!(!verify_home_lost.success);
+        assert_eq!(verify_home_lost.code, "blocked");
+    }
+
+    #[test]
+    fn post_update_5_stale_empty_dblock_and_no_side_effects_in_assessment_or_policy() {
+        let fx = TestFixture::new();
+        let mut cfg = fx.base_config();
+        let snap_dir = fx.path(".snapshots");
+        fs::create_dir_all(snap_dir.join("15/snapshot/usr/lib/modules/7.3.4-1-cachyos")).unwrap();
+        let pkcheck_marker = fx.path("pkcheck-side-effect");
+        let snapper_write_marker = fx.path("snapper-write-side-effect");
+        cfg.pkcheck_bin = fx.write_exec(
+            "bin/pkcheck",
+            &format!("touch '{}'\nexit 0\n", pkcheck_marker.display()),
+        );
+        cfg.snapper_bin = fx.write_exec(
+            "bin/snapper",
+            &format!(
+                r#"if [ "$3" = "create" ] || [ "$3" = "delete" ]; then
+  touch '{marker}'
+  exit 1
+fi
+echo '{{"root":[{{"number":0,"type":"single","description":"current"}},{{"number":15,"type":"single","description":"Pre-Update [update-op:upd-905]","userdata":{{"zethropol":"pre-update","important":"yes"}}}}]}}'
+"#,
+                marker = snapper_write_marker.display()
+            ),
+        );
+
+        // Stale/empty (0-byte) db.lck MUST NOT be auto-deleted and MUST block assessment & repair
+        let dblock = fx.write("var/lib/pacman/db.lck", "");
+        assert!(dblock.exists());
+
+        let mgr = RecoveryManager::new();
+        let assessment = mgr.assess_post_update_recovery_internal(
+            &cfg,
+            "upd-905".to_string(),
+            15,
+            "failed".to_string(),
+            false,
+        );
+        assert_eq!(assessment.assessment_status, "blocked-lock");
+        assert!(assessment.pacman_lock_present);
+        assert!(!assessment.preflight_can_proceed);
+        assert!(assessment
+            .blocked_actions
+            .contains(&"auto-delete-pacman-lock".to_string()));
+        assert!(dblock.exists(), "db.lck must never be auto-deleted");
+
+        let policy = mgr.evaluate_repair_policy_internal(
+            &cfg,
+            "guided-chroot-package-repair-plan",
+            15,
+            true,
+            true,
+        );
+        assert_eq!(policy.repair_class, RepairSafetyClass::Blocked);
+        assert!(!policy.allowed);
+        assert!(!policy.plan_ready);
+        assert!(!policy.repair_execution_enabled);
+        assert!(!policy.rollback_execution_enabled);
+
+        assert!(
+            !pkcheck_marker.exists(),
+            "read-only assessment and policy evaluation must not invoke pkcheck"
+        );
+        assert!(
+            !snapper_write_marker.exists(),
+            "read-only assessment and policy evaluation must not invoke snapper create/delete"
+        );
+    }
 }

@@ -357,6 +357,71 @@ printf 'Yeniden başlatma gerçekleştirilmedi.\n'
         QVERIFY(installer.recoveryGuidance().contains("/home"));
         QVERIFY(installer.recoveryGuidance().contains("Otomatik rollback"));
     }
+
+    void dbusUnavailablePreGateFailsClosedAndNeverRunsUpdater()
+    {
+        const QString marker = directory.filePath("updater-ran-dbus-down");
+        script("updater", QString("touch '%1'\nexit 0\n").arg(marker).toUtf8());
+
+        UpdateScanner scanner;
+        QSignalSpy scanned(&scanner, &UpdateScanner::scanFinished);
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 1, 5000);
+
+        UpdateInstaller installer(&scanner);
+        installer.m_updater = directory.filePath("updater");
+        QVERIFY(!installer.liveExecutionEnabled());
+        installer.m_recoveryGate = [](const QString &, bool) {
+            return PreUpdateGateResult{
+                false, QStringLiteral("not-available"),
+                QStringLiteral("Recovery servisi erişilemez; güncelleme engellendi."), 0};
+        };
+
+        QSignalSpy finished(&installer, &UpdateInstaller::sessionFinished);
+        installer.start();
+        QCOMPARE(finished.count(), 1);
+        QCOMPARE(installer.status(), "error");
+        QCOMPARE(installer.m_verifiedSnapshotId, 0u);
+        QVERIFY(!QFile::exists(marker));
+    }
+
+    void cancelledAndUnknownIsolatedUpdatePreserveSnapshotAndGuidance()
+    {
+        // 1. Cancelled (exit 4)
+        script("updater", "exit 4\n");
+        UpdateScanner scanner;
+        QSignalSpy scanned(&scanner, &UpdateScanner::scanFinished);
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 1, 5000);
+
+        UpdateInstaller cancelledInstaller(&scanner);
+        cancelledInstaller.m_updater = directory.filePath("updater");
+        cancelledInstaller.m_liveExecutionEnabled = true;
+
+        QString cancelledOutcome;
+        cancelledInstaller.m_recoveryGate = [](const QString &, bool) {
+            return PreUpdateGateResult{true, QStringLiteral("ok"), QStringLiteral("Verified"), 33};
+        };
+        cancelledInstaller.m_recoveryComplete = [&](const QString &, const QString &outcome) {
+            cancelledOutcome = outcome;
+        };
+
+        QSignalSpy cancelledFinished(&cancelledInstaller, &UpdateInstaller::sessionFinished);
+        cancelledInstaller.start();
+        QTRY_COMPARE_WITH_TIMEOUT(cancelledFinished.count(), 1, 5000);
+        QCOMPARE(cancelledInstaller.status(), "cancelled");
+        QCOMPARE(cancelledInstaller.m_verifiedSnapshotId, 33u);
+        QCOMPARE(cancelledOutcome, "failed");
+        QVERIFY(cancelledInstaller.recoveryGuidance().contains("#33"));
+        QVERIFY(cancelledInstaller.recoveryGuidance().contains("Otomatik rollback"));
+
+        // 2. Concurrent start() while scanner is busy is ignored
+        script("checkupdates", "sleep 1\nprintf 'pkg 1 -> 2\\n'\n");
+        scanner.scan();
+        UpdateInstaller busyCheckInstaller(&scanner);
+        busyCheckInstaller.m_updater = directory.filePath("updater");
+        QVERIFY(scanner.busy());
+        busyCheckInstaller.start();
+        QCOMPARE(busyCheckInstaller.status(), "idle");
+    }
 };
 
 QTEST_MAIN(UpdateInstallerTest)
