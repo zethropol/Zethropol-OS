@@ -13,12 +13,28 @@ use std::time::{Duration, Instant};
 use zbus::interface;
 use zbus::zvariant::{Array, OwnedValue, Str};
 
+pub const POLKIT_ACTION_MODIFY: &str = "org.zethropol.recovery.modify";
+pub const POLKIT_ACTION_ROLLBACK: &str = "org.zethropol.recovery.rollback";
+
 #[derive(Debug, Clone)]
 pub struct OpState {
     pub status: String, // "running", "ok", "failed", "cancelled"
     pub code: String,   // "running", "ok", "busy", "permission-denied", "timeout", "cancelled", "verification-failed", "failed"
     pub message: String,
     pub snapshot_id: Option<u32>,
+    pub owner_sender: String,
+}
+
+impl OpState {
+    fn new(status: &str, code: &str, message: impl Into<String>, snapshot_id: Option<u32>) -> Self {
+        Self {
+            status: status.to_string(),
+            code: code.to_string(),
+            message: message.into(),
+            snapshot_id,
+            owner_sender: String::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1211,11 +1227,34 @@ fn validate_snapshot_description(name: &str, description: &str) -> Result<String
     Ok(combined)
 }
 
+pub fn validate_dbus_sender(sender: Option<&str>) -> Result<&str, (String, String)> {
+    let raw = sender.ok_or_else(|| {
+        (
+            "invalid-caller".to_string(),
+            "D-Bus caller identity is unavailable.".to_string(),
+        )
+    })?;
+
+    if raw.is_empty()
+        || raw.trim() != raw
+        || raw.starts_with('-')
+        || raw.chars().any(|c| c.is_whitespace() || c.is_control())
+        || zbus::names::BusName::try_from(raw).is_err()
+    {
+        return Err((
+            "invalid-caller".to_string(),
+            "D-Bus caller identity is invalid.".to_string(),
+        ));
+    }
+
+    Ok(raw)
+}
+
 pub fn check_polkit_authorization(
     config: &DetectionConfig,
     sender: &str,
 ) -> Result<(), (String, String)> {
-    check_polkit_action(config, sender, "org.zethropol.recovery.modify")
+    check_polkit_action(config, sender, POLKIT_ACTION_MODIFY)
 }
 
 pub fn check_polkit_action(
@@ -1223,10 +1262,12 @@ pub fn check_polkit_action(
     sender: &str,
     action_id: &str,
 ) -> Result<(), (String, String)> {
-    if sender.trim().is_empty() {
+    let valid_sender = validate_dbus_sender(Some(sender))?;
+
+    if action_id != POLKIT_ACTION_MODIFY && action_id != POLKIT_ACTION_ROLLBACK {
         return Err((
-            "invalid-caller".to_string(),
-            "D-Bus caller identity is unavailable.".to_string(),
+            "permission-denied".to_string(),
+            "Unsupported Polkit action requested.".to_string(),
         ));
     }
 
@@ -1243,7 +1284,7 @@ pub fn check_polkit_action(
             "--action-id",
             action_id,
             "--system-bus-name",
-            sender,
+            valid_sender,
             "--allow-user-interaction",
         ],
         config.command_timeout,
@@ -1287,12 +1328,12 @@ pub fn execute_verified_snapshot_creation(
     op_id: Option<&str>,
 ) -> OpState {
     let Some(snapper_bin) = resolve_snapper_binary(&config.snapper_bin) else {
-        return OpState {
-            status: "failed".to_string(),
-            code: "not-found".to_string(),
-            message: "Snapper executable was not found.".to_string(),
-            snapshot_id: None,
-        };
+        return OpState::new(
+            "failed",
+            "not-found",
+            "Snapper executable was not found.",
+            None,
+        );
     };
 
     let desc_arg = format!("--description={}", full_description);
@@ -1317,24 +1358,24 @@ pub fn execute_verified_snapshot_creation(
     );
 
     match create_res {
-        Err(err) if err.starts_with("cancelled:") => OpState {
-            status: "cancelled".to_string(),
-            code: "cancelled".to_string(),
-            message: "Recovery point creation was cancelled.".to_string(),
-            snapshot_id: None,
-        },
-        Err(err) if err.starts_with("timeout:") => OpState {
-            status: "failed".to_string(),
-            code: "timeout".to_string(),
-            message: "Recovery point creation timed out.".to_string(),
-            snapshot_id: None,
-        },
-        Err(err) => OpState {
-            status: "failed".to_string(),
-            code: "failed".to_string(),
-            message: format!("Failed to execute Snapper: {}", err),
-            snapshot_id: None,
-        },
+        Err(err) if err.starts_with("cancelled:") => OpState::new(
+            "cancelled",
+            "cancelled",
+            "Recovery point creation was cancelled.",
+            None,
+        ),
+        Err(err) if err.starts_with("timeout:") => OpState::new(
+            "failed",
+            "timeout",
+            "Recovery point creation timed out.",
+            None,
+        ),
+        Err(err) => OpState::new(
+            "failed",
+            "failed",
+            format!("Failed to execute Snapper: {}", err),
+            None,
+        ),
         Ok((exit_code, stdout, stderr)) if exit_code != 0 => {
             let (status_kind, classified_msg) = classify_snapper_error(&stderr, &stdout, false);
             let code = status_kind.result_code().to_string();
@@ -1345,22 +1386,22 @@ pub fn execute_verified_snapshot_creation(
             } else {
                 classified_msg
             };
-            OpState {
-                status: "failed".to_string(),
-                code,
-                message: format!("Recovery point creation failed: {}", detail),
-                snapshot_id: None,
-            }
+            OpState::new(
+                "failed",
+                &code,
+                format!("Recovery point creation failed: {}", detail),
+                None,
+            )
         }
         Ok((0, stdout, _stderr)) => {
             if let (Some(set), Some(id)) = (cancel_set, op_id) {
                 if set.lock().unwrap().contains(id) {
-                    return OpState {
-                        status: "cancelled".to_string(),
-                        code: "cancelled".to_string(),
-                        message: "Recovery point creation was cancelled.".to_string(),
-                        snapshot_id: None,
-                    };
+                    return OpState::new(
+                        "cancelled",
+                        "cancelled",
+                        "Recovery point creation was cancelled.",
+                        None,
+                    );
                 }
             }
 
@@ -1373,27 +1414,26 @@ pub fn execute_verified_snapshot_creation(
                 .filter(|&id| id > 0);
 
             let Some(created_id) = parsed_id else {
-                return OpState {
-                    status: "failed".to_string(),
-                    code: "verification-failed".to_string(),
-                    message: "Snapper completed with exit code 0, but did not return a valid snapshot ID."
-                        .to_string(),
-                    snapshot_id: None,
-                };
+                return OpState::new(
+                    "failed",
+                    "verification-failed",
+                    "Snapper completed with exit code 0, but did not return a valid snapshot ID.",
+                    None,
+                );
             };
 
             // Verify that the created snapshot actually exists in the current Snapper snapshot list
             let post_report = detect_recovery_state(config);
             if post_report.status != DetectionStatus::InstalledAndConfigured {
-                return OpState {
-                    status: "failed".to_string(),
-                    code: "verification-failed".to_string(),
-                    message: format!(
+                return OpState::new(
+                    "failed",
+                    "verification-failed",
+                    format!(
                         "Snapshot #{} could not be verified because post-creation snapshot list failed: {}",
                         created_id, post_report.status_message
                     ),
-                    snapshot_id: None,
-                };
+                    None,
+                );
             }
 
             let found_in_list = post_report
@@ -1402,23 +1442,23 @@ pub fn execute_verified_snapshot_creation(
                 .any(|s| s.id == created_id as i32 && !s.is_current);
 
             if !found_in_list {
-                return OpState {
-                    status: "failed".to_string(),
-                    code: "verification-failed".to_string(),
-                    message: format!(
+                return OpState::new(
+                    "failed",
+                    "verification-failed",
+                    format!(
                         "Snapshot #{} was reported by Snapper but could not be verified in the snapshot list.",
                         created_id
                     ),
-                    snapshot_id: None,
-                };
+                    None,
+                );
             }
 
-            OpState {
-                status: "ok".to_string(),
-                code: "ok".to_string(),
-                message: format!("Recovery point #{} created successfully.", created_id),
-                snapshot_id: Some(created_id),
-            }
+            OpState::new(
+                "ok",
+                "ok",
+                format!("Recovery point #{} created successfully.", created_id),
+                Some(created_id),
+            )
         }
         Ok(_) => unreachable!(),
     }
@@ -1926,7 +1966,7 @@ pub fn run_rollback_preflight(
 
     // 10. Authorization and explicit confirmation requirements
     let polkit_defined = fs::read_to_string(&config.polkit_policy_file)
-        .map(|s| s.contains("org.zethropol.recovery.rollback"))
+        .map(|s| s.contains(POLKIT_ACTION_ROLLBACK))
         .unwrap_or(false)
         || resolve_snapper_binary(&config.pkcheck_bin).is_some();
     let c10 = if polkit_defined {
@@ -2003,7 +2043,7 @@ pub fn run_rollback_preflight(
         rollback_execution_enabled: false,
         requires_confirmation: true,
         requires_authorization: true,
-        polkit_action: "org.zethropol.recovery.rollback".to_string(),
+        polkit_action: POLKIT_ACTION_ROLLBACK.to_string(),
         snapshot_config: initial_report.config_name,
         filesystem: initial_report.filesystem,
         root_subvolume: initial_report.root_subvolume,
@@ -2302,6 +2342,341 @@ impl RecoveryManager {
             cancelled_operations: Arc::new(Mutex::new(HashSet::new())),
         }
     }
+
+    pub(crate) fn cancel_operation_with_caller(
+        &self,
+        caller: Option<&str>,
+        operation_id: String,
+    ) -> OperationResult {
+        let trimmed = operation_id.trim();
+        if trimmed.is_empty() {
+            return OperationResult {
+                success: false,
+                code: "invalid-argument".to_string(),
+                message: "Operation ID is required.".to_string(),
+                operation_id: String::new(),
+                data: HashMap::new(),
+            };
+        }
+
+        let valid_caller = match validate_dbus_sender(caller) {
+            Ok(sender) => sender,
+            Err((code, message)) => {
+                return OperationResult {
+                    success: false,
+                    code,
+                    message,
+                    operation_id: trimmed.to_string(),
+                    data: HashMap::new(),
+                };
+            }
+        };
+
+        let cancelled_msg = {
+            let mut ops = self.operations.lock().unwrap();
+            let Some(state) = ops.get_mut(trimmed) else {
+                return OperationResult {
+                    success: false,
+                    code: "not-found".to_string(),
+                    message: "Operation ID does not exist.".to_string(),
+                    operation_id: trimmed.to_string(),
+                    data: HashMap::new(),
+                };
+            };
+
+            if state.owner_sender != valid_caller {
+                return OperationResult {
+                    success: false,
+                    code: "permission-denied".to_string(),
+                    message: "Only the operation owner may cancel this recovery operation."
+                        .to_string(),
+                    operation_id: trimmed.to_string(),
+                    data: HashMap::new(),
+                };
+            }
+
+            if state.status != "running" {
+                return OperationResult {
+                    success: false,
+                    code: "invalid-state".to_string(),
+                    message: format!(
+                        "Operation cannot be cancelled in state '{}': {}",
+                        state.status, state.message
+                    ),
+                    operation_id: trimmed.to_string(),
+                    data: HashMap::new(),
+                };
+            }
+
+            state.status = "cancelled".to_string();
+            state.code = "cancelled".to_string();
+            state.message = "Recovery point creation was cancelled.".to_string();
+            state.message.clone()
+        };
+
+        self.cancelled_operations
+            .lock()
+            .unwrap()
+            .insert(trimmed.to_string());
+
+        {
+            let mut active = self.active_operation.lock().unwrap();
+            if active.as_deref() == Some(trimmed) {
+                *active = None;
+            }
+        }
+
+        OperationResult {
+            success: true,
+            code: "cancelled".to_string(),
+            message: cancelled_msg,
+            operation_id: trimmed.to_string(),
+            data: HashMap::new(),
+        }
+    }
+
+    pub(crate) fn create_recovery_point_with_caller(
+        &self,
+        cfg: &DetectionConfig,
+        caller: Option<&str>,
+        name: String,
+        description: String,
+        emitter: Option<zbus::object_server::SignalEmitter<'static>>,
+    ) -> OperationResult {
+        let full_description = match validate_snapshot_description(&name, &description) {
+            Ok(desc) => desc,
+            Err(msg) => {
+                return OperationResult {
+                    success: false,
+                    code: "invalid-argument".to_string(),
+                    message: msg,
+                    operation_id: String::new(),
+                    data: HashMap::new(),
+                };
+            }
+        };
+
+        {
+            let active = self.active_operation.lock().unwrap();
+            if active.is_some() {
+                return OperationResult {
+                    success: false,
+                    code: "busy".to_string(),
+                    message: "Another recovery operation is already in progress.".to_string(),
+                    operation_id: String::new(),
+                    data: HashMap::new(),
+                };
+            }
+        }
+
+        let sender_name = match validate_dbus_sender(caller) {
+            Ok(sender) => sender.to_string(),
+            Err((code, message)) => {
+                return OperationResult {
+                    success: false,
+                    code,
+                    message,
+                    operation_id: String::new(),
+                    data: HashMap::new(),
+                };
+            }
+        };
+
+        // Enforce Polkit authorization boundary before any state-modifying operation
+        if let Err((code, msg)) = check_polkit_authorization(cfg, &sender_name) {
+            return OperationResult {
+                success: false,
+                code,
+                message: msg,
+                operation_id: String::new(),
+                data: HashMap::new(),
+            };
+        }
+
+        // Verify current Snapper/Btrfs readiness and allowed root configuration
+        let report = detect_recovery_state(cfg);
+        if report.status != DetectionStatus::InstalledAndConfigured
+            || !report.filesystem.eq_ignore_ascii_case("Btrfs")
+            || report.config_name != "root"
+        {
+            return OperationResult {
+                success: false,
+                code: report.status.result_code().to_string(),
+                message: report.status_message,
+                operation_id: String::new(),
+                data: HashMap::new(),
+            };
+        }
+
+        let operation_id = uuid::Uuid::new_v4().to_string();
+
+        {
+            let mut active = self.active_operation.lock().unwrap();
+            if active.is_some() {
+                return OperationResult {
+                    success: false,
+                    code: "busy".to_string(),
+                    message: "Another recovery operation is already in progress.".to_string(),
+                    operation_id: String::new(),
+                    data: HashMap::new(),
+                };
+            }
+            *active = Some(operation_id.clone());
+        }
+
+        {
+            let mut ops = self.operations.lock().unwrap();
+            ops.insert(
+                operation_id.clone(),
+                OpState {
+                    status: "running".to_string(),
+                    code: "running".to_string(),
+                    message: format!("Creating recovery point: {}", full_description),
+                    snapshot_id: None,
+                    owner_sender: sender_name,
+                },
+            );
+        }
+
+        let config_name = report.config_name.clone();
+        let desc_clone = full_description.clone();
+        let ops_clone = Arc::clone(&self.operations);
+        let active_clone = Arc::clone(&self.active_operation);
+        let cancel_clone = Arc::clone(&self.cancelled_operations);
+        let op_id_clone = operation_id.clone();
+        let cfg_owned = cfg.clone();
+
+        tokio::spawn(async move {
+            let cancel_for_blocking = Arc::clone(&cancel_clone);
+            let op_for_blocking = op_id_clone.clone();
+            let cfg_for_blocking = cfg_owned.clone();
+            let config_name_for_blocking = config_name.clone();
+            let desc_for_blocking = desc_clone.clone();
+
+            let final_state = tokio::task::spawn_blocking(move || {
+                execute_verified_snapshot_creation(
+                    &cfg_for_blocking,
+                    &config_name_for_blocking,
+                    &desc_for_blocking,
+                    Some(&cancel_for_blocking),
+                    Some(&op_for_blocking),
+                )
+            })
+            .await
+            .unwrap_or_else(|e| {
+                OpState::new(
+                    "failed",
+                    "internal-error",
+                    format!("Recovery worker task failed: {}", e),
+                    None,
+                )
+            });
+
+            {
+                let mut ops = ops_clone.lock().unwrap();
+                if let Some(entry) = ops.get_mut(&op_id_clone) {
+                    if entry.status != "cancelled" {
+                        let owner = entry.owner_sender.clone();
+                        *entry = final_state.clone();
+                        entry.owner_sender = owner;
+                    }
+                }
+            }
+
+            {
+                let mut active = active_clone.lock().unwrap();
+                if active.as_deref() == Some(op_id_clone.as_str()) {
+                    *active = None;
+                }
+            }
+
+            if final_state.status == "ok" {
+                if let Some(emitter_owned) = emitter {
+                    let updated_report = detect_recovery_state(&cfg_owned);
+                    let points: Vec<RecoveryPoint> = updated_report
+                        .snapshots
+                        .iter()
+                        .filter(|s| s.id > 0)
+                        .map(|s| RecoveryPoint {
+                            id: s.id as u32,
+                            name: format!("Snapshot-{}", s.id),
+                            created_at: s.date.clone(),
+                            description: s.description.clone(),
+                            is_current: s.is_current,
+                        })
+                        .collect();
+                    let _ = RecoveryManager::recovery_state_changed(&emitter_owned, points).await;
+                    let _ = RecoveryManager::state_changed(
+                        &emitter_owned,
+                        encode_detection_envelope(&updated_report),
+                    )
+                    .await;
+                }
+            }
+        });
+
+        OperationResult {
+            success: true,
+            code: "ok".to_string(),
+            message: format!("Recovery point creation initiated for: {}", full_description),
+            operation_id,
+            data: HashMap::new(),
+        }
+    }
+
+    pub(crate) fn rollback_to_point_with_caller(
+        &self,
+        cfg: &DetectionConfig,
+        caller: Option<&str>,
+        point_id: u32,
+    ) -> OperationResult {
+        let sender_name = match validate_dbus_sender(caller) {
+            Ok(sender) => sender,
+            Err((code, message)) => {
+                return OperationResult {
+                    success: false,
+                    code,
+                    message,
+                    operation_id: String::new(),
+                    data: HashMap::new(),
+                };
+            }
+        };
+
+        if let Err((code, msg)) = check_polkit_action(cfg, sender_name, POLKIT_ACTION_ROLLBACK) {
+            return OperationResult {
+                success: false,
+                code,
+                message: msg,
+                operation_id: String::new(),
+                data: HashMap::new(),
+            };
+        }
+
+        let active_running = self.active_operation.lock().unwrap().is_some();
+        let preflight = run_rollback_preflight(cfg, point_id, active_running);
+        if !preflight.can_proceed {
+            return OperationResult {
+                success: false,
+                code: "failed".to_string(),
+                message: preflight.summary,
+                operation_id: String::new(),
+                data: HashMap::new(),
+            };
+        }
+
+        // Rollback execution is intentionally disabled in stage 03.2.05 (preflight verification only).
+        OperationResult {
+            success: false,
+            code: "unsupported".to_string(),
+            message: format!(
+                "Preflight passed for snapshot #{}, but rollback execution is disabled in this verification stage.",
+                point_id
+            ),
+            operation_id: String::new(),
+            data: HashMap::new(),
+        }
+    }
 }
 
 #[interface(name = "org.zethropol.Recovery.v1")]
@@ -2380,54 +2755,11 @@ impl RecoveryManager {
 
     async fn cancel_operation(
         &self,
+        #[zbus(header)] header: zbus::message::Header<'_>,
         operation_id: String,
     ) -> Result<OperationResult, zbus::fdo::Error> {
-        let trimmed = operation_id.trim();
-        if trimmed.is_empty() {
-            return Ok(OperationResult {
-                success: false,
-                code: "invalid-argument".to_string(),
-                message: "Operation ID is required.".to_string(),
-                operation_id: String::new(),
-                data: HashMap::new(),
-            });
-        }
-
-        self.cancelled_operations
-            .lock()
-            .unwrap()
-            .insert(trimmed.to_string());
-
-        {
-            let mut active = self.active_operation.lock().unwrap();
-            if active.as_deref() == Some(trimmed) {
-                *active = None;
-            }
-        }
-
-        let mut ops = self.operations.lock().unwrap();
-        if let Some(state) = ops.get_mut(trimmed) {
-            if state.status == "running" {
-                state.status = "cancelled".to_string();
-                state.code = "cancelled".to_string();
-                state.message = "Recovery point creation was cancelled.".to_string();
-            }
-            Ok(OperationResult {
-                success: true,
-                code: "cancelled".to_string(),
-                message: state.message.clone(),
-                operation_id: trimmed.to_string(),
-                data: HashMap::new(),
-            })
-        } else {
-            Ok(OperationResult {
-                success: false,
-                code: "not-found".to_string(),
-                message: "Operation ID does not exist.".to_string(),
-                operation_id: trimmed.to_string(),
-                data: HashMap::new(),
-            })
-        }
+        let caller = header.sender().map(|s| s.to_string());
+        Ok(self.cancel_operation_with_caller(caller.as_deref(), operation_id))
     }
 
     async fn create_recovery_point(
@@ -2437,180 +2769,15 @@ impl RecoveryManager {
         name: String,
         description: String,
     ) -> Result<OperationResult, zbus::fdo::Error> {
-        let full_description = match validate_snapshot_description(&name, &description) {
-            Ok(desc) => desc,
-            Err(msg) => {
-                return Ok(OperationResult {
-                    success: false,
-                    code: "invalid-argument".to_string(),
-                    message: msg,
-                    operation_id: String::new(),
-                    data: HashMap::new(),
-                });
-            }
-        };
-
-        {
-            let active = self.active_operation.lock().unwrap();
-            if active.is_some() {
-                return Ok(OperationResult {
-                    success: false,
-                    code: "busy".to_string(),
-                    message: "Another recovery operation is already in progress.".to_string(),
-                    operation_id: String::new(),
-                    data: HashMap::new(),
-                });
-            }
-        }
-
-        let sender_name = match header.sender() {
-            Some(sender) => sender.to_string(),
-            None => {
-                return Ok(OperationResult {
-                    success: false,
-                    code: "invalid-caller".to_string(),
-                    message: "D-Bus caller identity is unavailable.".to_string(),
-                    operation_id: String::new(),
-                    data: HashMap::new(),
-                });
-            }
-        };
-
         let cfg = DetectionConfig::from_env();
-
-        // Enforce Polkit authorization boundary before any state-modifying operation
-        if let Err((code, msg)) = check_polkit_authorization(&cfg, &sender_name) {
-            return Ok(OperationResult {
-                success: false,
-                code,
-                message: msg,
-                operation_id: String::new(),
-                data: HashMap::new(),
-            });
-        }
-
-        // Verify current Snapper/Btrfs readiness and allowed root configuration
-        let report = detect_recovery_state(&cfg);
-        if report.status != DetectionStatus::InstalledAndConfigured
-            || !report.filesystem.eq_ignore_ascii_case("Btrfs")
-            || report.config_name != "root"
-        {
-            return Ok(OperationResult {
-                success: false,
-                code: report.status.result_code().to_string(),
-                message: report.status_message,
-                operation_id: String::new(),
-                data: HashMap::new(),
-            });
-        }
-
-        let operation_id = uuid::Uuid::new_v4().to_string();
-
-        {
-            let mut active = self.active_operation.lock().unwrap();
-            if active.is_some() {
-                return Ok(OperationResult {
-                    success: false,
-                    code: "busy".to_string(),
-                    message: "Another recovery operation is already in progress.".to_string(),
-                    operation_id: String::new(),
-                    data: HashMap::new(),
-                });
-            }
-            *active = Some(operation_id.clone());
-        }
-
-        {
-            let mut ops = self.operations.lock().unwrap();
-            ops.insert(
-                operation_id.clone(),
-                OpState {
-                    status: "running".to_string(),
-                    code: "running".to_string(),
-                    message: format!("Creating recovery point: {}", full_description),
-                    snapshot_id: None,
-                },
-            );
-        }
-
-        let config_name = report.config_name.clone();
-        let desc_clone = full_description.clone();
-        let ops_clone = Arc::clone(&self.operations);
-        let active_clone = Arc::clone(&self.active_operation);
-        let cancel_clone = Arc::clone(&self.cancelled_operations);
-        let op_id_clone = operation_id.clone();
-        let emitter_owned = emitter.to_owned();
-
-        tokio::spawn(async move {
-            let cancel_for_blocking = Arc::clone(&cancel_clone);
-            let op_for_blocking = op_id_clone.clone();
-            let cfg_for_blocking = cfg.clone();
-            let config_name_for_blocking = config_name.clone();
-            let desc_for_blocking = desc_clone.clone();
-
-            let final_state = tokio::task::spawn_blocking(move || {
-                execute_verified_snapshot_creation(
-                    &cfg_for_blocking,
-                    &config_name_for_blocking,
-                    &desc_for_blocking,
-                    Some(&cancel_for_blocking),
-                    Some(&op_for_blocking),
-                )
-            })
-            .await
-            .unwrap_or_else(|e| OpState {
-                status: "failed".to_string(),
-                code: "internal-error".to_string(),
-                message: format!("Recovery worker task failed: {}", e),
-                snapshot_id: None,
-            });
-
-            {
-                let mut ops = ops_clone.lock().unwrap();
-                if let Some(entry) = ops.get_mut(&op_id_clone) {
-                    if entry.status != "cancelled" {
-                        *entry = final_state.clone();
-                    }
-                }
-            }
-
-            {
-                let mut active = active_clone.lock().unwrap();
-                if active.as_deref() == Some(op_id_clone.as_str()) {
-                    *active = None;
-                }
-            }
-
-            if final_state.status == "ok" {
-                let updated_report = detect_recovery_state(&cfg);
-                let points: Vec<RecoveryPoint> = updated_report
-                    .snapshots
-                    .iter()
-                    .filter(|s| s.id > 0)
-                    .map(|s| RecoveryPoint {
-                        id: s.id as u32,
-                        name: format!("Snapshot-{}", s.id),
-                        created_at: s.date.clone(),
-                        description: s.description.clone(),
-                        is_current: s.is_current,
-                    })
-                    .collect();
-                let _ = RecoveryManager::recovery_state_changed(&emitter_owned, points).await;
-                let _ = RecoveryManager::state_changed(
-                    &emitter_owned,
-                    encode_detection_envelope(&updated_report),
-                )
-                .await;
-            }
-        });
-
-        Ok(OperationResult {
-            success: true,
-            code: "ok".to_string(),
-            message: format!("Recovery point creation initiated for: {}", full_description),
-            operation_id,
-            data: HashMap::new(),
-        })
+        let caller = header.sender().map(|s| s.to_string());
+        Ok(self.create_recovery_point_with_caller(
+            &cfg,
+            caller.as_deref(),
+            name,
+            description,
+            Some(emitter.to_owned()),
+        ))
     }
 
     async fn preflight_rollback(
@@ -2633,55 +2800,9 @@ impl RecoveryManager {
         #[zbus(header)] header: zbus::message::Header<'_>,
         point_id: u32,
     ) -> Result<OperationResult, zbus::fdo::Error> {
-        let sender_name = match header.sender() {
-            Some(sender) => sender.to_string(),
-            None => {
-                return Ok(OperationResult {
-                    success: false,
-                    code: "invalid-caller".to_string(),
-                    message: "D-Bus caller identity is unavailable.".to_string(),
-                    operation_id: String::new(),
-                    data: HashMap::new(),
-                });
-            }
-        };
-
         let cfg = DetectionConfig::from_env();
-        if let Err((code, msg)) =
-            check_polkit_action(&cfg, &sender_name, "org.zethropol.recovery.rollback")
-        {
-            return Ok(OperationResult {
-                success: false,
-                code,
-                message: msg,
-                operation_id: String::new(),
-                data: HashMap::new(),
-            });
-        }
-
-        let active_running = self.active_operation.lock().unwrap().is_some();
-        let preflight = run_rollback_preflight(&cfg, point_id, active_running);
-        if !preflight.can_proceed {
-            return Ok(OperationResult {
-                success: false,
-                code: "failed".to_string(),
-                message: preflight.summary,
-                operation_id: String::new(),
-                data: HashMap::new(),
-            });
-        }
-
-        // Rollback execution is intentionally disabled in stage 03.2.04 (preflight verification only).
-        Ok(OperationResult {
-            success: false,
-            code: "unsupported".to_string(),
-            message: format!(
-                "Preflight passed for snapshot #{}, but rollback execution is disabled in this verification stage.",
-                point_id
-            ),
-            operation_id: String::new(),
-            data: HashMap::new(),
-        })
+        let caller = header.sender().map(|s| s.to_string());
+        Ok(self.rollback_to_point_with_caller(&cfg, caller.as_deref(), point_id))
     }
 
     #[zbus(signal)]
@@ -3056,5 +3177,210 @@ echo '{"root":[{"number":0,"type":"single","description":"current"}]}'
         let blk = run_rollback_preflight(&cfg, 0, false);
         assert_eq!(blk.overall_status, "blocked");
         assert!(!blk.can_proceed);
+    }
+
+    #[test]
+    fn polkit_caller_identity_validation_rejects_malformed_senders() {
+        let fx = TestFixture::new();
+        let mut cfg = fx.base_config();
+        let marker = fx.path("pkcheck-called");
+        cfg.pkcheck_bin = fx.write_exec(
+            "bin/pkcheck",
+            &format!("touch '{}'\nexit 0\n", marker.display()),
+        );
+
+        for invalid in [
+            "",
+            "   ",
+            " :1.42",
+            ":1.42\n",
+            "--system-bus-name",
+            "invalid bus name",
+            ":1",
+        ] {
+            let err = check_polkit_action(&cfg, invalid, POLKIT_ACTION_MODIFY).unwrap_err();
+            assert_eq!(err.0, "invalid-caller", "sender '{}' must be rejected", invalid);
+        }
+        assert!(
+            !marker.exists(),
+            "pkcheck must never be invoked for invalid caller identities"
+        );
+
+        let bad_action = check_polkit_action(&cfg, ":1.42", "org.zethropol.recovery.unknown")
+            .unwrap_err();
+        assert_eq!(bad_action.0, "permission-denied");
+        assert!(!marker.exists());
+    }
+
+    #[test]
+    fn polkit_failure_modes_timeout_and_missing_helper_fail_safely() {
+        let fx = TestFixture::new();
+        let mut cfg = fx.base_config();
+
+        // Missing pkcheck binary -> permission-denied
+        cfg.pkcheck_bin = fx.path("bin/missing-pkcheck");
+        let missing_err = check_polkit_action(&cfg, ":1.42", POLKIT_ACTION_ROLLBACK).unwrap_err();
+        assert_eq!(missing_err.0, "permission-denied");
+
+        // Timeout -> timeout
+        cfg.command_timeout = Duration::from_millis(80);
+        cfg.pkcheck_bin = fx.write_exec("bin/pkcheck", "sleep 2\nexit 0\n");
+        let timeout_err = check_polkit_action(&cfg, ":1.42", POLKIT_ACTION_MODIFY).unwrap_err();
+        assert_eq!(timeout_err.0, "timeout");
+    }
+
+    #[tokio::test]
+    async fn rollback_and_snapshot_permissions_are_strictly_separated() {
+        let fx = TestFixture::new();
+        let mut cfg = fx.base_config();
+        let mgr = RecoveryManager::new();
+
+        // 1. Caller has modify permission ONLY -> create succeeds, rollback is denied
+        cfg.pkcheck_bin = fx.write_exec(
+            "bin/pkcheck",
+            r#"if [ "$2" = "org.zethropol.recovery.modify" ]; then
+  exit 0
+fi
+echo "Not authorized for $2" >&2
+exit 1
+"#,
+        );
+
+        let rb_denied = mgr.rollback_to_point_with_caller(&cfg, Some(":1.42"), 12);
+        assert!(!rb_denied.success);
+        assert_eq!(rb_denied.code, "permission-denied");
+
+        let create_ok = mgr.create_recovery_point_with_caller(
+            &cfg,
+            Some(":1.42"),
+            "SecPoint".to_string(),
+            "Authorized modify".to_string(),
+            None,
+        );
+        assert!(create_ok.success);
+        assert_eq!(create_ok.code, "ok");
+
+        // Wait for background worker to finish so active_operation clears
+        for _ in 0..50 {
+            if mgr.active_operation.lock().unwrap().is_none() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+
+        // 2. Caller has rollback permission ONLY -> create is denied, rollback passes Polkit+preflight but execution stays disabled
+        cfg.pkcheck_bin = fx.write_exec(
+            "bin/pkcheck",
+            r#"if [ "$2" = "org.zethropol.recovery.rollback" ]; then
+  exit 0
+fi
+echo "Not authorized for $2" >&2
+exit 1
+"#,
+        );
+
+        let create_denied = mgr.create_recovery_point_with_caller(
+            &cfg,
+            Some(":1.42"),
+            "DeniedPoint".to_string(),
+            "Should fail modify".to_string(),
+            None,
+        );
+        assert!(!create_denied.success);
+        assert_eq!(create_denied.code, "permission-denied");
+
+        let rb_unsupported = mgr.rollback_to_point_with_caller(&cfg, Some(":1.42"), 12);
+        assert!(!rb_unsupported.success);
+        assert_eq!(rb_unsupported.code, "unsupported");
+        assert!(rb_unsupported.message.contains("disabled"));
+    }
+
+    #[tokio::test]
+    async fn cancel_operation_enforces_caller_identity_and_ownership() {
+        let fx = TestFixture::new();
+        let mut cfg = fx.base_config();
+        // Keep snapper running long enough for ownership & cancel tests
+        cfg.snapper_bin = fx.write_exec(
+            "bin/snapper",
+            r#"if [ "$3" = "create" ]; then
+  sleep 1
+  echo "15"
+  exit 0
+fi
+echo '{"root":[{"number":0,"type":"single","description":"current"},{"number":12,"type":"single","date":"2026-11-10 12:00:00","user":"root","cleanup":"number","description":"Pre-update","userdata":{"zethropol":"manual"}}]}'
+"#,
+        );
+
+        let mgr = RecoveryManager::new();
+        let started = mgr.create_recovery_point_with_caller(
+            &cfg,
+            Some(":1.42"),
+            "CancelTest".to_string(),
+            "Ownership check".to_string(),
+            None,
+        );
+        assert!(started.success);
+        let op_id = started.operation_id.clone();
+
+        // Missing or malformed caller -> invalid-caller, operation remains running
+        let no_caller = mgr.cancel_operation_with_caller(None, op_id.clone());
+        assert!(!no_caller.success);
+        assert_eq!(no_caller.code, "invalid-caller");
+
+        // Nonexistent operation -> not-found, does not pollute cancelled_operations
+        let missing = mgr.cancel_operation_with_caller(Some(":1.42"), "nonexistent-op".to_string());
+        assert!(!missing.success);
+        assert_eq!(missing.code, "not-found");
+        assert!(
+            !mgr.cancelled_operations
+                .lock()
+                .unwrap()
+                .contains("nonexistent-op")
+        );
+
+        // Different caller (:1.99) attempting to cancel :1.42's operation -> permission-denied
+        let hijack = mgr.cancel_operation_with_caller(Some(":1.99"), op_id.clone());
+        assert!(!hijack.success);
+        assert_eq!(hijack.code, "permission-denied");
+        assert_eq!(
+            mgr.active_operation.lock().unwrap().as_deref(),
+            Some(op_id.as_str())
+        );
+        assert_eq!(
+            mgr.operations.lock().unwrap().get(&op_id).unwrap().status,
+            "running"
+        );
+
+        // Original owner (:1.42) cancels -> succeeds
+        let cancelled = mgr.cancel_operation_with_caller(Some(":1.42"), op_id.clone());
+        assert!(cancelled.success);
+        assert_eq!(cancelled.code, "cancelled");
+        assert!(mgr.active_operation.lock().unwrap().is_none());
+
+        // Re-cancelling already cancelled operation -> invalid-state
+        let again = mgr.cancel_operation_with_caller(Some(":1.42"), op_id);
+        assert!(!again.success);
+        assert_eq!(again.code, "invalid-state");
+    }
+
+    #[test]
+    fn readonly_operations_do_not_invoke_pkcheck() {
+        let fx = TestFixture::new();
+        let mut cfg = fx.base_config();
+        let marker = fx.path("readonly-pkcheck-called");
+        cfg.pkcheck_bin = fx.write_exec(
+            "bin/pkcheck",
+            &format!("touch '{}'\nexit 1\n", marker.display()),
+        );
+
+        let report = detect_recovery_state(&cfg);
+        assert_eq!(report.status, DetectionStatus::InstalledAndConfigured);
+        let preflight = run_rollback_preflight(&cfg, 12, false);
+        assert!(preflight.can_proceed);
+        assert!(!preflight.rollback_execution_enabled);
+        assert!(
+            !marker.exists(),
+            "read-only detection and preflight must not invoke pkcheck"
+        );
     }
 }

@@ -1,0 +1,16 @@
+[Unit]
+Description=Zethropol Recovery D-Bus Service
+After=dbus.socket
+BindsTo=dbus.socket
+
+[Service]
+Type=dbus
+BusName=org.zethropol.Recovery
+ExecStart=/usr/lib/zethropol/zethropol-recovery
+Restart=on-failure
+RestartSec=2s
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
