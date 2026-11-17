@@ -4652,6 +4652,461 @@ impl RecoveryManager {
             }
         }
     }
+
+    pub(crate) fn evaluate_repair_policy_internal(
+        &self,
+        cfg: &DetectionConfig,
+        action_kind: &str,
+        point_id: u32,
+        client_claimed_external_backup: bool,
+        explicit_user_confirmation: bool,
+    ) -> RepairPolicyEvaluation {
+        let trimmed_action = action_kind.trim();
+        let report = detect_recovery_state(cfg);
+        let (home_status, home_reason, _) =
+            verify_home_subvolume_isolation(cfg, &report.root_subvolume);
+        let home_data_preserved = home_status == "pass";
+        let (boot_status, boot_reason, _) = verify_boot_mount(cfg);
+        let pacman_lock_present = cfg.pacman_lock_file.exists();
+        let active_running = self.active_operation.lock().unwrap().is_some();
+        let uncertain_reservation = self
+            .pre_update_reservation
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|r| {
+                matches!(
+                    r.state,
+                    PreUpdateReservationState::Creating
+                        | PreUpdateReservationState::ActiveUpdate
+                        | PreUpdateReservationState::AbortedOrOrphaned
+                )
+            })
+            .unwrap_or(false);
+
+        let app_data_compatibility_risk = true;
+        let app_data_warning = "Kullanıcı verileri (/home) geri sarılmaz; ancak sistem paketi değişikliği ~/.config ve ~/.local/share altındaki uygulama verilerinde sürüm uyumsuzluğu riski oluşturabilir.".to_string();
+
+        // 1. Read-only safe diagnostic actions
+        if matches!(
+            trimmed_action,
+            "diagnose-recovery-state"
+                | "inspect-subvolumes"
+                | "inspect-boot-and-limine"
+                | "assess-post-update"
+                | "verify-package-integrity-readonly"
+        ) {
+            return RepairPolicyEvaluation {
+                action_kind: trimmed_action.to_string(),
+                repair_class: RepairSafetyClass::ReadOnlySafe,
+                evaluation_status: "pass".to_string(),
+                allowed: true,
+                plan_ready: true,
+                requires_polkit: false,
+                required_polkit_action: String::new(),
+                polkit_authorized: false,
+                external_backup_required: false,
+                external_backup_verified_by_server: false,
+                client_claimed_external_backup,
+                explicit_user_confirmation,
+                snapshot_is_not_backup: true,
+                home_data_preserved,
+                app_data_compatibility_risk,
+                app_data_warning,
+                repair_execution_enabled: false,
+                rollback_execution_enabled: false,
+                summary: format!(
+                    "Salt-okunur teşhis eylemi '{}' güvenlidir; disk, paket veritabanı veya boot yapılandırmasına yazmaz.",
+                    trimmed_action
+                ),
+            };
+        }
+
+        // 2. Conditionally authorized repair plan actions (theoretical class only; execution disabled)
+        if matches!(
+            trimmed_action,
+            "guided-snapshot-rollback-plan"
+                | "guided-chroot-package-repair-plan"
+                | "reinstall-kernel-initramfs-plan"
+        ) {
+            let required_polkit_action = if trimmed_action == "guided-snapshot-rollback-plan" {
+                POLKIT_ACTION_ROLLBACK.to_string()
+            } else {
+                POLKIT_ACTION_MODIFY.to_string()
+            };
+
+            if pacman_lock_present {
+                return RepairPolicyEvaluation {
+                    action_kind: trimmed_action.to_string(),
+                    repair_class: RepairSafetyClass::Blocked,
+                    evaluation_status: "blocked".to_string(),
+                    allowed: false,
+                    plan_ready: false,
+                    requires_polkit: true,
+                    required_polkit_action,
+                    polkit_authorized: false,
+                    external_backup_required: true,
+                    external_backup_verified_by_server: false,
+                    client_claimed_external_backup,
+                    explicit_user_confirmation,
+                    snapshot_is_not_backup: true,
+                    home_data_preserved,
+                    app_data_compatibility_risk,
+                    app_data_warning,
+                    repair_execution_enabled: false,
+                    rollback_execution_enabled: false,
+                    summary: "Aktif veya belirsiz pacman kilidi (/var/lib/pacman/db.lck) mevcut; kilit silinmez ve onarım engellenir.".to_string(),
+                };
+            }
+
+            if active_running || uncertain_reservation {
+                return RepairPolicyEvaluation {
+                    action_kind: trimmed_action.to_string(),
+                    repair_class: RepairSafetyClass::Blocked,
+                    evaluation_status: "blocked".to_string(),
+                    allowed: false,
+                    plan_ready: false,
+                    requires_polkit: true,
+                    required_polkit_action,
+                    polkit_authorized: false,
+                    external_backup_required: true,
+                    external_backup_verified_by_server: false,
+                    client_claimed_external_backup,
+                    explicit_user_confirmation,
+                    snapshot_is_not_backup: true,
+                    home_data_preserved,
+                    app_data_compatibility_risk,
+                    app_data_warning,
+                    repair_execution_enabled: false,
+                    rollback_execution_enabled: false,
+                    summary: "Başka bir kurtarma işlemi sürüyor veya belirsiz/yetim güncelleme oturumu mevcut; onarım engellendi.".to_string(),
+                };
+            }
+
+            if !home_data_preserved {
+                return RepairPolicyEvaluation {
+                    action_kind: trimmed_action.to_string(),
+                    repair_class: RepairSafetyClass::Blocked,
+                    evaluation_status: if home_status == "unknown" {
+                        "unknown".to_string()
+                    } else {
+                        "blocked".to_string()
+                    },
+                    allowed: false,
+                    plan_ready: false,
+                    requires_polkit: true,
+                    required_polkit_action,
+                    polkit_authorized: false,
+                    external_backup_required: true,
+                    external_backup_verified_by_server: false,
+                    client_claimed_external_backup,
+                    explicit_user_confirmation,
+                    snapshot_is_not_backup: true,
+                    home_data_preserved: false,
+                    app_data_compatibility_risk,
+                    app_data_warning,
+                    repair_execution_enabled: false,
+                    rollback_execution_enabled: false,
+                    summary: format!(
+                        "/home izolasyonu doğrulanamadı ({}); veri kaybı riski nedeniyle onarım engellendi.",
+                        home_reason
+                    ),
+                };
+            }
+
+            if boot_status != "pass" {
+                return RepairPolicyEvaluation {
+                    action_kind: trimmed_action.to_string(),
+                    repair_class: RepairSafetyClass::Blocked,
+                    evaluation_status: if boot_status == "unknown" {
+                        "unknown".to_string()
+                    } else {
+                        "blocked".to_string()
+                    },
+                    allowed: false,
+                    plan_ready: false,
+                    requires_polkit: true,
+                    required_polkit_action,
+                    polkit_authorized: false,
+                    external_backup_required: true,
+                    external_backup_verified_by_server: false,
+                    client_claimed_external_backup,
+                    explicit_user_confirmation,
+                    snapshot_is_not_backup: true,
+                    home_data_preserved,
+                    app_data_compatibility_risk,
+                    app_data_warning,
+                    repair_execution_enabled: false,
+                    rollback_execution_enabled: false,
+                    summary: format!("/boot bağlama durumu doğrulanamadı: {}", boot_reason),
+                };
+            }
+
+            if trimmed_action == "guided-snapshot-rollback-plan" {
+                if point_id == 0 {
+                    return RepairPolicyEvaluation {
+                        action_kind: trimmed_action.to_string(),
+                        repair_class: RepairSafetyClass::Blocked,
+                        evaluation_status: "blocked".to_string(),
+                        allowed: false,
+                        plan_ready: false,
+                        requires_polkit: true,
+                        required_polkit_action,
+                        polkit_authorized: false,
+                        external_backup_required: true,
+                        external_backup_verified_by_server: false,
+                        client_claimed_external_backup,
+                        explicit_user_confirmation,
+                        snapshot_is_not_backup: true,
+                        home_data_preserved,
+                        app_data_compatibility_risk,
+                        app_data_warning,
+                        repair_execution_enabled: false,
+                        rollback_execution_enabled: false,
+                        summary: "Geçerli snapshot kimliği (> 0) olmadan rollback onarım planı engellenir.".to_string(),
+                    };
+                }
+                let preflight = run_rollback_preflight(cfg, point_id, active_running);
+                if !preflight.can_proceed || preflight.overall_status != "ready" {
+                    return RepairPolicyEvaluation {
+                        action_kind: trimmed_action.to_string(),
+                        repair_class: RepairSafetyClass::Blocked,
+                        evaluation_status: preflight.overall_status.clone(),
+                        allowed: false,
+                        plan_ready: false,
+                        requires_polkit: true,
+                        required_polkit_action,
+                        polkit_authorized: false,
+                        external_backup_required: true,
+                        external_backup_verified_by_server: false,
+                        client_claimed_external_backup,
+                        explicit_user_confirmation,
+                        snapshot_is_not_backup: true,
+                        home_data_preserved,
+                        app_data_compatibility_risk,
+                        app_data_warning,
+                        repair_execution_enabled: false,
+                        rollback_execution_enabled: false,
+                        summary: format!(
+                            "Snapshot #{} veya /boot uyumluluğu doğrulanamadı ({}): {}",
+                            point_id, preflight.overall_status, preflight.summary
+                        ),
+                    };
+                }
+            } else if trimmed_action == "reinstall-kernel-initramfs-plan" {
+                let (limine_status, limine_reason, _, _) = check_limine_integration(cfg);
+                if limine_status != "pass" {
+                    return RepairPolicyEvaluation {
+                        action_kind: trimmed_action.to_string(),
+                        repair_class: RepairSafetyClass::Blocked,
+                        evaluation_status: if limine_status == "unknown" {
+                            "unknown".to_string()
+                        } else {
+                            "blocked".to_string()
+                        },
+                        allowed: false,
+                        plan_ready: false,
+                        requires_polkit: true,
+                        required_polkit_action,
+                        polkit_authorized: false,
+                        external_backup_required: true,
+                        external_backup_verified_by_server: false,
+                        client_claimed_external_backup,
+                        explicit_user_confirmation,
+                        snapshot_is_not_backup: true,
+                        home_data_preserved,
+                        app_data_compatibility_risk,
+                        app_data_warning,
+                        repair_execution_enabled: false,
+                        rollback_execution_enabled: false,
+                        summary: format!("Limine/boot doğrulaması başarısız: {}", limine_reason),
+                    };
+                }
+            }
+
+            // Mandatory Security Fixes A, B, C:
+            // - Client-supplied has_verified_external_backup is NEVER trusted as proof (external_backup_verified_by_server=false).
+            // - explicit_user_confirmation=true NEVER substitutes for Polkit authorization (polkit_authorized=false).
+            // - Conditional class only indicates theoretical policy category; allowed=false, plan_ready=false, repair_execution_enabled=false.
+            return RepairPolicyEvaluation {
+                action_kind: trimmed_action.to_string(),
+                repair_class: RepairSafetyClass::ConditionalAuthorized,
+                evaluation_status: "missing-verification".to_string(),
+                allowed: false,
+                plan_ready: false,
+                requires_polkit: true,
+                required_polkit_action,
+                polkit_authorized: false,
+                external_backup_required: true,
+                external_backup_verified_by_server: false,
+                client_claimed_external_backup,
+                explicit_user_confirmation,
+                snapshot_is_not_backup: true,
+                home_data_preserved,
+                app_data_compatibility_risk,
+                app_data_warning,
+                repair_execution_enabled: false,
+                rollback_execution_enabled: false,
+                summary: "Eylem koşullu sınıftadır; ancak sunucu tarafında doğrulanmış bağımsız haricî yedek ve ayrı işlem-bazlı Polkit yetkilendirmesi bulunmadığı için plan hazır değildir ve yürütme kapalıdır.".to_string(),
+            };
+        }
+
+        // 3. Explicitly blocked or unknown/unproven actions (never promoted to read-only-safe)
+        RepairPolicyEvaluation {
+            action_kind: trimmed_action.to_string(),
+            repair_class: RepairSafetyClass::Blocked,
+            evaluation_status: "blocked".to_string(),
+            allowed: false,
+            plan_ready: false,
+            requires_polkit: false,
+            required_polkit_action: String::new(),
+            polkit_authorized: false,
+            external_backup_required: true,
+            external_backup_verified_by_server: false,
+            client_claimed_external_backup,
+            explicit_user_confirmation,
+            snapshot_is_not_backup: true,
+            home_data_preserved,
+            app_data_compatibility_risk,
+            app_data_warning,
+            repair_execution_enabled: false,
+            rollback_execution_enabled: false,
+            summary: format!(
+                "Eylem '{}' veri kaybı riski veya kanıtlanamayan güvenlik nedeniyle kesin olarak engellenmiştir.",
+                if trimmed_action.is_empty() { "<empty>" } else { trimmed_action }
+            ),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RepairSafetyClass {
+    ReadOnlySafe,
+    ConditionalAuthorized,
+    Blocked,
+}
+
+impl RepairSafetyClass {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::ReadOnlySafe => "read-only-safe",
+            Self::ConditionalAuthorized => "conditional-authorized",
+            Self::Blocked => "blocked",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RepairPolicyEvaluation {
+    pub action_kind: String,
+    pub repair_class: RepairSafetyClass,
+    pub evaluation_status: String,
+    pub allowed: bool,
+    pub plan_ready: bool,
+    pub requires_polkit: bool,
+    pub required_polkit_action: String,
+    pub polkit_authorized: bool,
+    pub external_backup_required: bool,
+    pub external_backup_verified_by_server: bool,
+    pub client_claimed_external_backup: bool,
+    pub explicit_user_confirmation: bool,
+    pub snapshot_is_not_backup: bool,
+    pub home_data_preserved: bool,
+    pub app_data_compatibility_risk: bool,
+    pub app_data_warning: String,
+    pub repair_execution_enabled: bool,
+    pub rollback_execution_enabled: bool,
+    pub summary: String,
+}
+
+pub fn encode_repair_policy_envelope(
+    eval: &RepairPolicyEvaluation,
+) -> HashMap<String, OwnedValue> {
+    let mut data: HashMap<String, OwnedValue> = HashMap::new();
+    data.insert(
+        "actionKind".to_string(),
+        OwnedValue::from(Str::from(eval.action_kind.clone())),
+    );
+    data.insert(
+        "repairClass".to_string(),
+        OwnedValue::from(Str::from(eval.repair_class.as_str())),
+    );
+    data.insert(
+        "evaluationStatus".to_string(),
+        OwnedValue::from(Str::from(eval.evaluation_status.clone())),
+    );
+    data.insert("allowed".to_string(), OwnedValue::from(eval.allowed));
+    data.insert("planReady".to_string(), OwnedValue::from(eval.plan_ready));
+    data.insert(
+        "requiresPolkit".to_string(),
+        OwnedValue::from(eval.requires_polkit),
+    );
+    data.insert(
+        "requiredPolkitAction".to_string(),
+        OwnedValue::from(Str::from(eval.required_polkit_action.clone())),
+    );
+    data.insert(
+        "polkitAuthorized".to_string(),
+        OwnedValue::from(eval.polkit_authorized),
+    );
+    data.insert(
+        "externalBackupRequired".to_string(),
+        OwnedValue::from(eval.external_backup_required),
+    );
+    data.insert(
+        "externalBackupVerifiedByServer".to_string(),
+        OwnedValue::from(eval.external_backup_verified_by_server),
+    );
+    data.insert(
+        "clientClaimedExternalBackup".to_string(),
+        OwnedValue::from(eval.client_claimed_external_backup),
+    );
+    data.insert(
+        "explicitUserConfirmation".to_string(),
+        OwnedValue::from(eval.explicit_user_confirmation),
+    );
+    data.insert(
+        "snapshotIsNotBackup".to_string(),
+        OwnedValue::from(eval.snapshot_is_not_backup),
+    );
+    data.insert(
+        "homeDataPreserved".to_string(),
+        OwnedValue::from(eval.home_data_preserved),
+    );
+    data.insert(
+        "appDataCompatibilityRisk".to_string(),
+        OwnedValue::from(eval.app_data_compatibility_risk),
+    );
+    data.insert(
+        "appDataWarning".to_string(),
+        OwnedValue::from(Str::from(eval.app_data_warning.clone())),
+    );
+    data.insert(
+        "repairExecutionEnabled".to_string(),
+        OwnedValue::from(eval.repair_execution_enabled),
+    );
+    data.insert(
+        "rollbackExecutionEnabled".to_string(),
+        OwnedValue::from(eval.rollback_execution_enabled),
+    );
+    data.insert(
+        "summary".to_string(),
+        OwnedValue::from(Str::from(eval.summary.clone())),
+    );
+
+    let mut envelope: HashMap<String, OwnedValue> = HashMap::new();
+    envelope.insert("success".to_string(), OwnedValue::from(true));
+    envelope.insert(
+        "code".to_string(),
+        OwnedValue::from(Str::from(eval.repair_class.as_str())),
+    );
+    envelope.insert(
+        "message".to_string(),
+        OwnedValue::from(Str::from(eval.summary.clone())),
+    );
+    envelope.insert("operationId".to_string(), OwnedValue::from(Str::from("")));
+    envelope.insert("data".to_string(), OwnedValue::from(data));
+    envelope
 }
 
 #[derive(Debug, Clone)]
@@ -4958,6 +5413,24 @@ impl RecoveryManager {
             health_check_ok,
         );
         Ok(encode_post_update_assessment_envelope(&assessment))
+    }
+
+    async fn evaluate_repair_policy(
+        &self,
+        action_kind: String,
+        point_id: u32,
+        has_verified_external_backup: bool,
+        explicit_user_confirmation: bool,
+    ) -> Result<HashMap<String, OwnedValue>, zbus::fdo::Error> {
+        let cfg = DetectionConfig::from_env();
+        let eval = self.evaluate_repair_policy_internal(
+            &cfg,
+            &action_kind,
+            point_id,
+            has_verified_external_backup,
+            explicit_user_confirmation,
+        );
+        Ok(encode_repair_policy_envelope(&eval))
     }
 
     #[zbus(signal)]
@@ -6529,5 +7002,196 @@ echo '{"root":[{"number":0,"type":"single","description":"current"},{"number":15
             envelope.get("code").and_then(|v| v.downcast_ref::<String>().ok()),
             Some("external-recovery-required".to_string())
         );
+    }
+
+    #[test]
+    fn repair_policy_1_readonly_safe_and_unknown_blocked() {
+        let fx = TestFixture::new();
+        let cfg = fx.base_config();
+        let mgr = RecoveryManager::new();
+
+        let ro = mgr.evaluate_repair_policy_internal(
+            &cfg,
+            "diagnose-recovery-state",
+            12,
+            false,
+            false,
+        );
+        assert_eq!(ro.repair_class, RepairSafetyClass::ReadOnlySafe);
+        assert_eq!(ro.evaluation_status, "pass");
+        assert!(ro.allowed);
+        assert!(!ro.requires_polkit);
+        assert!(!ro.repair_execution_enabled);
+        assert!(!ro.rollback_execution_enabled);
+
+        // Unknown / unproven actions MUST be blocked, never read-only-safe
+        let unk = mgr.evaluate_repair_policy_internal(
+            &cfg,
+            "unknown-repair-action",
+            12,
+            true,
+            true,
+        );
+        assert_eq!(unk.repair_class, RepairSafetyClass::Blocked);
+        assert_eq!(unk.evaluation_status, "blocked");
+        assert!(!unk.allowed);
+        assert!(!unk.plan_ready);
+    }
+
+    #[test]
+    fn repair_policy_2_client_backup_and_confirmation_claims_never_grant_ready_or_exec() {
+        let fx = TestFixture::new();
+        let cfg = fx.base_config();
+        let mgr = RecoveryManager::new();
+
+        // Mandatory Security Fixes A, B, C:
+        // Even if client passes has_verified_external_backup=true AND explicit_user_confirmation=true,
+        // server-verified backup & Polkit are unproven -> allowed=false, planReady=false, repairExecutionEnabled=false.
+        let cond = mgr.evaluate_repair_policy_internal(
+            &cfg,
+            "guided-chroot-package-repair-plan",
+            12,
+            true,
+            true,
+        );
+        assert_eq!(cond.repair_class, RepairSafetyClass::ConditionalAuthorized);
+        assert!(!cond.allowed);
+        assert!(!cond.plan_ready);
+        assert!(cond.requires_polkit);
+        assert!(!cond.polkit_authorized);
+        assert!(!cond.external_backup_verified_by_server);
+        assert!(cond.snapshot_is_not_backup);
+        assert!(cond.home_data_preserved);
+        assert!(cond.app_data_compatibility_risk);
+        assert!(!cond.repair_execution_enabled);
+        assert!(!cond.rollback_execution_enabled);
+
+        let envelope = encode_repair_policy_envelope(&cond);
+        assert_eq!(
+            envelope.get("code").and_then(|v| v.downcast_ref::<String>().ok()),
+            Some("conditional-authorized".to_string())
+        );
+    }
+
+    #[test]
+    fn repair_policy_3_blocks_home_db_lck_missing_snap_and_boot_mismatch() {
+        let fx = TestFixture::new();
+        let mut cfg = fx.base_config();
+        let mgr = RecoveryManager::new();
+
+        // 1. Destructive /home or pacman DB actions always blocked
+        for forbidden in [
+            "rollback-home-subvolume",
+            "format-partition",
+            "repartition-disk",
+            "auto-delete-user-data",
+            "delete-pacman-lock",
+            "guess-repair-pacman-db",
+            "delete-snapshots-for-space",
+            "overwrite-boot-kernels-unverified",
+        ] {
+            let res = mgr.evaluate_repair_policy_internal(&cfg, forbidden, 12, true, true);
+            assert_eq!(res.repair_class, RepairSafetyClass::Blocked, "{} must be blocked", forbidden);
+            assert!(!res.allowed);
+            assert!(!res.plan_ready);
+        }
+
+        // 2. Pacman db.lck present -> conditional repair plan downgraded to blocked
+        fx.write("var/lib/pacman/db.lck", "");
+        let locked = mgr.evaluate_repair_policy_internal(
+            &cfg,
+            "guided-chroot-package-repair-plan",
+            12,
+            true,
+            true,
+        );
+        assert_eq!(locked.repair_class, RepairSafetyClass::Blocked);
+        assert!(!locked.plan_ready);
+        fs::remove_file(fx.path("var/lib/pacman/db.lck")).unwrap();
+
+        // 3. Corrupted/missing snapshot (point_id=0 or 99) -> blocked
+        let bad_snap = mgr.evaluate_repair_policy_internal(
+            &cfg,
+            "guided-snapshot-rollback-plan",
+            0,
+            true,
+            true,
+        );
+        assert_eq!(bad_snap.repair_class, RepairSafetyClass::Blocked);
+        assert!(!bad_snap.plan_ready);
+
+        // 4. Separate /boot kernel/Limine mismatch -> blocked
+        fs::remove_file(fx.path("boot/limine.conf")).unwrap();
+        let boot_bad = mgr.evaluate_repair_policy_internal(
+            &cfg,
+            "reinstall-kernel-initramfs-plan",
+            12,
+            true,
+            true,
+        );
+        assert_eq!(boot_bad.repair_class, RepairSafetyClass::Blocked);
+        assert!(!boot_bad.plan_ready);
+
+        // 5. Missing /home isolation -> blocked
+        cfg.mountinfo_file = fx.write(
+            "mountinfo",
+            concat!(
+                "36 1 0:36 /@ / rw,noatime - btrfs /dev/nvme0n1p2 rw,subvolid=539,subvol=/@\n",
+                "38 36 259:1 / /boot rw,noatime - vfat /dev/nvme0n1p1 rw\n",
+            ),
+        );
+        cfg.fstab_file = fx.write(
+            "fstab",
+            concat!(
+                "UUID=1234 / btrfs subvol=/@,defaults 0 0\n",
+                "UUID=FB94-FF19 /boot vfat defaults,umask=0077 0 2\n",
+            ),
+        );
+        let no_home = mgr.evaluate_repair_policy_internal(
+            &cfg,
+            "guided-chroot-package-repair-plan",
+            12,
+            true,
+            true,
+        );
+        assert_eq!(no_home.repair_class, RepairSafetyClass::Blocked);
+        assert!(!no_home.home_data_preserved);
+    }
+
+    #[test]
+    fn repair_policy_4_blocks_when_active_op_or_uncertain_reservation_exists() {
+        let fx = TestFixture::new();
+        let cfg = fx.base_config();
+        let mgr = RecoveryManager::new();
+
+        *mgr.active_operation.lock().unwrap() = Some("op-busy".to_string());
+        let busy = mgr.evaluate_repair_policy_internal(
+            &cfg,
+            "guided-chroot-package-repair-plan",
+            12,
+            true,
+            true,
+        );
+        assert_eq!(busy.repair_class, RepairSafetyClass::Blocked);
+        assert!(!busy.plan_ready);
+        *mgr.active_operation.lock().unwrap() = None;
+
+        *mgr.pre_update_reservation.lock().unwrap() = Some(PreUpdateReservation {
+            update_op_id: "upd-orphan".to_string(),
+            recovery_op_id: "rec-orphan".to_string(),
+            snapshot_id: Some(12),
+            subvolume_id: "272".to_string(),
+            owner_sender: ":1.42".to_string(),
+            state: PreUpdateReservationState::AbortedOrOrphaned,
+        });
+        let uncertain = mgr.evaluate_repair_policy_internal(
+            &cfg,
+            "guided-chroot-package-repair-plan",
+            12,
+            true,
+            true,
+        );
+        assert_eq!(uncertain.repair_class, RepairSafetyClass::Blocked);
+        assert!(!uncertain.plan_ready);
     }
 }
