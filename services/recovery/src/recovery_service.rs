@@ -444,6 +444,198 @@ pub fn detect_root_filesystem(mountinfo_path: &Path, fstab_path: &Path) -> (Stri
     ("Unknown".to_string(), "/".to_string())
 }
 
+#[derive(Debug, Clone)]
+struct MountEntry {
+    mount_point: String,
+    fstype: String,
+    subvol: String,
+}
+
+fn normalize_subvol_name(subvol: &str) -> String {
+    subvol.trim().trim_start_matches('/').to_string()
+}
+
+fn is_ephemeral_fs(fstype: &str) -> bool {
+    matches!(
+        fstype.to_ascii_lowercase().as_str(),
+        "tmpfs" | "overlay" | "rootfs" | "ramfs"
+    )
+}
+
+fn parse_mountinfo_entries(mountinfo_path: &Path) -> Result<Vec<MountEntry>, std::io::Error> {
+    let content = fs::read_to_string(mountinfo_path)?;
+    let mut entries = Vec::new();
+    for line in content.lines() {
+        let Some((left, right)) = line.split_once(" - ") else {
+            continue;
+        };
+        let left_fields: Vec<&str> = left.split_whitespace().collect();
+        let right_fields: Vec<&str> = right.split_whitespace().collect();
+        if left_fields.len() < 5 || right_fields.is_empty() {
+            continue;
+        }
+        let root_field = left_fields[3];
+        let mount_point = left_fields[4].to_string();
+        let fstype = right_fields[0].to_string();
+        let super_opts = right_fields.get(2).copied().unwrap_or("");
+        let subvol = extract_subvol_option(super_opts, root_field);
+        entries.push(MountEntry {
+            mount_point,
+            fstype,
+            subvol,
+        });
+    }
+    Ok(entries)
+}
+
+fn parse_fstab_entries(fstab_path: &Path) -> Result<Vec<MountEntry>, std::io::Error> {
+    let content = fs::read_to_string(fstab_path)?;
+    let mut entries = Vec::new();
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        let fields: Vec<&str> = trimmed.split_whitespace().collect();
+        if fields.len() < 4 {
+            continue;
+        }
+        entries.push(MountEntry {
+            mount_point: fields[1].to_string(),
+            fstype: fields[2].to_string(),
+            subvol: extract_subvol_option(fields[3], "/"),
+        });
+    }
+    Ok(entries)
+}
+
+pub fn verify_home_subvolume_isolation(
+    config: &DetectionConfig,
+    root_subvolume: &str,
+) -> (String, String, String) {
+    let mount_res = parse_mountinfo_entries(&config.mountinfo_file);
+    let fstab_res = parse_fstab_entries(&config.fstab_file);
+
+    if mount_res.is_err() && fstab_res.is_err() {
+        return (
+            "unknown".to_string(),
+            "Mount table and /etc/fstab could not be read to verify /home isolation.".to_string(),
+            "Ensure /proc/self/mountinfo and /etc/fstab are readable.".to_string(),
+        );
+    }
+
+    let mount_entries = mount_res.as_ref().ok();
+    let fstab_entries = fstab_res.as_ref().ok();
+
+    let mount_root = mount_entries.and_then(|list| list.iter().find(|e| e.mount_point == "/"));
+    let mount_home = mount_entries.and_then(|list| list.iter().find(|e| e.mount_point == "/home"));
+    let fstab_home = fstab_entries.and_then(|list| list.iter().find(|e| e.mount_point == "/home"));
+
+    let real_root_in_mountinfo = mount_root
+        .map(|r| !is_ephemeral_fs(&r.fstype))
+        .unwrap_or(false);
+
+    let effective_home: MountEntry = if real_root_in_mountinfo {
+        let Some(mh) = mount_home else {
+            return (
+                "blocked".to_string(),
+                "No separate /home mount was detected in active mounts; /home resides inside the root subvolume.".to_string(),
+                "Mount /home on a separate Btrfs subvolume (such as /@home) or separate filesystem before rollback.".to_string(),
+            );
+        };
+
+        if let Some(fstab_list) = fstab_entries {
+            let Some(fh) = fstab_list.iter().find(|e| e.mount_point == "/home") else {
+                return (
+                    "blocked".to_string(),
+                    "/home is mounted in active mounts but missing from /etc/fstab; persistent isolation is unverified.".to_string(),
+                    "Add the separate /home mount entry to /etc/fstab.".to_string(),
+                );
+            };
+            if !mh.fstype.eq_ignore_ascii_case(&fh.fstype)
+                || (mh.fstype.eq_ignore_ascii_case("btrfs")
+                    && normalize_subvol_name(&mh.subvol) != normalize_subvol_name(&fh.subvol))
+            {
+                return (
+                    "blocked".to_string(),
+                    format!(
+                        "/home mount configuration differs between mountinfo ('{}', subvol '{}') and /etc/fstab ('{}', subvol '{}').",
+                        mh.fstype, mh.subvol, fh.fstype, fh.subvol
+                    ),
+                    "Reconcile /home mount configuration between active mounts and /etc/fstab.".to_string(),
+                );
+            }
+        }
+        mh.clone()
+    } else if let Some(mh) = mount_home {
+        mh.clone()
+    } else if let Some(fh) = fstab_home {
+        fh.clone()
+    } else {
+        return (
+            "blocked".to_string(),
+            "No separate /home mount or /etc/fstab entry was detected.".to_string(),
+            "Configure /home on a separate Btrfs subvolume (such as /@home) or separate filesystem.".to_string(),
+        );
+    };
+
+    if is_ephemeral_fs(&effective_home.fstype) || effective_home.fstype.trim().is_empty() {
+        return (
+            "blocked".to_string(),
+            format!(
+                "/home uses ephemeral or unsupported filesystem '{}'; user data preservation cannot be guaranteed.",
+                effective_home.fstype
+            ),
+            "Mount /home on a persistent separate subvolume or filesystem.".to_string(),
+        );
+    }
+
+    if effective_home.fstype.eq_ignore_ascii_case("btrfs") {
+        let root_norm = normalize_subvol_name(root_subvolume);
+        let home_norm = normalize_subvol_name(&effective_home.subvol);
+
+        if home_norm.is_empty() || home_norm == root_norm {
+            return (
+                "blocked".to_string(),
+                format!(
+                    "/home shares Btrfs subvolume '{}' with '/'; root rollback would overwrite user data.",
+                    effective_home.subvol
+                ),
+                "Separate /home into its own top-level Btrfs subvolume (such as /@home).".to_string(),
+            );
+        }
+
+        if !root_norm.is_empty() && home_norm.starts_with(&format!("{}/", root_norm)) {
+            return (
+                "blocked".to_string(),
+                format!(
+                    "/home subvolume '{}' is nested inside root subvolume '{}'; rollback could orphan user data.",
+                    effective_home.subvol, root_subvolume
+                ),
+                "Move /home to an independent top-level Btrfs subvolume (such as /@home).".to_string(),
+            );
+        }
+
+        return (
+            "pass".to_string(),
+            format!(
+                "/home is isolated on separate Btrfs subvolume '{}' (root subvolume '{}').",
+                effective_home.subvol, root_subvolume
+            ),
+            "No action required.".to_string(),
+        );
+    }
+
+    (
+        "pass".to_string(),
+        format!(
+            "/home is isolated on separate '{}' filesystem.",
+            effective_home.fstype
+        ),
+        "No action required.".to_string(),
+    )
+}
+
 fn is_executable_file(path: &Path) -> bool {
     match fs::metadata(path) {
         Ok(meta) => meta.is_file() && (meta.permissions().mode() & 0o111 != 0),
@@ -1954,7 +2146,18 @@ pub fn run_rollback_preflight(
     };
     checks.push(c8);
 
-    // 9. Limine / boot integration
+    // 9. User data (/home) subvolume isolation
+    let (home_status, home_reason, home_rem) =
+        verify_home_subvolume_isolation(config, &initial_report.root_subvolume);
+    checks.push(check_record(
+        "home_subvolume_isolation",
+        "User data (/home) subvolume isolation",
+        &home_status,
+        home_reason,
+        &home_rem,
+    ));
+
+    // 10. Limine / boot integration
     let (limine_status, limine_reason, limine_rem) = check_limine_integration(config);
     checks.push(check_record(
         "limine_boot_integration",
@@ -2866,9 +3069,18 @@ mod tests {
         fn base_config(&self) -> DetectionConfig {
             let mountinfo = self.write(
                 "mountinfo",
-                "36 1 0:36 /@ / rw,noatime - btrfs /dev/nvme0n1p2 rw,subvolid=256,subvol=/@\n",
+                concat!(
+                    "36 1 0:36 /@ / rw,noatime - btrfs /dev/nvme0n1p2 rw,subvolid=539,subvol=/@\n",
+                    "37 36 0:36 /@home /home rw,noatime - btrfs /dev/nvme0n1p2 rw,subvolid=257,subvol=/@home\n",
+                ),
             );
-            let fstab = self.write("fstab", "UUID=1234 / btrfs subvol=/@,defaults 0 0\n");
+            let fstab = self.write(
+                "fstab",
+                concat!(
+                    "UUID=1234 / btrfs subvol=/@,defaults 0 0\n",
+                    "UUID=1234 /home btrfs subvol=/@home,defaults 0 0\n",
+                ),
+            );
             let sysconf = self.write("sysconf/snapper", "SNAPPER_CONFIGS=\"root\"\n");
             let configs_dir = self.path("configs");
             fs::create_dir_all(&configs_dir).unwrap();
@@ -3163,7 +3375,7 @@ echo '{"root":[{"number":0,"type":"single","description":"current"}]}'
         assert!(ok.can_proceed);
         assert!(!ok.rollback_execution_enabled);
         assert_eq!(ok.snapshot_subvolume_id, "272");
-        assert_eq!(ok.checks.len(), 10);
+        assert_eq!(ok.checks.len(), 11);
 
         // Missing limine.conf must yield "unknown" and canProceed=false
         fs::remove_file(fx.path("boot/limine.conf")).unwrap();
@@ -3382,5 +3594,179 @@ echo '{"root":[{"number":0,"type":"single","description":"current"},{"number":12
             !marker.exists(),
             "read-only detection and preflight must not invoke pkcheck"
         );
+    }
+
+    #[test]
+    fn preflight_allows_separate_home_subvolume_and_separate_fs() {
+        let fx = TestFixture::new();
+        let mut cfg = fx.base_config();
+
+        // Separate /@home Btrfs subvolume passes
+        let btrfs_ok = run_rollback_preflight(&cfg, 12, false);
+        assert!(btrfs_ok.can_proceed);
+        assert_eq!(btrfs_ok.overall_status, "ready");
+        let home_chk = btrfs_ok
+            .checks
+            .iter()
+            .find(|c| c.id == "home_subvolume_isolation")
+            .unwrap();
+        assert_eq!(home_chk.status, "pass");
+
+        // Separate non-Btrfs filesystem (ext4) for /home also passes
+        cfg.mountinfo_file = fx.write(
+            "mountinfo",
+            concat!(
+                "36 1 0:36 /@ / rw,noatime - btrfs /dev/nvme0n1p2 rw,subvolid=539,subvol=/@\n",
+                "37 36 259:3 / /home rw,noatime - ext4 /dev/nvme0n1p3 rw\n",
+            ),
+        );
+        cfg.fstab_file = fx.write(
+            "fstab",
+            concat!(
+                "UUID=1234 / btrfs subvol=/@,defaults 0 0\n",
+                "UUID=5678 /home ext4 defaults 0 2\n",
+            ),
+        );
+        let ext4_ok = run_rollback_preflight(&cfg, 12, false);
+        assert!(ext4_ok.can_proceed);
+        assert_eq!(
+            ext4_ok
+                .checks
+                .iter()
+                .find(|c| c.id == "home_subvolume_isolation")
+                .unwrap()
+                .status,
+            "pass"
+        );
+    }
+
+    #[test]
+    fn preflight_blocks_shared_root_subvolume_for_home() {
+        let fx = TestFixture::new();
+        let mut cfg = fx.base_config();
+        cfg.mountinfo_file = fx.write(
+            "mountinfo",
+            concat!(
+                "36 1 0:36 /@ / rw,noatime - btrfs /dev/nvme0n1p2 rw,subvolid=539,subvol=/@\n",
+                "37 36 0:36 /@ /home rw,noatime - btrfs /dev/nvme0n1p2 rw,subvolid=539,subvol=/@\n",
+            ),
+        );
+        cfg.fstab_file = fx.write(
+            "fstab",
+            concat!(
+                "UUID=1234 / btrfs subvol=/@,defaults 0 0\n",
+                "UUID=1234 /home btrfs subvol=/@,defaults 0 0\n",
+            ),
+        );
+
+        let report = run_rollback_preflight(&cfg, 12, false);
+        assert!(!report.can_proceed);
+        assert_eq!(report.overall_status, "blocked");
+        let home_chk = report
+            .checks
+            .iter()
+            .find(|c| c.id == "home_subvolume_isolation")
+            .unwrap();
+        assert_eq!(home_chk.status, "blocked");
+        assert!(home_chk.reason.contains("shares Btrfs subvolume"));
+    }
+
+    #[test]
+    fn preflight_blocks_missing_home_mount() {
+        let fx = TestFixture::new();
+        let mut cfg = fx.base_config();
+        cfg.mountinfo_file = fx.write(
+            "mountinfo",
+            "36 1 0:36 /@ / rw,noatime - btrfs /dev/nvme0n1p2 rw,subvolid=539,subvol=/@\n",
+        );
+        cfg.fstab_file = fx.write("fstab", "UUID=1234 / btrfs subvol=/@,defaults 0 0\n");
+
+        let report = run_rollback_preflight(&cfg, 12, false);
+        assert!(!report.can_proceed);
+        assert_eq!(report.overall_status, "blocked");
+        let home_chk = report
+            .checks
+            .iter()
+            .find(|c| c.id == "home_subvolume_isolation")
+            .unwrap();
+        assert_eq!(home_chk.status, "blocked");
+    }
+
+    #[test]
+    fn preflight_blocks_nested_or_conflicting_home_subvolume() {
+        let fx = TestFixture::new();
+        let mut cfg = fx.base_config();
+
+        // Nested subvolume /@/home under /@
+        cfg.mountinfo_file = fx.write(
+            "mountinfo",
+            concat!(
+                "36 1 0:36 /@ / rw,noatime - btrfs /dev/nvme0n1p2 rw,subvolid=539,subvol=/@\n",
+                "37 36 0:36 /@/home /home rw,noatime - btrfs /dev/nvme0n1p2 rw,subvolid=600,subvol=/@/home\n",
+            ),
+        );
+        cfg.fstab_file = fx.write(
+            "fstab",
+            concat!(
+                "UUID=1234 / btrfs subvol=/@,defaults 0 0\n",
+                "UUID=1234 /home btrfs subvol=/@/home,defaults 0 0\n",
+            ),
+        );
+        let nested = run_rollback_preflight(&cfg, 12, false);
+        assert!(!nested.can_proceed);
+        assert_eq!(nested.overall_status, "blocked");
+        assert_eq!(
+            nested
+                .checks
+                .iter()
+                .find(|c| c.id == "home_subvolume_isolation")
+                .unwrap()
+                .status,
+            "blocked"
+        );
+
+        // Conflicting mountinfo (/@home) vs fstab (/@data)
+        cfg.mountinfo_file = fx.write(
+            "mountinfo",
+            concat!(
+                "36 1 0:36 /@ / rw,noatime - btrfs /dev/nvme0n1p2 rw,subvolid=539,subvol=/@\n",
+                "37 36 0:36 /@home /home rw,noatime - btrfs /dev/nvme0n1p2 rw,subvolid=257,subvol=/@home\n",
+            ),
+        );
+        cfg.fstab_file = fx.write(
+            "fstab",
+            concat!(
+                "UUID=1234 / btrfs subvol=/@,defaults 0 0\n",
+                "UUID=1234 /home btrfs subvol=/@other,defaults 0 0\n",
+            ),
+        );
+        let conflict = run_rollback_preflight(&cfg, 12, false);
+        assert!(!conflict.can_proceed);
+        assert_eq!(conflict.overall_status, "blocked");
+        assert_eq!(
+            conflict
+                .checks
+                .iter()
+                .find(|c| c.id == "home_subvolume_isolation")
+                .unwrap()
+                .status,
+            "blocked"
+        );
+    }
+
+    #[test]
+    fn preflight_returns_unknown_when_mount_and_fstab_unverifiable() {
+        let fx = TestFixture::new();
+        let mut cfg = fx.base_config();
+        cfg.mountinfo_file = fx.path("missing-mountinfo");
+        cfg.fstab_file = fx.path("missing-fstab");
+
+        let (status, reason, _) = verify_home_subvolume_isolation(&cfg, "/@");
+        assert_eq!(status, "unknown");
+        assert!(reason.contains("could not be read"));
+
+        let report = run_rollback_preflight(&cfg, 12, false);
+        assert!(!report.can_proceed);
+        assert!(!report.rollback_execution_enabled);
     }
 }
