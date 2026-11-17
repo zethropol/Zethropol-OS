@@ -1,14 +1,163 @@
 #include "UpdateInstaller.h"
 #include "UpdateScanner.h"
 
+#include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDBusReply>
 #include <QProcessEnvironment>
 #include <QRegularExpression>
 #include <QStandardPaths>
+#include <QThread>
+#include <QUuid>
+
+namespace {
+
+PreUpdateGateResult runDefaultRecoveryPreGate(const QString &updateOpId, bool criticalBootUpdate)
+{
+    const QDBusConnection bus = QDBusConnection::systemBus();
+    if (!bus.isConnected()) {
+        return {false, QStringLiteral("not-available"),
+                QStringLiteral("Sistem D-Bus bağlantısı kurulamadı; güncelleme engellendi."), 0};
+    }
+
+    auto callRecovery = [&](const QString &method, const QList<QVariant> &args, int timeoutMs = 10000) -> QDBusMessage {
+        QDBusMessage msg = QDBusMessage::createMethodCall(
+            QStringLiteral("org.zethropol.Recovery"),
+            QStringLiteral("/org/zethropol/Recovery"),
+            QStringLiteral("org.zethropol.Recovery.v1"),
+            method);
+        msg.setArguments(args);
+        return bus.call(msg, QDBus::Block, timeoutMs);
+    };
+
+    const QDBusMessage createReply = callRecovery(
+        QStringLiteral("CreatePreUpdateRecoveryPoint"),
+        {updateOpId, QStringLiteral("Pre-update safety snapshot")},
+        30000);
+    if (createReply.type() == QDBusMessage::ErrorMessage || createReply.arguments().size() < 4) {
+        return {false, QStringLiteral("not-available"),
+                QStringLiteral("Recovery servisi erişilemez veya geçersiz yanıt döndürdü; güncelleme engellendi."), 0};
+    }
+    const bool createOk = createReply.arguments().at(0).toBool();
+    const QString createCode = createReply.arguments().at(1).toString();
+    const QString createMsg = createReply.arguments().at(2).toString();
+    const QString recoveryOpId = createReply.arguments().at(3).toString();
+    if (!createOk || recoveryOpId.isEmpty()) {
+        return {false, createCode, createMsg.isEmpty() ? QStringLiteral("Güncelleme öncesi snapshot başlatılamadı.") : createMsg, 0};
+    }
+
+    quint32 snapshotId = 0;
+    for (int i = 0; i < 120; ++i) {
+        const QDBusMessage stateReply = callRecovery(
+            QStringLiteral("GetOperationState"), {recoveryOpId}, 5000);
+        if (stateReply.type() == QDBusMessage::ErrorMessage || stateReply.arguments().isEmpty()) {
+            return {false, QStringLiteral("not-available"),
+                    QStringLiteral("Recovery işlem durumu sorgulanamadı; güncelleme engellendi."), 0};
+        }
+        const QDBusReply<QVariantMap> parsedState(stateReply);
+        if (!parsedState.isValid()) {
+            return {false, QStringLiteral("not-available"),
+                    QStringLiteral("Recovery işlem durumu çözümlenemedi; güncelleme engellendi."), 0};
+        }
+        const QVariantMap opMap = parsedState.value();
+        const QString status = opMap.value(QStringLiteral("status")).toString();
+        const QString code = opMap.value(QStringLiteral("code")).toString();
+        const QString message = opMap.value(QStringLiteral("message")).toString();
+        if (status == QStringLiteral("ok")) {
+            snapshotId = opMap.value(QStringLiteral("snapshot_id")).toString().toUInt();
+            break;
+        }
+        if (status != QStringLiteral("running")) {
+            return {false, code, message.isEmpty() ? QStringLiteral("Güncelleme öncesi snapshot doğrulanamadı.") : message, 0};
+        }
+        QThread::msleep(250);
+    }
+    if (snapshotId == 0) {
+        return {false, QStringLiteral("verification-failed"),
+                QStringLiteral("Güncelleme öncesi snapshot kimliği doğrulanamadı."), 0};
+    }
+
+    const QDBusMessage verifyReply = callRecovery(
+        QStringLiteral("VerifyPreUpdateSnapshot"),
+        {updateOpId, QVariant::fromValue(snapshotId), criticalBootUpdate},
+        10000);
+    if (verifyReply.type() == QDBusMessage::ErrorMessage || verifyReply.arguments().size() < 3) {
+        return {false, QStringLiteral("verification-failed"),
+                QStringLiteral("Snapshot son doğrulama kapısı başarısız; güncelleme engellendi."), snapshotId};
+    }
+    if (!verifyReply.arguments().at(0).toBool()) {
+        return {false, verifyReply.arguments().at(1).toString(),
+                verifyReply.arguments().at(2).toString(), snapshotId};
+    }
+
+    const QDBusMessage beginReply = callRecovery(
+        QStringLiteral("BeginPreUpdateExecution"),
+        {updateOpId, QVariant::fromValue(snapshotId)},
+        5000);
+    if (beginReply.type() == QDBusMessage::ErrorMessage || beginReply.arguments().size() < 3
+        || !beginReply.arguments().at(0).toBool()) {
+        const QString errMsg = beginReply.arguments().size() >= 3
+            ? beginReply.arguments().at(2).toString()
+            : QStringLiteral("Rezervasyon aktif güncelleme durumuna geçirilemedi.");
+        return {false, QStringLiteral("invalid-state"), errMsg, snapshotId};
+    }
+
+    return {true, QStringLiteral("ok"), QStringLiteral("Doğrulandı"), snapshotId};
+}
+
+void runDefaultRecoveryComplete(const QString &updateOpId, const QString &outcome)
+{
+    const QDBusConnection bus = QDBusConnection::systemBus();
+    if (!bus.isConnected() || updateOpId.isEmpty())
+        return;
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        QStringLiteral("org.zethropol.Recovery"),
+        QStringLiteral("/org/zethropol/Recovery"),
+        QStringLiteral("org.zethropol.Recovery.v1"),
+        QStringLiteral("CompletePreUpdateExecution"));
+    msg << updateOpId << outcome;
+    bus.call(msg, QDBus::Block, 5000);
+}
+
+} // namespace
+
+bool UpdateInstaller::isCriticalBootUpdate(const UpdateScanner *scanner)
+{
+    if (!scanner)
+        return true;
+
+    static const QRegularExpression criticalPkgRe(
+        QStringLiteral("^(?:linux(?:-[a-z0-9._-]+)?|mkinitcpio.*|dracut.*|limine.*|grub.*|efibootmgr|systemd.*|btrfs-progs|snapper|snap-pac|limine-snapper-sync|pacman|glibc)$"),
+        QRegularExpression::CaseInsensitiveOption);
+
+    const QVariantList reports = scanner->reports();
+    if (reports.isEmpty())
+        return true;
+
+    for (const QVariant &repVal : reports) {
+        const QVariantMap rep = repVal.toMap();
+        const QString state = rep.value(QStringLiteral("state")).toString();
+        if (state != QStringLiteral("complete") && state != QStringLiteral("disabled"))
+            return true;
+
+        const QVariantList pkgs = rep.value(QStringLiteral("packages")).toList();
+        for (const QVariant &pkgVal : pkgs) {
+            const QString pkgName = pkgVal.typeId() == QMetaType::QVariantMap
+                ? pkgVal.toMap().value(QStringLiteral("name")).toString()
+                : pkgVal.toString().section(QLatin1Char(' '), 0, 0);
+            if (criticalPkgRe.match(pkgName.trimmed()).hasMatch())
+                return true;
+        }
+    }
+    return false;
+}
 
 UpdateInstaller::UpdateInstaller(UpdateScanner *scanner, QObject *parent)
     : QObject(parent), m_scanner(scanner),
       m_sessionTool(QStandardPaths::findExecutable("script")),
-      m_updater(QStandardPaths::findExecutable("arch-update"))
+      m_updater(QStandardPaths::findExecutable("arch-update")),
+      m_recoveryGate(runDefaultRecoveryPreGate),
+      m_recoveryComplete(runDefaultRecoveryComplete)
 {
     if (m_updater.isEmpty())
         m_updater = QStandardPaths::findExecutable("cachy-update");
@@ -65,6 +214,38 @@ void UpdateInstaller::start()
         m_message = "Kurulum için gerekli sistem araçları bulunamadı.";
         emit changed();
         return;
+    }
+
+    m_updateOperationId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    m_verifiedSnapshotId = 0;
+
+    if (m_recoveryGateEnabled) {
+        const bool criticalBoot = isCriticalBootUpdate(m_scanner);
+        const PreUpdateGateResult gate = m_recoveryGate
+            ? m_recoveryGate(m_updateOperationId, criticalBoot)
+            : PreUpdateGateResult{false, QStringLiteral("not-available"),
+                                  QStringLiteral("Recovery ön-kapısı yapılandırılmadı."), 0};
+        if (!gate.ok || gate.snapshotId == 0) {
+            m_status = "error";
+            m_message = gate.message.isEmpty()
+                ? QStringLiteral("Güncelleme öncesi Recovery doğrulaması başarısız; işlem engellendi.")
+                : gate.message;
+            emit changed();
+            emit sessionFinished();
+            return;
+        }
+        m_verifiedSnapshotId = gate.snapshotId;
+
+        if (!m_liveExecutionEnabled) {
+            if (m_recoveryComplete)
+                m_recoveryComplete(m_updateOperationId, QStringLiteral("aborted"));
+            m_status = "blocked";
+            m_message = QStringLiteral("Güncelleme öncesi snapshot #%1 doğrulandı, ancak 03.2.08 aşamasında canlı güncelleme yürütmesi kapalıdır.")
+                            .arg(m_verifiedSnapshotId);
+            emit changed();
+            emit sessionFinished();
+            return;
+        }
     }
 
     m_rawOutput.clear();
@@ -167,6 +348,12 @@ void UpdateInstaller::finish(const QString &status, const QString &message)
     m_status = status;
     m_message = message;
     m_scanner->m_installationRunning = false;
+    if (m_recoveryGateEnabled && m_recoveryComplete && !m_updateOperationId.isEmpty()) {
+        const QString outcome = (status == QStringLiteral("finished"))
+            ? QStringLiteral("ok")
+            : (status == QStringLiteral("unknown") ? QStringLiteral("unknown") : QStringLiteral("failed"));
+        m_recoveryComplete(m_updateOperationId, outcome);
+    }
     emit changed();
     m_scanner->scan();
     emit sessionFinished();

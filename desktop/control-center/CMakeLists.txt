@@ -76,7 +76,7 @@ if(BUILD_TESTING)
         src/UpdateScanner.cpp src/UpdateScanner.h)
     target_include_directories(control_center_update_installer_test PRIVATE src)
     target_link_libraries(control_center_update_installer_test PRIVATE
-        Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Test)
+        Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::DBus Qt6::Test)
     target_compile_definitions(control_center_update_installer_test PRIVATE
         UPDATE_REPORT_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/UpdateReport.qml")
     add_test(NAME control_center_update_installer_test

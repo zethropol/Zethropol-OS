@@ -52,6 +52,11 @@ pub struct DetectionConfig {
     pub esp_dir: PathBuf,
     pub modules_dir: PathBuf,
     pub running_kernel: Option<String>,
+    pub pacman_lock_file: PathBuf,
+    pub min_free_percent: u32,
+    pub max_important_snapshots: usize,
+    pub simulated_free_percent: Option<u32>,
+    pub simulated_boot_usage_percent: Option<u32>,
     pub polkit_policy_file: PathBuf,
     pub command_timeout: Duration,
 }
@@ -72,6 +77,11 @@ impl Default for DetectionConfig {
             esp_dir: PathBuf::from("/boot"),
             modules_dir: PathBuf::from("/usr/lib/modules"),
             running_kernel: None,
+            pacman_lock_file: PathBuf::from("/var/lib/pacman/db.lck"),
+            min_free_percent: 20,
+            max_important_snapshots: 15,
+            simulated_free_percent: None,
+            simulated_boot_usage_percent: None,
             polkit_policy_file: PathBuf::from(
                 "/usr/share/polkit-1/actions/org.zethropol.recovery.policy",
             ),
@@ -146,6 +156,19 @@ impl DetectionConfig {
             let trimmed = v.trim();
             if !trimmed.is_empty() {
                 cfg.running_kernel = Some(trimmed.to_string());
+            }
+        }
+        if let Some(v) = get_var("ZETHROPOL_RECOVERY_PACMAN_LOCK_FILE") {
+            cfg.pacman_lock_file = PathBuf::from(v);
+        }
+        if let Some(v) = get_var("ZETHROPOL_RECOVERY_MIN_FREE_PERCENT") {
+            if let Ok(p) = v.parse::<u32>() {
+                cfg.min_free_percent = p.min(99);
+            }
+        }
+        if let Some(v) = get_var("ZETHROPOL_RECOVERY_MAX_IMPORTANT_SNAPSHOTS") {
+            if let Ok(m) = v.parse::<usize>() {
+                cfg.max_important_snapshots = m.max(1);
             }
         }
         if let Some(v) = get_var("ZETHROPOL_RECOVERY_POLKIT_POLICY_FILE") {
@@ -1532,6 +1555,26 @@ pub fn execute_verified_snapshot_creation(
     cancel_set: Option<&Arc<Mutex<HashSet<String>>>>,
     op_id: Option<&str>,
 ) -> OpState {
+    execute_verified_snapshot_creation_with_options(
+        config,
+        config_name,
+        full_description,
+        "zethropol=manual",
+        false,
+        cancel_set,
+        op_id,
+    )
+}
+
+pub fn execute_verified_snapshot_creation_with_options(
+    config: &DetectionConfig,
+    config_name: &str,
+    full_description: &str,
+    userdata: &str,
+    verify_btrfs_subvolume: bool,
+    cancel_set: Option<&Arc<Mutex<HashSet<String>>>>,
+    op_id: Option<&str>,
+) -> OpState {
     let Some(snapper_bin) = resolve_snapper_binary(&config.snapper_bin) else {
         return OpState::new(
             "failed",
@@ -1554,7 +1597,7 @@ pub fn execute_verified_snapshot_creation(
             "--cleanup-algorithm",
             "number",
             "--userdata",
-            "zethropol=manual",
+            userdata,
             &desc_arg,
         ],
         config.command_timeout,
@@ -1656,6 +1699,24 @@ pub fn execute_verified_snapshot_creation(
                     ),
                     None,
                 );
+            }
+
+            if verify_btrfs_subvolume {
+                let (subvol_status, _, subvol_id, subvol_err) =
+                    verify_snapshot_btrfs_subvolume(config, created_id);
+                if subvol_status != "pass" || subvol_id.trim().is_empty() {
+                    return OpState::new(
+                        "failed",
+                        "verification-failed",
+                        subvol_err.unwrap_or_else(|| {
+                            format!(
+                                "Snapshot #{} Btrfs subvolume could not be verified.",
+                                created_id
+                            )
+                        }),
+                        None,
+                    );
+                }
             }
 
             OpState::new(
@@ -3136,11 +3197,130 @@ pub fn encode_detection_envelope(report: &DetectionReport) -> HashMap<String, Ow
     envelope
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PreUpdateReservationState {
+    Creating,
+    VerifiedReady,
+    ActiveUpdate,
+    CompletedOk,
+    CompletedFailed,
+    AbortedOrOrphaned,
+}
+
+impl PreUpdateReservationState {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Creating => "creating",
+            Self::VerifiedReady => "verified_ready",
+            Self::ActiveUpdate => "active_update",
+            Self::CompletedOk => "completed_ok",
+            Self::CompletedFailed => "completed_failed",
+            Self::AbortedOrOrphaned => "aborted_or_orphaned",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PreUpdateReservation {
+    pub update_op_id: String,
+    pub recovery_op_id: String,
+    pub snapshot_id: Option<u32>,
+    pub subvolume_id: String,
+    pub owner_sender: String,
+    pub state: PreUpdateReservationState,
+}
+
+fn query_fs_free_percent(path: &Path, timeout: Duration) -> Option<u32> {
+    let target = if path.exists() {
+        path
+    } else {
+        path.parent().unwrap_or(Path::new("/"))
+    };
+    let (code, stdout, _) = run_command_with_timeout(
+        Path::new("df"),
+        &["-Pk", &target.to_string_lossy()],
+        timeout,
+    )
+    .ok()?;
+    if code != 0 {
+        return None;
+    }
+    let data_line = stdout.lines().nth(1)?;
+    let pct_str = data_line
+        .split_whitespace()
+        .find(|f| f.ends_with('%'))?;
+    let used_pct = pct_str.trim_end_matches('%').parse::<u32>().ok()?;
+    Some(100u32.saturating_sub(used_pct))
+}
+
+fn verify_storage_and_retention_headroom(
+    cfg: &DetectionConfig,
+    report: &DetectionReport,
+) -> Result<(), (String, String)> {
+    if cfg.pacman_lock_file.exists() {
+        return Err((
+            "busy".to_string(),
+            format!(
+                "Another package manager transaction is active ('{}' exists).",
+                cfg.pacman_lock_file.display()
+            ),
+        ));
+    }
+
+    let important_count = report.snapshots.iter().filter(|s| s.important).count();
+    if important_count >= cfg.max_important_snapshots {
+        return Err((
+            "storage-limit".to_string(),
+            format!(
+                "Important snapshot count ({}) reached Snapper NUMBER_LIMIT_IMPORTANT ({}); cleanup assessment required before update.",
+                important_count, cfg.max_important_snapshots
+            ),
+        ));
+    }
+
+    let free_pct = cfg
+        .simulated_free_percent
+        .or_else(|| query_fs_free_percent(&cfg.snapshots_dir, cfg.command_timeout));
+    match free_pct {
+        Some(pct) if pct < cfg.min_free_percent => {
+            return Err((
+                "insufficient-space".to_string(),
+                format!(
+                    "Root filesystem free space ({}%) is below required safety margin ({}%) for pre-update and snap-pac snapshots.",
+                    pct, cfg.min_free_percent
+                ),
+            ));
+        }
+        None => {
+            return Err((
+                "unknown".to_string(),
+                "Root filesystem free space could not be verified before update.".to_string(),
+            ));
+        }
+        Some(_) => {}
+    }
+
+    if let Some(boot_used) = cfg.simulated_boot_usage_percent {
+        if boot_used >= 85 {
+            return Err((
+                "insufficient-space".to_string(),
+                format!(
+                    "Boot partition usage ({}%) reached limine-snapper-sync LIMIT_USAGE_PERCENT (85%).",
+                    boot_used
+                ),
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 #[derive(Debug)]
 pub struct RecoveryManager {
     operations: Arc<Mutex<HashMap<String, OpState>>>,
     active_operation: Arc<Mutex<Option<String>>>,
     cancelled_operations: Arc<Mutex<HashSet<String>>>,
+    pre_update_reservation: Arc<Mutex<Option<PreUpdateReservation>>>,
 }
 
 impl RecoveryManager {
@@ -3149,6 +3329,7 @@ impl RecoveryManager {
             operations: Arc::new(Mutex::new(HashMap::new())),
             active_operation: Arc::new(Mutex::new(None)),
             cancelled_operations: Arc::new(Mutex::new(HashSet::new())),
+            pre_update_reservation: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -3486,6 +3667,732 @@ impl RecoveryManager {
             data: HashMap::new(),
         }
     }
+
+    #[allow(dead_code)]
+    pub(crate) fn handle_dbus_disconnect(&self, disconnected_sender: &str) {
+        let mut res_guard = self.pre_update_reservation.lock().unwrap();
+        if let Some(ref mut res) = *res_guard {
+            if res.owner_sender == disconnected_sender
+                && matches!(
+                    res.state,
+                    PreUpdateReservationState::Creating
+                        | PreUpdateReservationState::VerifiedReady
+                        | PreUpdateReservationState::ActiveUpdate
+                )
+            {
+                // D-Bus disconnect does NOT prove any external pacman/arch-update process stopped;
+                // mark reservation uncertain/orphaned and preserve snapshot on disk.
+                res.state = PreUpdateReservationState::AbortedOrOrphaned;
+            }
+        }
+    }
+
+    pub(crate) fn create_pre_update_recovery_point_with_caller(
+        &self,
+        cfg: &DetectionConfig,
+        caller: Option<&str>,
+        update_op_id: String,
+        description: String,
+        emitter: Option<zbus::object_server::SignalEmitter<'static>>,
+    ) -> OperationResult {
+        let trimmed_update_id = update_op_id.trim().to_string();
+        if trimmed_update_id.is_empty()
+            || trimmed_update_id.len() > 128
+            || trimmed_update_id.chars().any(|c| c.is_control() || c.is_whitespace())
+        {
+            return OperationResult {
+                success: false,
+                code: "invalid-argument".to_string(),
+                message: "Valid update operation ID is required.".to_string(),
+                operation_id: String::new(),
+                data: HashMap::new(),
+            };
+        }
+
+        let full_description = match validate_snapshot_description("Pre-Update", &description) {
+            Ok(desc) => desc,
+            Err(msg) => {
+                return OperationResult {
+                    success: false,
+                    code: "invalid-argument".to_string(),
+                    message: msg,
+                    operation_id: String::new(),
+                    data: HashMap::new(),
+                };
+            }
+        };
+
+        {
+            let active = self.active_operation.lock().unwrap();
+            if active.is_some() {
+                return OperationResult {
+                    success: false,
+                    code: "busy".to_string(),
+                    message: "Another recovery operation is already in progress.".to_string(),
+                    operation_id: String::new(),
+                    data: HashMap::new(),
+                };
+            }
+        }
+
+        {
+            let res_guard = self.pre_update_reservation.lock().unwrap();
+            if let Some(ref res) = *res_guard {
+                match res.state {
+                    PreUpdateReservationState::Creating
+                    | PreUpdateReservationState::VerifiedReady
+                    | PreUpdateReservationState::ActiveUpdate => {
+                        return OperationResult {
+                            success: false,
+                            code: "busy".to_string(),
+                            message: format!(
+                                "Another pre-update reservation '{}' is already active ({}).",
+                                res.update_op_id,
+                                res.state.as_str()
+                            ),
+                            operation_id: String::new(),
+                            data: HashMap::new(),
+                        };
+                    }
+                    PreUpdateReservationState::AbortedOrOrphaned => {
+                        return OperationResult {
+                            success: false,
+                            code: "uncertain-state".to_string(),
+                            message: format!(
+                                "Previous pre-update session '{}' ended in an uncertain/orphaned state; resolve recovery state before starting another update.",
+                                res.update_op_id
+                            ),
+                            operation_id: String::new(),
+                            data: HashMap::new(),
+                        };
+                    }
+                    PreUpdateReservationState::CompletedOk
+                    | PreUpdateReservationState::CompletedFailed => {}
+                }
+            }
+        }
+
+        let sender_name = match validate_dbus_sender(caller) {
+            Ok(sender) => sender.to_string(),
+            Err((code, message)) => {
+                return OperationResult {
+                    success: false,
+                    code,
+                    message,
+                    operation_id: String::new(),
+                    data: HashMap::new(),
+                };
+            }
+        };
+
+        if let Err((code, msg)) = check_polkit_authorization(cfg, &sender_name) {
+            return OperationResult {
+                success: false,
+                code,
+                message: msg,
+                operation_id: String::new(),
+                data: HashMap::new(),
+            };
+        }
+
+        let report = detect_recovery_state(cfg);
+        if report.status != DetectionStatus::InstalledAndConfigured
+            || !report.filesystem.eq_ignore_ascii_case("Btrfs")
+            || report.config_name != "root"
+        {
+            return OperationResult {
+                success: false,
+                code: report.status.result_code().to_string(),
+                message: report.status_message,
+                operation_id: String::new(),
+                data: HashMap::new(),
+            };
+        }
+
+        if let Err((code, msg)) = verify_storage_and_retention_headroom(cfg, &report) {
+            return OperationResult {
+                success: false,
+                code,
+                message: msg,
+                operation_id: String::new(),
+                data: HashMap::new(),
+            };
+        }
+
+        let operation_id = uuid::Uuid::new_v4().to_string();
+
+        {
+            let mut active = self.active_operation.lock().unwrap();
+            if active.is_some() {
+                return OperationResult {
+                    success: false,
+                    code: "busy".to_string(),
+                    message: "Another recovery operation is already in progress.".to_string(),
+                    operation_id: String::new(),
+                    data: HashMap::new(),
+                };
+            }
+            *active = Some(operation_id.clone());
+        }
+
+        {
+            let mut res_guard = self.pre_update_reservation.lock().unwrap();
+            *res_guard = Some(PreUpdateReservation {
+                update_op_id: trimmed_update_id.clone(),
+                recovery_op_id: operation_id.clone(),
+                snapshot_id: None,
+                subvolume_id: String::new(),
+                owner_sender: sender_name.clone(),
+                state: PreUpdateReservationState::Creating,
+            });
+        }
+
+        {
+            let mut ops = self.operations.lock().unwrap();
+            ops.insert(
+                operation_id.clone(),
+                OpState {
+                    status: "running".to_string(),
+                    code: "running".to_string(),
+                    message: format!("Creating pre-update recovery point: {}", full_description),
+                    snapshot_id: None,
+                    owner_sender: sender_name,
+                },
+            );
+        }
+
+        let config_name = report.config_name.clone();
+        let desc_clone = format!("{} [update-op:{}]", full_description, trimmed_update_id);
+        let ops_clone = Arc::clone(&self.operations);
+        let active_clone = Arc::clone(&self.active_operation);
+        let cancel_clone = Arc::clone(&self.cancelled_operations);
+        let res_clone = Arc::clone(&self.pre_update_reservation);
+        let op_id_clone = operation_id.clone();
+        let update_op_clone = trimmed_update_id;
+        let cfg_owned = cfg.clone();
+
+        tokio::spawn(async move {
+            let cancel_for_blocking = Arc::clone(&cancel_clone);
+            let op_for_blocking = op_id_clone.clone();
+            let cfg_for_blocking = cfg_owned.clone();
+            let config_name_for_blocking = config_name.clone();
+            let desc_for_blocking = desc_clone.clone();
+
+            let final_state = tokio::task::spawn_blocking(move || {
+                execute_verified_snapshot_creation_with_options(
+                    &cfg_for_blocking,
+                    &config_name_for_blocking,
+                    &desc_for_blocking,
+                    "zethropol=pre-update,important=yes",
+                    true,
+                    Some(&cancel_for_blocking),
+                    Some(&op_for_blocking),
+                )
+            })
+            .await
+            .unwrap_or_else(|e| {
+                OpState::new(
+                    "failed",
+                    "internal-error",
+                    format!("Pre-update recovery worker task failed: {}", e),
+                    None,
+                )
+            });
+
+            let mut verified_subvol_id = String::new();
+            if final_state.status == "ok" {
+                if let Some(snap_id) = final_state.snapshot_id {
+                    let (_, _, subvol_id, _) = verify_snapshot_btrfs_subvolume(&cfg_owned, snap_id);
+                    verified_subvol_id = subvol_id;
+                }
+            }
+
+            {
+                let mut ops = ops_clone.lock().unwrap();
+                if let Some(entry) = ops.get_mut(&op_id_clone) {
+                    if entry.status != "cancelled" {
+                        let owner = entry.owner_sender.clone();
+                        *entry = final_state.clone();
+                        entry.owner_sender = owner;
+                    }
+                }
+            }
+
+            {
+                let mut res_guard = res_clone.lock().unwrap();
+                if let Some(ref mut res) = *res_guard {
+                    if res.update_op_id == update_op_clone
+                        && res.state == PreUpdateReservationState::Creating
+                    {
+                        if final_state.status == "ok" {
+                            if let Some(snap_id) = final_state.snapshot_id {
+                                res.snapshot_id = Some(snap_id);
+                                res.subvolume_id = verified_subvol_id;
+                                res.state = PreUpdateReservationState::VerifiedReady;
+                            } else {
+                                res.state = PreUpdateReservationState::CompletedFailed;
+                            }
+                        } else {
+                            res.state = PreUpdateReservationState::CompletedFailed;
+                        }
+                    }
+                }
+            }
+
+            {
+                let mut active = active_clone.lock().unwrap();
+                if active.as_deref() == Some(op_id_clone.as_str()) {
+                    *active = None;
+                }
+            }
+
+            if final_state.status == "ok" {
+                if let Some(emitter_owned) = emitter {
+                    let updated_report = detect_recovery_state(&cfg_owned);
+                    let points: Vec<RecoveryPoint> = updated_report
+                        .snapshots
+                        .iter()
+                        .filter(|s| s.id > 0)
+                        .map(|s| RecoveryPoint {
+                            id: s.id as u32,
+                            name: format!("Snapshot-{}", s.id),
+                            created_at: s.date.clone(),
+                            description: s.description.clone(),
+                            is_current: s.is_current,
+                        })
+                        .collect();
+                    let _ = RecoveryManager::recovery_state_changed(&emitter_owned, points).await;
+                    let _ = RecoveryManager::state_changed(
+                        &emitter_owned,
+                        encode_detection_envelope(&updated_report),
+                    )
+                    .await;
+                }
+            }
+        });
+
+        OperationResult {
+            success: true,
+            code: "ok".to_string(),
+            message: format!(
+                "Pre-update recovery point creation initiated for: {}",
+                full_description
+            ),
+            operation_id,
+            data: HashMap::new(),
+        }
+    }
+
+    pub(crate) fn verify_pre_update_snapshot_with_caller(
+        &self,
+        cfg: &DetectionConfig,
+        caller: Option<&str>,
+        update_op_id: String,
+        point_id: u32,
+        critical_boot_update: bool,
+    ) -> OperationResult {
+        let sender_name = match validate_dbus_sender(caller) {
+            Ok(sender) => sender,
+            Err((code, message)) => {
+                return OperationResult {
+                    success: false,
+                    code,
+                    message,
+                    operation_id: String::new(),
+                    data: HashMap::new(),
+                };
+            }
+        };
+
+        if point_id == 0 || update_op_id.trim().is_empty() {
+            return OperationResult {
+                success: false,
+                code: "invalid-argument".to_string(),
+                message: "Valid update operation ID and snapshot ID (> 0) are required."
+                    .to_string(),
+                operation_id: String::new(),
+                data: HashMap::new(),
+            };
+        }
+
+        if self.active_operation.lock().unwrap().is_some() {
+            return OperationResult {
+                success: false,
+                code: "busy".to_string(),
+                message: "Another recovery operation is currently active.".to_string(),
+                operation_id: String::new(),
+                data: HashMap::new(),
+            };
+        }
+
+        let (expected_subvol_id, recovery_op_id) = {
+            let res_guard = self.pre_update_reservation.lock().unwrap();
+            let Some(ref res) = *res_guard else {
+                return OperationResult {
+                    success: false,
+                    code: "not-found".to_string(),
+                    message: "No pre-update snapshot reservation exists.".to_string(),
+                    operation_id: String::new(),
+                    data: HashMap::new(),
+                };
+            };
+            if res.owner_sender != sender_name {
+                return OperationResult {
+                    success: false,
+                    code: "permission-denied".to_string(),
+                    message: "Caller is not the owner of this pre-update reservation.".to_string(),
+                    operation_id: res.recovery_op_id.clone(),
+                    data: HashMap::new(),
+                };
+            }
+            if res.update_op_id != update_op_id.trim() || res.snapshot_id != Some(point_id) {
+                return OperationResult {
+                    success: false,
+                    code: "invalid-state".to_string(),
+                    message: "Snapshot ID or update operation ID does not match active reservation."
+                        .to_string(),
+                    operation_id: res.recovery_op_id.clone(),
+                    data: HashMap::new(),
+                };
+            }
+            if res.state != PreUpdateReservationState::VerifiedReady {
+                return OperationResult {
+                    success: false,
+                    code: "invalid-state".to_string(),
+                    message: format!(
+                        "Pre-update reservation cannot be verified in state '{}'.",
+                        res.state.as_str()
+                    ),
+                    operation_id: res.recovery_op_id.clone(),
+                    data: HashMap::new(),
+                };
+            }
+            (res.subvolume_id.clone(), res.recovery_op_id.clone())
+        };
+
+        let report = detect_recovery_state(cfg);
+        if report.status != DetectionStatus::InstalledAndConfigured
+            || !report.filesystem.eq_ignore_ascii_case("Btrfs")
+            || report.config_name != "root"
+        {
+            return OperationResult {
+                success: false,
+                code: report.status.result_code().to_string(),
+                message: report.status_message,
+                operation_id: recovery_op_id,
+                data: HashMap::new(),
+            };
+        }
+
+        if let Err((code, msg)) = verify_storage_and_retention_headroom(cfg, &report) {
+            return OperationResult {
+                success: false,
+                code,
+                message: msg,
+                operation_id: recovery_op_id,
+                data: HashMap::new(),
+            };
+        }
+
+        let snap_present = report
+            .snapshots
+            .iter()
+            .any(|s| s.id == point_id as i32 && !s.is_current);
+        if !snap_present {
+            return OperationResult {
+                success: false,
+                code: "verification-failed".to_string(),
+                message: format!("Pre-update snapshot #{} is no longer present.", point_id),
+                operation_id: recovery_op_id,
+                data: HashMap::new(),
+            };
+        }
+
+        let (subvol_status, _, subvol_id, subvol_err) =
+            verify_snapshot_btrfs_subvolume(cfg, point_id);
+        if subvol_status != "pass" || subvol_id != expected_subvol_id {
+            return OperationResult {
+                success: false,
+                code: "verification-failed".to_string(),
+                message: subvol_err.unwrap_or_else(|| {
+                    format!(
+                        "Pre-update snapshot #{} Btrfs subvolume ID mismatch.",
+                        point_id
+                    )
+                }),
+                operation_id: recovery_op_id,
+                data: HashMap::new(),
+            };
+        }
+
+        let (home_status, home_reason, _) =
+            verify_home_subvolume_isolation(cfg, &report.root_subvolume);
+        if home_status != "pass" {
+            return OperationResult {
+                success: false,
+                code: if home_status == "unknown" {
+                    "unknown".to_string()
+                } else {
+                    "blocked".to_string()
+                },
+                message: home_reason,
+                operation_id: recovery_op_id,
+                data: HashMap::new(),
+            };
+        }
+
+        let (boot_status, boot_reason, _) = verify_boot_mount(cfg);
+        if boot_status != "pass" {
+            return OperationResult {
+                success: false,
+                code: if boot_status == "unknown" {
+                    "unknown".to_string()
+                } else {
+                    "blocked".to_string()
+                },
+                message: boot_reason,
+                operation_id: recovery_op_id,
+                data: HashMap::new(),
+            };
+        }
+
+        if critical_boot_update {
+            let (limine_status, limine_reason, _, entries) = check_limine_integration(cfg);
+            if limine_status != "pass" {
+                return OperationResult {
+                    success: false,
+                    code: if limine_status == "unknown" {
+                        "unknown".to_string()
+                    } else {
+                        "blocked".to_string()
+                    },
+                    message: format!(
+                        "Critical boot update blocked: {}",
+                        limine_reason
+                    ),
+                    operation_id: recovery_op_id,
+                    data: HashMap::new(),
+                };
+            }
+            let (kmod_status, kmod_reason, _) =
+                verify_kernel_modules_compatibility(cfg, point_id, &entries);
+            if kmod_status != "pass" {
+                return OperationResult {
+                    success: false,
+                    code: if kmod_status == "unknown" {
+                        "unknown".to_string()
+                    } else {
+                        "blocked".to_string()
+                    },
+                    message: format!(
+                        "Critical boot update blocked: {}",
+                        kmod_reason
+                    ),
+                    operation_id: recovery_op_id,
+                    data: HashMap::new(),
+                };
+            }
+        }
+
+        let mut data = HashMap::new();
+        data.insert("snapshotId".to_string(), OwnedValue::from(point_id));
+        data.insert(
+            "subvolumeId".to_string(),
+            OwnedValue::from(Str::from(subvol_id)),
+        );
+        data.insert(
+            "homeIsolationStatus".to_string(),
+            OwnedValue::from(Str::from(home_status)),
+        );
+        data.insert(
+            "bootMountStatus".to_string(),
+            OwnedValue::from(Str::from(boot_status)),
+        );
+
+        OperationResult {
+            success: true,
+            code: "ok".to_string(),
+            message: format!("Pre-update snapshot #{} verified for update.", point_id),
+            operation_id: recovery_op_id,
+            data,
+        }
+    }
+
+    pub(crate) fn begin_pre_update_execution_with_caller(
+        &self,
+        cfg: &DetectionConfig,
+        caller: Option<&str>,
+        update_op_id: String,
+        point_id: u32,
+    ) -> OperationResult {
+        let sender_name = match validate_dbus_sender(caller) {
+            Ok(sender) => sender,
+            Err((code, message)) => {
+                return OperationResult {
+                    success: false,
+                    code,
+                    message,
+                    operation_id: String::new(),
+                    data: HashMap::new(),
+                };
+            }
+        };
+
+        if cfg.pacman_lock_file.exists() {
+            return OperationResult {
+                success: false,
+                code: "busy".to_string(),
+                message: format!(
+                    "Another package manager transaction is active ('{}' exists).",
+                    cfg.pacman_lock_file.display()
+                ),
+                operation_id: String::new(),
+                data: HashMap::new(),
+            };
+        }
+
+        let mut res_guard = self.pre_update_reservation.lock().unwrap();
+        let Some(ref mut res) = *res_guard else {
+            return OperationResult {
+                success: false,
+                code: "not-found".to_string(),
+                message: "No pre-update reservation exists.".to_string(),
+                operation_id: String::new(),
+                data: HashMap::new(),
+            };
+        };
+
+        if res.owner_sender != sender_name {
+            return OperationResult {
+                success: false,
+                code: "permission-denied".to_string(),
+                message: "Caller is not the owner of this pre-update reservation.".to_string(),
+                operation_id: res.recovery_op_id.clone(),
+                data: HashMap::new(),
+            };
+        }
+
+        if res.update_op_id != update_op_id.trim() || res.snapshot_id != Some(point_id) {
+            return OperationResult {
+                success: false,
+                code: "invalid-state".to_string(),
+                message: "Snapshot ID or update operation ID does not match active reservation."
+                    .to_string(),
+                operation_id: res.recovery_op_id.clone(),
+                data: HashMap::new(),
+            };
+        }
+
+        if res.state != PreUpdateReservationState::VerifiedReady {
+            return OperationResult {
+                success: false,
+                code: "invalid-state".to_string(),
+                message: format!(
+                    "Pre-update execution cannot begin from state '{}'.",
+                    res.state.as_str()
+                ),
+                operation_id: res.recovery_op_id.clone(),
+                data: HashMap::new(),
+            };
+        }
+
+        res.state = PreUpdateReservationState::ActiveUpdate;
+        OperationResult {
+            success: true,
+            code: "ok".to_string(),
+            message: format!(
+                "Pre-update reservation '{}' transitioned to active_update.",
+                res.update_op_id
+            ),
+            operation_id: res.recovery_op_id.clone(),
+            data: HashMap::new(),
+        }
+    }
+
+    pub(crate) fn complete_pre_update_execution_with_caller(
+        &self,
+        caller: Option<&str>,
+        update_op_id: String,
+        outcome: String,
+    ) -> OperationResult {
+        let sender_name = match validate_dbus_sender(caller) {
+            Ok(sender) => sender,
+            Err((code, message)) => {
+                return OperationResult {
+                    success: false,
+                    code,
+                    message,
+                    operation_id: String::new(),
+                    data: HashMap::new(),
+                };
+            }
+        };
+
+        let mut res_guard = self.pre_update_reservation.lock().unwrap();
+        let Some(ref mut res) = *res_guard else {
+            return OperationResult {
+                success: false,
+                code: "not-found".to_string(),
+                message: "No pre-update reservation exists.".to_string(),
+                operation_id: String::new(),
+                data: HashMap::new(),
+            };
+        };
+
+        if res.owner_sender != sender_name {
+            return OperationResult {
+                success: false,
+                code: "permission-denied".to_string(),
+                message: "Caller is not the owner of this pre-update reservation.".to_string(),
+                operation_id: res.recovery_op_id.clone(),
+                data: HashMap::new(),
+            };
+        }
+
+        if res.update_op_id != update_op_id.trim() {
+            return OperationResult {
+                success: false,
+                code: "invalid-state".to_string(),
+                message: "Update operation ID does not match active reservation.".to_string(),
+                operation_id: res.recovery_op_id.clone(),
+                data: HashMap::new(),
+            };
+        }
+
+        if !matches!(
+            res.state,
+            PreUpdateReservationState::VerifiedReady | PreUpdateReservationState::ActiveUpdate
+        ) {
+            return OperationResult {
+                success: false,
+                code: "invalid-state".to_string(),
+                message: format!(
+                    "Pre-update reservation cannot complete from state '{}'.",
+                    res.state.as_str()
+                ),
+                operation_id: res.recovery_op_id.clone(),
+                data: HashMap::new(),
+            };
+        }
+
+        res.state = match outcome.trim().to_ascii_lowercase().as_str() {
+            "ok" => PreUpdateReservationState::CompletedOk,
+            "failed" => PreUpdateReservationState::CompletedFailed,
+            _ => PreUpdateReservationState::AbortedOrOrphaned,
+        };
+
+        OperationResult {
+            success: true,
+            code: "ok".to_string(),
+            message: format!(
+                "Pre-update reservation '{}' completed in state '{}'; snapshot preserved.",
+                res.update_op_id,
+                res.state.as_str()
+            ),
+            operation_id: res.recovery_op_id.clone(),
+            data: HashMap::new(),
+        }
+    }
 }
 
 #[interface(name = "org.zethropol.Recovery.v1")]
@@ -3612,6 +4519,72 @@ impl RecoveryManager {
         let cfg = DetectionConfig::from_env();
         let caller = header.sender().map(|s| s.to_string());
         Ok(self.rollback_to_point_with_caller(&cfg, caller.as_deref(), point_id))
+    }
+
+    async fn create_pre_update_recovery_point(
+        &self,
+        #[zbus(header)] header: zbus::message::Header<'_>,
+        #[zbus(signal_emitter)] emitter: zbus::object_server::SignalEmitter<'_>,
+        update_op_id: String,
+        description: String,
+    ) -> Result<OperationResult, zbus::fdo::Error> {
+        let cfg = DetectionConfig::from_env();
+        let caller = header.sender().map(|s| s.to_string());
+        Ok(self.create_pre_update_recovery_point_with_caller(
+            &cfg,
+            caller.as_deref(),
+            update_op_id,
+            description,
+            Some(emitter.to_owned()),
+        ))
+    }
+
+    async fn verify_pre_update_snapshot(
+        &self,
+        #[zbus(header)] header: zbus::message::Header<'_>,
+        update_op_id: String,
+        point_id: u32,
+        critical_boot_update: bool,
+    ) -> Result<OperationResult, zbus::fdo::Error> {
+        let cfg = DetectionConfig::from_env();
+        let caller = header.sender().map(|s| s.to_string());
+        Ok(self.verify_pre_update_snapshot_with_caller(
+            &cfg,
+            caller.as_deref(),
+            update_op_id,
+            point_id,
+            critical_boot_update,
+        ))
+    }
+
+    async fn begin_pre_update_execution(
+        &self,
+        #[zbus(header)] header: zbus::message::Header<'_>,
+        update_op_id: String,
+        point_id: u32,
+    ) -> Result<OperationResult, zbus::fdo::Error> {
+        let cfg = DetectionConfig::from_env();
+        let caller = header.sender().map(|s| s.to_string());
+        Ok(self.begin_pre_update_execution_with_caller(
+            &cfg,
+            caller.as_deref(),
+            update_op_id,
+            point_id,
+        ))
+    }
+
+    async fn complete_pre_update_execution(
+        &self,
+        #[zbus(header)] header: zbus::message::Header<'_>,
+        update_op_id: String,
+        outcome: String,
+    ) -> Result<OperationResult, zbus::fdo::Error> {
+        let caller = header.sender().map(|s| s.to_string());
+        Ok(self.complete_pre_update_execution_with_caller(
+            caller.as_deref(),
+            update_op_id,
+            outcome,
+        ))
     }
 
     #[zbus(signal)]
@@ -3814,6 +4787,11 @@ EOF
                 esp_dir,
                 modules_dir,
                 running_kernel: Some("7.3.4-1-cachyos".to_string()),
+                pacman_lock_file: self.path("var/lib/pacman/db.lck"),
+                min_free_percent: 20,
+                max_important_snapshots: 15,
+                simulated_free_percent: Some(65),
+                simulated_boot_usage_percent: Some(35),
                 polkit_policy_file,
                 command_timeout: Duration::from_secs(2),
             }
@@ -4667,5 +5645,298 @@ EOF
             Some(false)
         );
         assert!(data_dict.contains_key("checks"));
+    }
+
+    #[tokio::test]
+    async fn pre_update_1_reservation_lifecycle_and_single_use_transition() {
+        let fx = TestFixture::new();
+        let mut cfg = fx.base_config();
+        let snap_dir = fx.path(".snapshots");
+        fs::create_dir_all(snap_dir.join("15/snapshot/usr/lib/modules/7.3.4-1-cachyos")).unwrap();
+        let args_log = fx.path("snapper-args.log");
+        cfg.snapper_bin = fx.write_exec(
+            "bin/snapper",
+            &format!(
+                r#"echo "$*" >> "{log}"
+if [ "$3" = "create" ]; then
+  echo "15"
+  exit 0
+fi
+cat << 'EOF'
+{{
+  "root": [
+    {{"number":0,"type":"single","date":"","user":"root","cleanup":"","description":"current","userdata":{{}}}},
+    {{"number":12,"type":"single","date":"2026-11-16 12:00:00","user":"root","cleanup":"number","description":"Pre-change","userdata":{{"zethropol":"manual"}}}},
+    {{"number":15,"type":"single","date":"2026-11-18 00:30:00","user":"root","cleanup":"number","description":"Pre-Update","userdata":{{"zethropol":"pre-update","important":"yes"}}}}
+  ]
+}}
+EOF
+"#,
+                log = args_log.display()
+            ),
+        );
+
+        let mgr = RecoveryManager::new();
+        let started = mgr.create_pre_update_recovery_point_with_caller(
+            &cfg,
+            Some(":1.42"),
+            "upd-100".to_string(),
+            "System upgrade".to_string(),
+            None,
+        );
+        assert!(started.success);
+
+        for _ in 0..50 {
+            let st = mgr.pre_update_reservation.lock().unwrap().as_ref().unwrap().state;
+            if st == PreUpdateReservationState::VerifiedReady {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+
+        // Verify userdata tag separates pre-update + important=yes from manual snapshots
+        let logged = fs::read_to_string(&args_log).unwrap();
+        assert!(logged.contains("zethropol=pre-update,important=yes"));
+
+        // Wrong D-Bus owner (:1.99) cannot verify or begin
+        let wrong_owner = mgr.verify_pre_update_snapshot_with_caller(
+            &cfg,
+            Some(":1.99"),
+            "upd-100".to_string(),
+            15,
+            true,
+        );
+        assert!(!wrong_owner.success);
+        assert_eq!(wrong_owner.code, "permission-denied");
+
+        // Fake / mismatched snapshot ID is rejected
+        let fake_id = mgr.verify_pre_update_snapshot_with_caller(
+            &cfg,
+            Some(":1.42"),
+            "upd-100".to_string(),
+            99,
+            true,
+        );
+        assert!(!fake_id.success);
+        assert_eq!(fake_id.code, "invalid-state");
+
+        // Real owner verifies cleanly (VerifyPreUpdateSnapshot does NOT consume reservation)
+        let verified = mgr.verify_pre_update_snapshot_with_caller(
+            &cfg,
+            Some(":1.42"),
+            "upd-100".to_string(),
+            15,
+            true,
+        );
+        assert!(verified.success);
+        assert_eq!(verified.code, "ok");
+
+        // Single-use transition VerifiedReady -> ActiveUpdate
+        let begun = mgr.begin_pre_update_execution_with_caller(
+            &cfg,
+            Some(":1.42"),
+            "upd-100".to_string(),
+            15,
+        );
+        assert!(begun.success);
+        assert_eq!(
+            mgr.pre_update_reservation.lock().unwrap().as_ref().unwrap().state,
+            PreUpdateReservationState::ActiveUpdate
+        );
+
+        // Second begin / replay is rejected
+        let replay = mgr.begin_pre_update_execution_with_caller(
+            &cfg,
+            Some(":1.42"),
+            "upd-100".to_string(),
+            15,
+        );
+        assert!(!replay.success);
+        assert_eq!(replay.code, "invalid-state");
+
+        // Failed update transitions to CompletedFailed and preserves snapshot
+        let completed = mgr.complete_pre_update_execution_with_caller(
+            Some(":1.42"),
+            "upd-100".to_string(),
+            "failed".to_string(),
+        );
+        assert!(completed.success);
+        assert_eq!(
+            mgr.pre_update_reservation.lock().unwrap().as_ref().unwrap().state,
+            PreUpdateReservationState::CompletedFailed
+        );
+    }
+
+    #[tokio::test]
+    async fn pre_update_2_disconnect_and_uncertain_state_blocks_subsequent_updates() {
+        let fx = TestFixture::new();
+        let mut cfg = fx.base_config();
+        let snap_dir = fx.path(".snapshots");
+        fs::create_dir_all(snap_dir.join("15/snapshot/usr/lib/modules/7.3.4-1-cachyos")).unwrap();
+        cfg.snapper_bin = fx.write_exec(
+            "bin/snapper",
+            r#"if [ "$3" = "create" ]; then
+  echo "15"
+  exit 0
+fi
+echo '{"root":[{"number":0,"type":"single","description":"current"},{"number":15,"type":"single","description":"Pre-Update","userdata":{"zethropol":"pre-update","important":"yes"}}]}'
+"#,
+        );
+
+        let mgr = RecoveryManager::new();
+        let started = mgr.create_pre_update_recovery_point_with_caller(
+            &cfg,
+            Some(":1.42"),
+            "upd-200".to_string(),
+            "Disconnect test".to_string(),
+            None,
+        );
+        assert!(started.success);
+        for _ in 0..50 {
+            if mgr.pre_update_reservation.lock().unwrap().as_ref().unwrap().state
+                == PreUpdateReservationState::VerifiedReady
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert!(mgr
+            .begin_pre_update_execution_with_caller(&cfg, Some(":1.42"), "upd-200".to_string(), 15)
+            .success);
+
+        // Simulate D-Bus disconnect while ActiveUpdate -> AbortedOrOrphaned
+        mgr.handle_dbus_disconnect(":1.42");
+        assert_eq!(
+            mgr.pre_update_reservation.lock().unwrap().as_ref().unwrap().state,
+            PreUpdateReservationState::AbortedOrOrphaned
+        );
+
+        // Uncertain state MUST block another update from starting
+        let blocked_next = mgr.create_pre_update_recovery_point_with_caller(
+            &cfg,
+            Some(":1.55"),
+            "upd-201".to_string(),
+            "Should be blocked".to_string(),
+            None,
+        );
+        assert!(!blocked_next.success);
+        assert_eq!(blocked_next.code, "uncertain-state");
+    }
+
+    #[test]
+    fn pre_update_3_coordination_storage_polkit_and_critical_boot_blocks() {
+        let fx = TestFixture::new();
+        let mut cfg = fx.base_config();
+        let mgr = RecoveryManager::new();
+
+        // 1. Polkit denied
+        cfg.pkcheck_bin = fx.write_exec("bin/pkcheck", "echo 'Not authorized' >&2\nexit 1\n");
+        let polkit_denied = mgr.create_pre_update_recovery_point_with_caller(
+            &cfg,
+            Some(":1.42"),
+            "upd-300".to_string(),
+            "Polkit denied".to_string(),
+            None,
+        );
+        assert!(!polkit_denied.success);
+        assert_eq!(polkit_denied.code, "permission-denied");
+        cfg.pkcheck_bin = fx.write_exec("bin/pkcheck", "exit 0\n");
+
+        // 2. Pacman db.lck present -> busy
+        fx.write("var/lib/pacman/db.lck", "");
+        let locked = mgr.create_pre_update_recovery_point_with_caller(
+            &cfg,
+            Some(":1.42"),
+            "upd-301".to_string(),
+            "Pacman locked".to_string(),
+            None,
+        );
+        assert!(!locked.success);
+        assert_eq!(locked.code, "busy");
+        fs::remove_file(fx.path("var/lib/pacman/db.lck")).unwrap();
+
+        // 3. Low disk space -> insufficient-space
+        cfg.simulated_free_percent = Some(10);
+        let low_space = mgr.create_pre_update_recovery_point_with_caller(
+            &cfg,
+            Some(":1.42"),
+            "upd-302".to_string(),
+            "Low space".to_string(),
+            None,
+        );
+        assert!(!low_space.success);
+        assert_eq!(low_space.code, "insufficient-space");
+
+        // 4. /boot >= 85% -> insufficient-space
+        cfg.simulated_free_percent = Some(65);
+        cfg.simulated_boot_usage_percent = Some(86);
+        let boot_full = mgr.create_pre_update_recovery_point_with_caller(
+            &cfg,
+            Some(":1.42"),
+            "upd-303".to_string(),
+            "Boot full".to_string(),
+            None,
+        );
+        assert!(!boot_full.success);
+        assert_eq!(boot_full.code, "insufficient-space");
+
+        // 5. Snapper NUMBER_LIMIT_IMPORTANT reached -> storage-limit
+        cfg.simulated_boot_usage_percent = Some(35);
+        cfg.max_important_snapshots = 1;
+        let limit_hit = mgr.create_pre_update_recovery_point_with_caller(
+            &cfg,
+            Some(":1.42"),
+            "upd-304".to_string(),
+            "Important limit".to_string(),
+            None,
+        );
+        assert!(!limit_hit.success);
+        assert_eq!(limit_hit.code, "storage-limit");
+    }
+
+    #[tokio::test]
+    async fn pre_update_4_critical_boot_update_blocks_on_boot_mismatch() {
+        let fx = TestFixture::new();
+        let mut cfg = fx.base_config();
+        let snap_dir = fx.path(".snapshots");
+        // Snapshot 15 has mismatched kernel modules
+        fs::create_dir_all(snap_dir.join("15/snapshot/usr/lib/modules/6.12.0-old")).unwrap();
+        cfg.snapper_bin = fx.write_exec(
+            "bin/snapper",
+            r#"if [ "$3" = "create" ]; then
+  echo "15"
+  exit 0
+fi
+echo '{"root":[{"number":0,"type":"single","description":"current"},{"number":15,"type":"single","description":"Pre-Update","userdata":{"zethropol":"pre-update","important":"yes"}}]}'
+"#,
+        );
+
+        let mgr = RecoveryManager::new();
+        let started = mgr.create_pre_update_recovery_point_with_caller(
+            &cfg,
+            Some(":1.42"),
+            "upd-400".to_string(),
+            "Critical kernel update".to_string(),
+            None,
+        );
+        assert!(started.success);
+        for _ in 0..50 {
+            if mgr.pre_update_reservation.lock().unwrap().as_ref().unwrap().state
+                == PreUpdateReservationState::VerifiedReady
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+
+        let blocked = mgr.verify_pre_update_snapshot_with_caller(
+            &cfg,
+            Some(":1.42"),
+            "upd-400".to_string(),
+            15,
+            true,
+        );
+        assert!(!blocked.success);
+        assert_eq!(blocked.code, "blocked");
     }
 }

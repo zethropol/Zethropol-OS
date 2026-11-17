@@ -27,7 +27,13 @@ class UpdateInstallerTest : public QObject
         QVERIFY(file.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
     }
 
-    void setup(UpdateInstaller &installer) { installer.m_updater = directory.filePath("updater"); }
+    void setup(UpdateInstaller &installer)
+    {
+        installer.m_updater = directory.filePath("updater");
+        // Existing PTY mock tests opt out of the Recovery D-Bus pre-gate and enable mock updater execution.
+        installer.m_recoveryGateEnabled = false;
+        installer.m_liveExecutionEnabled = true;
+    }
 
 private slots:
     void init()
@@ -253,6 +259,100 @@ printf 'Yeniden başlatma gerçekleştirilmedi.\n'
         QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
         QCOMPARE(installer.status(), "finished");
         QVERIFY(installer.message().contains("başarıyla"));
+    }
+
+    void preUpdateGateDefaultsToLiveExecutionDisabledAndBlocksUpdater()
+    {
+        const QString marker = directory.filePath("updater-ran");
+        script("updater", QString("touch '%1'\nexit 0\n").arg(marker).toUtf8());
+
+        UpdateScanner scanner;
+        QSignalSpy scanned(&scanner, &UpdateScanner::scanFinished);
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 1, 5000);
+
+        UpdateInstaller installer(&scanner);
+        installer.m_updater = directory.filePath("updater");
+        QVERIFY(!installer.liveExecutionEnabled());
+
+        QString recordedOutcome;
+        installer.m_recoveryGate = [](const QString &, bool) {
+            return PreUpdateGateResult{true, QStringLiteral("ok"), QStringLiteral("Verified"), 15};
+        };
+        installer.m_recoveryComplete = [&](const QString &, const QString &outcome) {
+            recordedOutcome = outcome;
+        };
+
+        QSignalSpy finished(&installer, &UpdateInstaller::sessionFinished);
+        installer.start();
+        QCOMPARE(finished.count(), 1);
+        QCOMPARE(installer.status(), "blocked");
+        QCOMPARE(installer.m_verifiedSnapshotId, 15u);
+        QCOMPARE(recordedOutcome, "aborted");
+        QVERIFY(!QFile::exists(marker));
+    }
+
+    void preUpdateGateFailureBlocksUpdaterAndClassifiesCriticalAndIncompleteScans()
+    {
+        const QString marker = directory.filePath("updater-ran-fail");
+        script("updater", QString("touch '%1'\nexit 0\n").arg(marker).toUtf8());
+        script("checkupdates", "printf 'linux-cachyos 7.3.4 -> 7.4.0\\n'\n");
+
+        UpdateScanner scanner;
+        QSignalSpy scanned(&scanner, &UpdateScanner::scanFinished);
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 1, 5000);
+        QVERIFY(UpdateInstaller::isCriticalBootUpdate(&scanner));
+
+        // Also incomplete/error scan must default to critical=true
+        script("checkupdates", "printf 'mesa 1 -> 2\\n'\n");
+        script("paru", "echo 'AUR error' >&2\nexit 2\n");
+        UpdateScanner incompleteScanner;
+        QSignalSpy incompleteScanned(&incompleteScanner, &UpdateScanner::scanFinished);
+        QTRY_COMPARE_WITH_TIMEOUT(incompleteScanned.count(), 1, 5000);
+        QVERIFY(UpdateInstaller::isCriticalBootUpdate(&incompleteScanner));
+
+        UpdateInstaller installer(&scanner);
+        installer.m_updater = directory.filePath("updater");
+        bool sawCriticalFlag = false;
+        installer.m_recoveryGate = [&](const QString &, bool criticalBoot) {
+            sawCriticalFlag = criticalBoot;
+            return PreUpdateGateResult{false, QStringLiteral("blocked"),
+                                       QStringLiteral("Critical boot update blocked: /boot unreadable."), 0};
+        };
+
+        QSignalSpy finished(&installer, &UpdateInstaller::sessionFinished);
+        installer.start();
+        QCOMPARE(finished.count(), 1);
+        QVERIFY(sawCriticalFlag);
+        QCOMPARE(installer.status(), "error");
+        QVERIFY(installer.message().contains("/boot"));
+        QVERIFY(!QFile::exists(marker));
+    }
+
+    void failedIsolatedUpdatePreservesSnapshotAndReportsFailedOutcome()
+    {
+        script("updater", "exit 5\n");
+        UpdateScanner scanner;
+        QSignalSpy scanned(&scanner, &UpdateScanner::scanFinished);
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 1, 5000);
+
+        UpdateInstaller installer(&scanner);
+        installer.m_updater = directory.filePath("updater");
+        installer.m_liveExecutionEnabled = true;
+
+        QString completedOutcome;
+        installer.m_recoveryGate = [](const QString &, bool) {
+            return PreUpdateGateResult{true, QStringLiteral("ok"), QStringLiteral("Verified"), 21};
+        };
+        installer.m_recoveryComplete = [&](const QString &, const QString &outcome) {
+            completedOutcome = outcome;
+        };
+
+        QSignalSpy finished(&installer, &UpdateInstaller::sessionFinished);
+        installer.start();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+        QCOMPARE(installer.status(), "error");
+        QCOMPARE(installer.m_verifiedSnapshotId, 21u);
+        QCOMPARE(completedOutcome, "failed");
     }
 };
 
