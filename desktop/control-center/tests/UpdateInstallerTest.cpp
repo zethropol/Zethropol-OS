@@ -353,6 +353,9 @@ printf 'Yeniden başlatma gerçekleştirilmedi.\n'
         QCOMPARE(installer.status(), "error");
         QCOMPARE(installer.m_verifiedSnapshotId, 21u);
         QCOMPARE(completedOutcome, "failed");
+        QVERIFY(installer.recoveryGuidance().contains("#21"));
+        QVERIFY(installer.recoveryGuidance().contains("/home"));
+        QVERIFY(installer.recoveryGuidance().contains("Otomatik rollback"));
     }
 };
 

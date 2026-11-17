@@ -4393,6 +4393,361 @@ impl RecoveryManager {
             data: HashMap::new(),
         }
     }
+
+    pub(crate) fn assess_post_update_recovery_internal(
+        &self,
+        cfg: &DetectionConfig,
+        update_op_id: String,
+        point_id: u32,
+        update_outcome: String,
+        health_check_ok: bool,
+    ) -> RecoveryPostUpdateAssessment {
+        let trimmed_op_id = update_op_id.trim().to_string();
+        let outcome_norm = update_outcome.trim().to_ascii_lowercase();
+        let pacman_lock_present = cfg.pacman_lock_file.exists();
+        let blocked_actions = vec![
+            "auto-rollback".to_string(),
+            "auto-delete-pacman-lock".to_string(),
+            "auto-delete-snapshot".to_string(),
+            "rollback-home-subvolume".to_string(),
+            "auto-clear-uncertain-state".to_string(),
+        ];
+        let home_compat_warning = "Kullanıcı verileri (/home) root rollback sırasında korunur; ancak sistem paketleri geri alındığında ~/.config ve ~/.local/share altındaki uygulama verilerinde sürüm uyumsuzluğu oluşabilir.".to_string();
+
+        // Mandatory Security Fix B: Never auto-select latest snapshot when point_id == 0
+        if point_id == 0 || trimmed_op_id.is_empty() {
+            return RecoveryPostUpdateAssessment {
+                point_id,
+                update_op_id: trimmed_op_id,
+                assessment_status: "snapshot-unavailable".to_string(),
+                recommended_level: "external-arch-chroot".to_string(),
+                pacman_lock_present,
+                snapshot_verified: false,
+                preflight_can_proceed: false,
+                preflight_overall_status: "unknown".to_string(),
+                home_data_preserved: false,
+                home_compatibility_warning: home_compat_warning,
+                guidance_only: true,
+                rollback_execution_enabled: false,
+                blocked_actions,
+                summary: "Belirli snapshot kimliği (> 0) ve güncelleme oturumu kimliği gereklidir; otomatik snapshot seçimi güvenlik nedeniyle kapalıdır.".to_string(),
+            };
+        }
+
+        let res_snapshot = self.pre_update_reservation.lock().unwrap().clone();
+        let active_running = self.active_operation.lock().unwrap().is_some();
+
+        // Verify binding between point_id and update_op_id
+        let mut reservation_state: Option<PreUpdateReservationState> = None;
+        if let Some(ref res) = res_snapshot {
+            if res.update_op_id != trimmed_op_id || res.snapshot_id != Some(point_id) {
+                return RecoveryPostUpdateAssessment {
+                    point_id,
+                    update_op_id: trimmed_op_id,
+                    assessment_status: "snapshot-unavailable".to_string(),
+                    recommended_level: "external-arch-chroot".to_string(),
+                    pacman_lock_present,
+                    snapshot_verified: false,
+                    preflight_can_proceed: false,
+                    preflight_overall_status: "blocked".to_string(),
+                    home_data_preserved: false,
+                    home_compatibility_warning: home_compat_warning,
+                    guidance_only: true,
+                    rollback_execution_enabled: false,
+                    blocked_actions,
+                    summary: "Belirtilen snapshot kimliği veya güncelleme oturumu aktif/son rezervasyonla eşleşmiyor; kurtarma ilişkisi kanıtlanamadı.".to_string(),
+                };
+            }
+            reservation_state = Some(res.state);
+        } else {
+            // After Recovery restart / power loss, verify on-disk snapshot description tag [update-op:<id>]
+            let report = detect_recovery_state(cfg);
+            let op_marker = format!("[update-op:{}]", trimmed_op_id);
+            let matched_on_disk = report.status == DetectionStatus::InstalledAndConfigured
+                && report.snapshots.iter().any(|s| {
+                    s.id == point_id as i32
+                        && !s.is_current
+                        && s.description.contains(&op_marker)
+                });
+            if !matched_on_disk {
+                return RecoveryPostUpdateAssessment {
+                    point_id,
+                    update_op_id: trimmed_op_id.clone(),
+                    assessment_status: "snapshot-unavailable".to_string(),
+                    recommended_level: "external-arch-chroot".to_string(),
+                    pacman_lock_present,
+                    snapshot_verified: false,
+                    preflight_can_proceed: false,
+                    preflight_overall_status: "unknown".to_string(),
+                    home_data_preserved: false,
+                    home_compatibility_warning: home_compat_warning,
+                    guidance_only: true,
+                    rollback_execution_enabled: false,
+                    blocked_actions,
+                    summary: format!(
+                        "Snapshot #{} ile '{}' güncelleme oturumu arasındaki ilişki disk kayıtlarından doğrulanamadı.",
+                        point_id, trimmed_op_id
+                    ),
+                };
+            }
+        }
+
+        let preflight = run_rollback_preflight(cfg, point_id, active_running);
+        let snapshot_verified = preflight
+            .checks
+            .iter()
+            .find(|c| c.id == "snapshot_exists")
+            .map(|c| c.status == "pass")
+            .unwrap_or(false)
+            && preflight
+                .checks
+                .iter()
+                .find(|c| c.id == "snapshot_subvolume_verified")
+                .map(|c| c.status == "pass")
+                .unwrap_or(false);
+        let home_data_preserved = preflight
+            .checks
+            .iter()
+            .find(|c| c.id == "home_subvolume_isolation")
+            .map(|c| c.status == "pass")
+            .unwrap_or(false);
+
+        if pacman_lock_present {
+            return RecoveryPostUpdateAssessment {
+                point_id,
+                update_op_id: trimmed_op_id,
+                assessment_status: "blocked-lock".to_string(),
+                recommended_level: "external-arch-chroot".to_string(),
+                pacman_lock_present: true,
+                snapshot_verified,
+                preflight_can_proceed: false,
+                preflight_overall_status: preflight.overall_status,
+                home_data_preserved,
+                home_compatibility_warning: home_compat_warning,
+                guidance_only: true,
+                rollback_execution_enabled: false,
+                blocked_actions,
+                summary: "Aktif veya kesilmiş paket yöneticisi kilidi (/var/lib/pacman/db.lck) mevcut; kilit otomatik silinmez ve rollback engellenir.".to_string(),
+            };
+        }
+
+        if !snapshot_verified {
+            return RecoveryPostUpdateAssessment {
+                point_id,
+                update_op_id: trimmed_op_id,
+                assessment_status: "snapshot-unavailable".to_string(),
+                recommended_level: "external-arch-chroot".to_string(),
+                pacman_lock_present: false,
+                snapshot_verified: false,
+                preflight_can_proceed: false,
+                preflight_overall_status: preflight.overall_status,
+                home_data_preserved,
+                home_compatibility_warning: home_compat_warning,
+                guidance_only: true,
+                rollback_execution_enabled: false,
+                blocked_actions,
+                summary: format!(
+                    "Pre-update snapshot #{} veya Btrfs alt hacmi doğrulanamadı; haricî kurtarma / arch-chroot rehberliği gereklidir.",
+                    point_id
+                ),
+            };
+        }
+
+        // Mandatory Security Fix C: AbortedOrOrphaned stays blocked even if db.lck is absent
+        if reservation_state == Some(PreUpdateReservationState::AbortedOrOrphaned) {
+            let rec_level = if preflight.overall_status == "ready" {
+                "snapshot-preflight"
+            } else {
+                "external-arch-chroot"
+            };
+            return RecoveryPostUpdateAssessment {
+                point_id,
+                update_op_id: trimmed_op_id,
+                assessment_status: "blocked-uncertain".to_string(),
+                recommended_level: rec_level.to_string(),
+                pacman_lock_present: false,
+                snapshot_verified: true,
+                preflight_can_proceed: preflight.can_proceed,
+                preflight_overall_status: preflight.overall_status,
+                home_data_preserved,
+                home_compatibility_warning: home_compat_warning,
+                guidance_only: true,
+                rollback_execution_enabled: false,
+                blocked_actions,
+                summary: "Güncelleme oturumu kesintiye uğradı veya belirsiz durumda (AbortedOrOrphaned); db.lck yokluğu işlemin bittiğini kanıtlamaz, belirsiz durum engeli korunur.".to_string(),
+            };
+        }
+
+        // Mandatory Security Fix A: Client-supplied health_check_ok=true / update_outcome="ok" alone
+        // NEVER produces "healthy" without independent server-side health verification.
+        if outcome_norm == "ok" || reservation_state == Some(PreUpdateReservationState::CompletedOk) {
+            if health_check_ok {
+                return RecoveryPostUpdateAssessment {
+                    point_id,
+                    update_op_id: trimmed_op_id,
+                    assessment_status: "unknown".to_string(),
+                    recommended_level: if preflight.overall_status == "ready" {
+                        "none".to_string()
+                    } else {
+                        "external-arch-chroot".to_string()
+                    },
+                    pacman_lock_present: false,
+                    snapshot_verified: true,
+                    preflight_can_proceed: preflight.can_proceed,
+                    preflight_overall_status: preflight.overall_status,
+                    home_data_preserved,
+                    home_compatibility_warning: home_compat_warning,
+                    guidance_only: true,
+                    rollback_execution_enabled: false,
+                    blocked_actions,
+                    summary: format!(
+                        "İstemci güncelleme ve sağlık bildirimini 'ok' iletti, ancak sunucu tarafında bağımsız sistem sağlığı doğrulaması bulunmadığından durum 'unknown' olarak sınıflandırıldı; snapshot #{} korunuyor.",
+                        point_id
+                    ),
+                };
+            }
+        }
+
+        // Failure / cancellation / unknown / failed health check -> conditional guidance only (Fix D)
+        if preflight.overall_status == "ready" && preflight.can_proceed {
+            RecoveryPostUpdateAssessment {
+                point_id,
+                update_op_id: trimmed_op_id,
+                assessment_status: "recovery-recommended".to_string(),
+                recommended_level: "snapshot-preflight".to_string(),
+                pacman_lock_present: false,
+                snapshot_verified: true,
+                preflight_can_proceed: true,
+                preflight_overall_status: preflight.overall_status,
+                home_data_preserved,
+                home_compatibility_warning: home_compat_warning,
+                guidance_only: true,
+                rollback_execution_enabled: false,
+                blocked_actions,
+                summary: format!(
+                    "Güncelleme başarısız veya doğrulanamadı ({}). Snapshot #{} için ön kontrol 'ready', ancak bu durum Limine snapshot boot veya limine-snapper-restore işleminin kesin başarısını garanti etmez; geri dönüş yalnızca kullanıcı onayıyla koşullu seçenektir.",
+                    if outcome_norm.is_empty() { "unknown" } else { &outcome_norm },
+                    point_id
+                ),
+            }
+        } else {
+            RecoveryPostUpdateAssessment {
+                point_id,
+                update_op_id: trimmed_op_id,
+                assessment_status: "external-recovery-required".to_string(),
+                recommended_level: "external-arch-chroot".to_string(),
+                pacman_lock_present: false,
+                snapshot_verified: true,
+                preflight_can_proceed: false,
+                preflight_overall_status: preflight.overall_status.clone(),
+                home_data_preserved,
+                home_compatibility_warning: home_compat_warning,
+                guidance_only: true,
+                rollback_execution_enabled: false,
+                blocked_actions,
+                summary: format!(
+                    "Boot/Limine veya sistem ön kontrolü '{}' durumunda olduğu için yerinde geri dönüş önerilmiyor; koşullu rehberlik olarak haricî Arch kurtarma ortamı veya arch-chroot değerlendirilmelidir.",
+                    preflight.overall_status
+                ),
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RecoveryPostUpdateAssessment {
+    pub point_id: u32,
+    pub update_op_id: String,
+    pub assessment_status: String,
+    pub recommended_level: String,
+    pub pacman_lock_present: bool,
+    pub snapshot_verified: bool,
+    pub preflight_can_proceed: bool,
+    pub preflight_overall_status: String,
+    pub home_data_preserved: bool,
+    pub home_compatibility_warning: String,
+    pub guidance_only: bool,
+    pub rollback_execution_enabled: bool,
+    pub blocked_actions: Vec<String>,
+    pub summary: String,
+}
+
+pub fn encode_post_update_assessment_envelope(
+    assessment: &RecoveryPostUpdateAssessment,
+) -> HashMap<String, OwnedValue> {
+    let mut data: HashMap<String, OwnedValue> = HashMap::new();
+    data.insert("pointId".to_string(), OwnedValue::from(assessment.point_id));
+    data.insert(
+        "updateOperationId".to_string(),
+        OwnedValue::from(Str::from(assessment.update_op_id.clone())),
+    );
+    data.insert(
+        "assessmentStatus".to_string(),
+        OwnedValue::from(Str::from(assessment.assessment_status.clone())),
+    );
+    data.insert(
+        "recommendedLevel".to_string(),
+        OwnedValue::from(Str::from(assessment.recommended_level.clone())),
+    );
+    data.insert(
+        "pacmanLockPresent".to_string(),
+        OwnedValue::from(assessment.pacman_lock_present),
+    );
+    data.insert(
+        "snapshotVerified".to_string(),
+        OwnedValue::from(assessment.snapshot_verified),
+    );
+    data.insert(
+        "preflightCanProceed".to_string(),
+        OwnedValue::from(assessment.preflight_can_proceed),
+    );
+    data.insert(
+        "preflightOverallStatus".to_string(),
+        OwnedValue::from(Str::from(assessment.preflight_overall_status.clone())),
+    );
+    data.insert(
+        "homeDataPreserved".to_string(),
+        OwnedValue::from(assessment.home_data_preserved),
+    );
+    data.insert(
+        "homeCompatibilityWarning".to_string(),
+        OwnedValue::from(Str::from(assessment.home_compatibility_warning.clone())),
+    );
+    data.insert(
+        "guidanceOnly".to_string(),
+        OwnedValue::from(assessment.guidance_only),
+    );
+    data.insert(
+        "rollbackExecutionEnabled".to_string(),
+        OwnedValue::from(assessment.rollback_execution_enabled),
+    );
+    let blocked_arr: Vec<OwnedValue> = assessment
+        .blocked_actions
+        .iter()
+        .map(|s| OwnedValue::from(Str::from(s.clone())))
+        .collect();
+    let arr = Array::from(blocked_arr);
+    if let Ok(val) = OwnedValue::try_from(arr) {
+        data.insert("blockedActions".to_string(), val);
+    }
+    data.insert(
+        "summary".to_string(),
+        OwnedValue::from(Str::from(assessment.summary.clone())),
+    );
+
+    let mut envelope: HashMap<String, OwnedValue> = HashMap::new();
+    envelope.insert("success".to_string(), OwnedValue::from(true));
+    envelope.insert(
+        "code".to_string(),
+        OwnedValue::from(Str::from(assessment.assessment_status.clone())),
+    );
+    envelope.insert(
+        "message".to_string(),
+        OwnedValue::from(Str::from(assessment.summary.clone())),
+    );
+    envelope.insert("operationId".to_string(), OwnedValue::from(Str::from("")));
+    envelope.insert("data".to_string(), OwnedValue::from(data));
+    envelope
 }
 
 #[interface(name = "org.zethropol.Recovery.v1")]
@@ -4585,6 +4940,24 @@ impl RecoveryManager {
             update_op_id,
             outcome,
         ))
+    }
+
+    async fn assess_post_update_recovery(
+        &self,
+        update_op_id: String,
+        point_id: u32,
+        update_outcome: String,
+        health_check_ok: bool,
+    ) -> Result<HashMap<String, OwnedValue>, zbus::fdo::Error> {
+        let cfg = DetectionConfig::from_env();
+        let assessment = self.assess_post_update_recovery_internal(
+            &cfg,
+            update_op_id,
+            point_id,
+            update_outcome,
+            health_check_ok,
+        );
+        Ok(encode_post_update_assessment_envelope(&assessment))
     }
 
     #[zbus(signal)]
@@ -5938,5 +6311,223 @@ echo '{"root":[{"number":0,"type":"single","description":"current"},{"number":15
         );
         assert!(!blocked.success);
         assert_eq!(blocked.code, "blocked");
+    }
+
+    #[test]
+    fn post_update_1_rejects_point_id_zero_and_mismatched_session() {
+        let fx = TestFixture::new();
+        let cfg = fx.base_config();
+        let mgr = RecoveryManager::new();
+
+        // point_id=0 MUST NOT auto-select latest snapshot
+        let zero = mgr.assess_post_update_recovery_internal(
+            &cfg,
+            "upd-900".to_string(),
+            0,
+            "failed".to_string(),
+            false,
+        );
+        assert_eq!(zero.assessment_status, "snapshot-unavailable");
+        assert!(!zero.snapshot_verified);
+        assert!(!zero.preflight_can_proceed);
+        assert!(!zero.rollback_execution_enabled);
+
+        // Snapshot #12 belongs to manual, NOT [update-op:upd-900] -> rejected
+        let wrong_op = mgr.assess_post_update_recovery_internal(
+            &cfg,
+            "upd-900".to_string(),
+            12,
+            "failed".to_string(),
+            false,
+        );
+        assert_eq!(wrong_op.assessment_status, "snapshot-unavailable");
+        assert!(!wrong_op.snapshot_verified);
+    }
+
+    #[tokio::test]
+    async fn post_update_2_client_healthy_claim_and_completed_ok_yield_unknown() {
+        let fx = TestFixture::new();
+        let mut cfg = fx.base_config();
+        let snap_dir = fx.path(".snapshots");
+        fs::create_dir_all(snap_dir.join("15/snapshot/usr/lib/modules/7.3.4-1-cachyos")).unwrap();
+        cfg.snapper_bin = fx.write_exec(
+            "bin/snapper",
+            r#"if [ "$3" = "create" ]; then
+  echo "15"
+  exit 0
+fi
+echo '{"root":[{"number":0,"type":"single","description":"current"},{"number":15,"type":"single","description":"Pre-Update [update-op:upd-901]","userdata":{"zethropol":"pre-update","important":"yes"}}]}'
+"#,
+        );
+
+        let mgr = RecoveryManager::new();
+        assert!(mgr
+            .create_pre_update_recovery_point_with_caller(
+                &cfg,
+                Some(":1.42"),
+                "upd-901".to_string(),
+                "Health check test".to_string(),
+                None,
+            )
+            .success);
+        for _ in 0..50 {
+            if mgr.pre_update_reservation.lock().unwrap().as_ref().unwrap().state
+                == PreUpdateReservationState::VerifiedReady
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert!(mgr
+            .begin_pre_update_execution_with_caller(&cfg, Some(":1.42"), "upd-901".to_string(), 15)
+            .success);
+        assert!(mgr
+            .complete_pre_update_execution_with_caller(
+                Some(":1.42"),
+                "upd-901".to_string(),
+                "ok".to_string()
+            )
+            .success);
+
+        // Mandatory Security Fix A: Client-supplied health_check_ok=true + update_outcome="ok"
+        // MUST NOT fabricate "healthy" without server-side health proof -> "unknown"
+        let fake_healthy = mgr.assess_post_update_recovery_internal(
+            &cfg,
+            "upd-901".to_string(),
+            15,
+            "ok".to_string(),
+            true,
+        );
+        assert_eq!(fake_healthy.assessment_status, "unknown");
+        assert!(fake_healthy.guidance_only);
+        assert!(!fake_healthy.rollback_execution_enabled);
+
+        // CompletedOk but health_check_ok=false -> recovery-recommended (conditional)
+        let failed_health = mgr.assess_post_update_recovery_internal(
+            &cfg,
+            "upd-901".to_string(),
+            15,
+            "ok".to_string(),
+            false,
+        );
+        assert_eq!(failed_health.assessment_status, "recovery-recommended");
+        assert_eq!(failed_health.recommended_level, "snapshot-preflight");
+        assert!(failed_health.home_data_preserved);
+        assert!(!failed_health.home_compatibility_warning.is_empty());
+    }
+
+    #[tokio::test]
+    async fn post_update_3_aborted_orphaned_without_dblock_and_dblock_present() {
+        let fx = TestFixture::new();
+        let mut cfg = fx.base_config();
+        let snap_dir = fx.path(".snapshots");
+        fs::create_dir_all(snap_dir.join("15/snapshot/usr/lib/modules/7.3.4-1-cachyos")).unwrap();
+        cfg.snapper_bin = fx.write_exec(
+            "bin/snapper",
+            r#"if [ "$3" = "create" ]; then
+  echo "15"
+  exit 0
+fi
+echo '{"root":[{"number":0,"type":"single","description":"current"},{"number":15,"type":"single","description":"Pre-Update [update-op:upd-902]","userdata":{"zethropol":"pre-update","important":"yes"}}]}'
+"#,
+        );
+
+        let mgr = RecoveryManager::new();
+        assert!(mgr
+            .create_pre_update_recovery_point_with_caller(
+                &cfg,
+                Some(":1.42"),
+                "upd-902".to_string(),
+                "Disconnect assessment".to_string(),
+                None,
+            )
+            .success);
+        for _ in 0..50 {
+            if mgr.pre_update_reservation.lock().unwrap().as_ref().unwrap().state
+                == PreUpdateReservationState::VerifiedReady
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert!(mgr
+            .begin_pre_update_execution_with_caller(&cfg, Some(":1.42"), "upd-902".to_string(), 15)
+            .success);
+
+        mgr.handle_dbus_disconnect(":1.42");
+        assert!(!cfg.pacman_lock_file.exists());
+
+        // Mandatory Security Fix C: AbortedOrOrphaned stays blocked even when db.lck is absent
+        let orphaned = mgr.assess_post_update_recovery_internal(
+            &cfg,
+            "upd-902".to_string(),
+            15,
+            "unknown".to_string(),
+            false,
+        );
+        assert_eq!(orphaned.assessment_status, "blocked-uncertain");
+        assert!(orphaned
+            .blocked_actions
+            .contains(&"auto-clear-uncertain-state".to_string()));
+
+        // When db.lck is present -> blocked-lock and preflightCanProceed=false
+        fx.write("var/lib/pacman/db.lck", "");
+        let locked = mgr.assess_post_update_recovery_internal(
+            &cfg,
+            "upd-902".to_string(),
+            15,
+            "failed".to_string(),
+            false,
+        );
+        assert_eq!(locked.assessment_status, "blocked-lock");
+        assert!(locked.pacman_lock_present);
+        assert!(!locked.preflight_can_proceed);
+    }
+
+    #[test]
+    fn post_update_4_restart_power_loss_and_unverifiable_boot_guidance() {
+        let fx = TestFixture::new();
+        let mut cfg = fx.base_config();
+        let snap_dir = fx.path(".snapshots");
+        fs::create_dir_all(snap_dir.join("15/snapshot/usr/lib/modules/7.3.4-1-cachyos")).unwrap();
+        cfg.snapper_bin = fx.write_exec(
+            "bin/snapper",
+            r#"echo '{"root":[{"number":0,"type":"single","description":"current"},{"number":15,"type":"single","description":"Pre-Update: power [update-op:upd-903]","userdata":{"zethropol":"pre-update","important":"yes"}}]}'"#,
+        );
+
+        // Fresh RecoveryManager (simulating service restart / power loss)
+        let mgr = RecoveryManager::new();
+
+        // 1. Healthy boot & snapshot on disk -> recovery-recommended (conditional)
+        let restart_ok = mgr.assess_post_update_recovery_internal(
+            &cfg,
+            "upd-903".to_string(),
+            15,
+            "power-loss".to_string(),
+            false,
+        );
+        assert_eq!(restart_ok.assessment_status, "recovery-recommended");
+        assert_eq!(restart_ok.recommended_level, "snapshot-preflight");
+        assert!(restart_ok.guidance_only);
+
+        // 2. /boot & Limine unverifiable (limine.conf missing) -> external-recovery-required, NOT ready
+        fs::remove_file(fx.path("boot/limine.conf")).unwrap();
+        let boot_unverified = mgr.assess_post_update_recovery_internal(
+            &cfg,
+            "upd-903".to_string(),
+            15,
+            "failed".to_string(),
+            false,
+        );
+        assert_eq!(boot_unverified.assessment_status, "external-recovery-required");
+        assert_eq!(boot_unverified.recommended_level, "external-arch-chroot");
+        assert!(!boot_unverified.preflight_can_proceed);
+        assert!(!boot_unverified.rollback_execution_enabled);
+
+        let envelope = encode_post_update_assessment_envelope(&boot_unverified);
+        assert_eq!(
+            envelope.get("code").and_then(|v| v.downcast_ref::<String>().ok()),
+            Some("external-recovery-required".to_string())
+        );
     }
 }

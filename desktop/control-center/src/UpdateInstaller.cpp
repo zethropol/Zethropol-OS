@@ -218,6 +218,7 @@ void UpdateInstaller::start()
 
     m_updateOperationId = QUuid::createUuid().toString(QUuid::WithoutBraces);
     m_verifiedSnapshotId = 0;
+    m_recoveryGuidance.clear();
 
     if (m_recoveryGateEnabled) {
         const bool criticalBoot = isCriticalBootUpdate(m_scanner);
@@ -353,6 +354,15 @@ void UpdateInstaller::finish(const QString &status, const QString &message)
             ? QStringLiteral("ok")
             : (status == QStringLiteral("unknown") ? QStringLiteral("unknown") : QStringLiteral("failed"));
         m_recoveryComplete(m_updateOperationId, outcome);
+    }
+    if (status != QStringLiteral("finished") && m_verifiedSnapshotId > 0) {
+        m_recoveryGuidance = QStringLiteral(
+            "Güncelleme öncesi snapshot #%1 korundu. Kullanıcı verileri (/home) root geri yüklemesinden ayrı korunur, ancak sistem paketi geri alınırsa uygulama verilerinde (~/.config, ~/.local/share) sürüm uyumsuzluğu oluşabilir. Otomatik rollback veya onarım başlatılmadı; kurtarma için Recovery ön kontrolü veya gerekirse haricî kurtarma/arch-chroot kullanılmalıdır.")
+                                 .arg(m_verifiedSnapshotId);
+    } else if (status == QStringLiteral("finished") && m_verifiedSnapshotId > 0) {
+        m_recoveryGuidance = QStringLiteral(
+            "Güncelleme öncesi snapshot #%1 korundu; sistem sağlığı bağımsız olarak doğrulanana kadar otomatik silinmez.")
+                                 .arg(m_verifiedSnapshotId);
     }
     emit changed();
     m_scanner->scan();

@@ -22,6 +22,7 @@ class UpdateInstaller : public QObject
     Q_PROPERTY(QString status READ status NOTIFY changed)
     Q_PROPERTY(QString message READ message NOTIFY changed)
     Q_PROPERTY(QString output READ output NOTIFY outputChanged)
+    Q_PROPERTY(QString recoveryGuidance READ recoveryGuidance NOTIFY changed)
     Q_PROPERTY(bool liveExecutionEnabled READ liveExecutionEnabled CONSTANT)
 
 public:
@@ -30,6 +31,7 @@ public:
     QString status() const { return m_status; }
     QString message() const { return m_message; }
     QString output() const { return m_output; }
+    QString recoveryGuidance() const { return m_recoveryGuidance; }
     bool liveExecutionEnabled() const { return m_liveExecutionEnabled; }
     static bool isCriticalBootUpdate(const UpdateScanner *scanner);
     Q_INVOKABLE void start();
@@ -60,6 +62,7 @@ private:
     bool m_liveExecutionEnabled = false;
     QString m_updateOperationId;
     quint32 m_verifiedSnapshotId = 0;
+    QString m_recoveryGuidance;
     std::function<PreUpdateGateResult(const QString &updateOpId, bool criticalBootUpdate)> m_recoveryGate;
     std::function<void(const QString &updateOpId, const QString &outcome)> m_recoveryComplete;
 };
