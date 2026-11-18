@@ -107,7 +107,7 @@ private:
     QString resolveRecoveryBinary() const
     {
         const QString envBin = qEnvironmentVariable("ZETHROPOL_RECOVERY_SERVICE_BINARY");
-        if (!envBin.isEmpty() && QFile::exists(envBin))
+        if (!envBin.isEmpty())
             return envBin;
         const QString tmpBin = QStringLiteral("/tmp/zethropol-recovery-target/debug/recovery");
         if (QFile::exists(tmpBin))
@@ -149,6 +149,8 @@ private:
         QString snapshotsDir;
         QString limineConfFile;
         QString espDir;
+        QString modulesDir;
+        QString runningKernel;
         QString polkitPolicyFile;
         QString envFile;
         QString createdStateFile;
@@ -164,11 +166,17 @@ private:
         paths.mountinfoFile = writeFile(
             dir,
             QStringLiteral("mountinfo"),
-            QByteArrayLiteral("36 1 0:36 /@ / rw,noatime - btrfs /dev/nvme0n1p2 rw,subvolid=256,subvol=/@\n"));
+            QByteArrayLiteral(
+                "36 1 0:36 /@ / rw,noatime - btrfs /dev/nvme0n1p2 rw,subvolid=256,subvol=/@\n"
+                "37 36 0:36 /@home /home rw,noatime - btrfs /dev/nvme0n1p2 rw,subvolid=257,subvol=/@home\n"
+                "38 36 259:1 / /boot rw,relatime - vfat /dev/nvme0n1p1 rw,fmask=0022,dmask=0022\n"));
         paths.fstabFile = writeFile(
             dir,
             QStringLiteral("fstab"),
-            QByteArrayLiteral("UUID=1111-2222 / btrfs subvol=/@,defaults 0 0\n"));
+            QByteArrayLiteral(
+                "UUID=1111-2222 / btrfs subvol=/@,defaults 0 0\n"
+                "UUID=1111-2222 /home btrfs subvol=/@home,defaults 0 0\n"
+                "UUID=3333-4444 /boot vfat defaults 0 2\n"));
         paths.sysconfFile = writeFile(
             dir,
             QStringLiteral("etc/conf.d/snapper"),
@@ -180,7 +188,10 @@ private:
             QStringLiteral("etc/snapper/configs/root"),
             QByteArrayLiteral("SUBVOLUME=\"/\"\nFSTYPE=\"btrfs\"\nALLOW_USERS=\"\"\n"));
         paths.snapshotsDir = dir.filePath(QStringLiteral(".snapshots"));
-        QDir().mkpath(paths.snapshotsDir + QStringLiteral("/25/snapshot"));
+        paths.runningKernel = QStringLiteral("7.3.4-1-cachyos");
+        paths.modulesDir = dir.filePath(QStringLiteral("usr/lib/modules"));
+        QDir().mkpath(paths.modulesDir + QStringLiteral("/") + paths.runningKernel);
+        QDir().mkpath(paths.snapshotsDir + QStringLiteral("/25/snapshot/usr/lib/modules/") + paths.runningKernel);
         paths.pkcheckBin = writeScript(
             dir,
             QStringLiteral("bin/pkcheck"),
@@ -199,7 +210,20 @@ private:
             QByteArrayLiteral("LIMIT_USAGE_PERCENT=85\n"));
         paths.espDir = dir.filePath(QStringLiteral("boot"));
         QDir().mkpath(paths.espDir);
-        writeFile(dir, QStringLiteral("boot/limine.conf"), QByteArrayLiteral("timeout: 5\n"));
+        writeFile(dir, QStringLiteral("boot/vmlinuz-linux"), QByteArrayLiteral("mock-kernel-image\n"));
+        writeFile(dir, QStringLiteral("boot/initramfs-linux.img"), QByteArrayLiteral("mock-initramfs\n"));
+        writeFile(dir, QStringLiteral("boot/initramfs-linux-fallback.img"), QByteArrayLiteral("mock-fallback-initramfs\n"));
+        writeFile(
+            dir,
+            QStringLiteral("boot/limine.conf"),
+            QByteArrayLiteral(
+                "timeout: 5\n"
+                "/Zethropol OS\n"
+                "    kernel_path: boot:///vmlinuz-linux\n"
+                "    module_path: boot:///initramfs-linux.img\n"
+                "/Zethropol OS (fallback)\n"
+                "    kernel_path: boot:///vmlinuz-linux\n"
+                "    module_path: boot:///initramfs-linux-fallback.img\n"));
         paths.polkitPolicyFile = writeFile(
             dir,
             QStringLiteral("polkit/org.zethropol.recovery.policy"),
@@ -252,6 +276,8 @@ private:
         content += "ZETHROPOL_RECOVERY_SNAPSHOTS_DIR=" + paths.snapshotsDir.toUtf8() + "\n";
         content += "ZETHROPOL_RECOVERY_LIMINE_CONF=" + paths.limineConfFile.toUtf8() + "\n";
         content += "ZETHROPOL_RECOVERY_ESP_DIR=" + paths.espDir.toUtf8() + "\n";
+        content += "ZETHROPOL_RECOVERY_MODULES_DIR=" + paths.modulesDir.toUtf8() + "\n";
+        content += "ZETHROPOL_RECOVERY_RUNNING_KERNEL=" + paths.runningKernel.toUtf8() + "\n";
         content += "ZETHROPOL_RECOVERY_POLKIT_POLICY_FILE=" + paths.polkitPolicyFile.toUtf8() + "\n";
         content += "ZETHROPOL_RECOVERY_TIMEOUT_MS=" + QByteArray::number(paths.timeoutMs) + "\n";
         QFile file(paths.envFile);
@@ -276,6 +302,22 @@ private:
         QTRY_VERIFY_WITH_TIMEOUT(
             QDBusConnection::systemBus().interface()->isServiceRegistered(QStringLiteral("org.zethropol.Recovery")).value(),
             5000);
+
+        const QDBusMessage introspectMsg = QDBusMessage::createMethodCall(
+            QStringLiteral("org.zethropol.Recovery"),
+            QStringLiteral("/org/zethropol/Recovery"),
+            QStringLiteral("org.freedesktop.DBus.Introspectable"),
+            QStringLiteral("Introspect"));
+        const QDBusMessage introspectReply = QDBusConnection::systemBus().call(introspectMsg, QDBus::Block, 3000);
+        const QString xml = introspectReply.arguments().value(0).toString();
+        if (introspectReply.type() != QDBusMessage::ReplyMessage
+            || !xml.contains(QStringLiteral("GetState"))
+            || !xml.contains(QStringLiteral("PreflightRollback"))) {
+            stopRecoveryDaemon();
+            QFAIL(qPrintable(QStringLiteral(
+                "Stale or incompatible recovery binary at '%1': missing org.zethropol.Recovery.v1.GetState/PreflightRollback. "
+                "Rebuild services/recovery or set ZETHROPOL_RECOVERY_SERVICE_BINARY.").arg(bin)));
+        }
     }
 
     void stopRecoveryDaemon()
@@ -1146,7 +1188,33 @@ EOF
         QVERIFY(res.value(QStringLiteral("requiresConfirmation")).toBool());
         QVERIFY(res.value(QStringLiteral("requiresAuthorization")).toBool());
         QCOMPARE(res.value(QStringLiteral("snapshotSubvolumeId")).toString(), QStringLiteral("275"));
-        QCOMPARE(res.value(QStringLiteral("checks")).toList().size(), 10);
+        const QVariantList checks = res.value(QStringLiteral("checks")).toList();
+        QCOMPARE(checks.size(), 13);
+        const QSet<QString> expectedCheckIds = {
+            QStringLiteral("snapper_and_root_config"),
+            QStringLiteral("btrfs_root_filesystem"),
+            QStringLiteral("snapshot_exists"),
+            QStringLiteral("snapshot_belongs_to_root"),
+            QStringLiteral("snapshot_subvolume_verified"),
+            QStringLiteral("snapshot_consistency_accessible"),
+            QStringLiteral("snapshot_type_and_state_eligible"),
+            QStringLiteral("system_and_recovery_preservation"),
+            QStringLiteral("home_subvolume_isolation"),
+            QStringLiteral("boot_mount_verified"),
+            QStringLiteral("limine_boot_integration"),
+            QStringLiteral("kernel_modules_compatibility"),
+            QStringLiteral("authorization_and_confirmation"),
+        };
+        QSet<QString> actualCheckIds;
+        for (const QVariant &entry : checks) {
+            const QVariantMap check = entry.toMap();
+            const QString id = check.value(QStringLiteral("id")).toString();
+            QVERIFY2(!id.isEmpty(), "Preflight check is missing an id");
+            QVERIFY2(!actualCheckIds.contains(id), qPrintable(QStringLiteral("Duplicate preflight check id: %1").arg(id)));
+            actualCheckIds.insert(id);
+            QCOMPARE(check.value(QStringLiteral("status")).toString(), QStringLiteral("pass"));
+        }
+        QCOMPARE(actualCheckIds, expectedCheckIds);
 
         // Verify RollbackToPoint never executes real rollback in this stage
         const QDBusMessage rbMsg = QDBusMessage::createMethodCall(

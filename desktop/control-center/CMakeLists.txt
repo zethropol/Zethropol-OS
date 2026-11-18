@@ -124,8 +124,10 @@ if(BUILD_TESTING)
     target_include_directories(control_center_recovery_test PRIVATE src)
     target_link_libraries(control_center_recovery_test PRIVATE
         Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::DBus Qt6::Test)
+    set(RECOVERY_BINARY "${CMAKE_CURRENT_SOURCE_DIR}/../../services/recovery/target/debug/recovery"
+        CACHE FILEPATH "Path to the compiled zethropol recovery service binary")
     target_compile_definitions(control_center_recovery_test PRIVATE
-        RECOVERY_BINARY="${CMAKE_CURRENT_SOURCE_DIR}/../../services/recovery/target/debug/recovery")
+        RECOVERY_BINARY="${RECOVERY_BINARY}")
     add_dependencies(control_center_recovery_test control_center)
     add_test(NAME control_center_recovery_test
         COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/tests/hardware-private-bus.sh
