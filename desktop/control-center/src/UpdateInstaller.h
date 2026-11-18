@@ -24,6 +24,7 @@ class UpdateInstaller : public QObject
     Q_PROPERTY(QString output READ output NOTIFY outputChanged)
     Q_PROPERTY(QString recoveryGuidance READ recoveryGuidance NOTIFY changed)
     Q_PROPERTY(bool liveExecutionEnabled READ liveExecutionEnabled CONSTANT)
+    Q_PROPERTY(bool officialRepoReady READ officialRepoReady NOTIFY changed)
 
 public:
     explicit UpdateInstaller(UpdateScanner *scanner, QObject *parent = nullptr);
@@ -33,6 +34,8 @@ public:
     QString output() const { return m_output; }
     QString recoveryGuidance() const { return m_recoveryGuidance; }
     bool liveExecutionEnabled() const { return m_liveExecutionEnabled; }
+    bool officialRepoReady() const;
+    static bool isOfficialRepoScanComplete(const UpdateScanner *scanner, QString *reason = nullptr);
     static bool isCriticalBootUpdate(const UpdateScanner *scanner);
     Q_INVOKABLE void start();
     Q_INVOKABLE void sendInput(const QString &text);

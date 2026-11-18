@@ -6,6 +6,7 @@
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -421,6 +422,142 @@ printf 'Yeniden başlatma gerçekleştirilmedi.\n'
         QVERIFY(scanner.busy());
         busyCheckInstaller.start();
         QCOMPARE(busyCheckInstaller.status(), "idle");
+    }
+
+    void officialRepoScanIntegrityGatesInstallAndUi()
+    {
+        const QString marker = directory.filePath("updater-ran-bad-official");
+        script("updater", QString("touch '%1'\nexit 0\n").arg(marker).toUtf8());
+
+        // 1. Official repo error + AUR/Flatpak updates present -> must block
+        script("checkupdates", "printf 'sync db failed\\n' >&2\nexit 1\n");
+        script("paru", "printf 'aurpkg 1 -> 2\\n'\n");
+        script("flatpak", "printf 'org.app.Test\\tTest\\t1.2\\n'\n");
+
+        UpdateScanner scanner;
+        QSignalSpy scanned(&scanner, &UpdateScanner::scanFinished);
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 1, 5000);
+        QVERIFY(scanner.hasUpdates());
+
+        UpdateInstaller installer(&scanner);
+        installer.m_updater = directory.filePath("updater");
+        installer.m_liveExecutionEnabled = true;
+        QVERIFY(!installer.officialRepoReady());
+
+        bool gateCalled = false;
+        installer.m_recoveryGate = [&](const QString &, bool) {
+            gateCalled = true;
+            return PreUpdateGateResult{true, QStringLiteral("ok"), QStringLiteral("Verified"), 41};
+        };
+
+        QSignalSpy finished(&installer, &UpdateInstaller::sessionFinished);
+        installer.start();
+        QCOMPARE(finished.count(), 1);
+        QCOMPARE(installer.status(), "error");
+        QVERIFY(installer.message().contains("Resmî depo"));
+        QVERIFY(!gateCalled);
+        QVERIFY(!QFile::exists(marker));
+
+        // Verify QML button is disabled and notice is visible when official repo is not ready
+        QQmlEngine engine;
+        QQmlComponent component(&engine, QUrl::fromLocalFile(UPDATE_REPORT_QML));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QObject> root(component.createWithInitialProperties(
+            {{"scanner", QVariant::fromValue(&scanner)}, {"installer", QVariant::fromValue(&installer)}}));
+        QVERIFY(root);
+        auto *startButton = root->findChild<QObject *>("startUpdateInstallation");
+        auto *noticeLabel = root->findChild<QObject *>("officialRepoGateNotice");
+        QVERIFY(startButton);
+        QVERIFY(noticeLabel);
+        QVERIFY(!startButton->property("enabled").toBool());
+        QVERIFY(noticeLabel->property("visible").toBool());
+
+        // 2. Official repo warning -> must block
+        script("checkupdates", "printf 'malformed line\\n'\n");
+        scanner.scan();
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 2, 5000);
+        QVERIFY(!installer.officialRepoReady());
+        installer.start();
+        QCOMPARE(finished.count(), 2);
+        QCOMPARE(installer.status(), "error");
+        QVERIFY(!gateCalled);
+        QVERIFY(!QFile::exists(marker));
+
+        // 3. Official repo pending (before scan finishes) -> officialRepoReady is false and updater never runs
+        script("checkupdates", "exit 2\n");
+        UpdateScanner pendingScanner;
+        UpdateInstaller pendingInstaller(&pendingScanner);
+        pendingInstaller.m_updater = directory.filePath("updater");
+        pendingInstaller.m_liveExecutionEnabled = true;
+        QVERIFY(!pendingInstaller.officialRepoReady());
+        QVERIFY(!UpdateInstaller::isOfficialRepoScanComplete(&pendingScanner));
+        pendingInstaller.start();
+        QCOMPARE(pendingInstaller.status(), "idle");
+        QVERIFY(!QFile::exists(marker));
+    }
+
+    void skipAutosnapIsStrippedAndExitZeroErrorsNeverReportOk()
+    {
+        // 1. SKIP_AUTOSNAP=1 in parent env must be stripped; exit 0 + verified error pattern -> error/failed
+        qputenv("SKIP_AUTOSNAP", "1");
+        const auto envGuard = qScopeGuard([] { qunsetenv("SKIP_AUTOSNAP"); });
+
+        script("updater", R"SH(
+if [ -n "${SKIP_AUTOSNAP:-}" ]; then
+    echo "LEAKED_SKIP_AUTOSNAP"
+    exit 0
+fi
+printf 'Updating Packages...\n'
+printf 'error: failed to commit transaction (conflicting files)\n'
+printf 'An error has occurred during the update process\n'
+exit 0
+)SH");
+
+        UpdateScanner scanner;
+        QSignalSpy scanned(&scanner, &UpdateScanner::scanFinished);
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 1, 5000);
+
+        UpdateInstaller installer(&scanner);
+        QVERIFY(!installer.liveExecutionEnabled());
+        installer.m_updater = directory.filePath("updater");
+        installer.m_liveExecutionEnabled = true;
+        QString outcome;
+        installer.m_recoveryGate = [](const QString &, bool) {
+            return PreUpdateGateResult{true, QStringLiteral("ok"), QStringLiteral("Verified"), 51};
+        };
+        installer.m_recoveryComplete = [&](const QString &, const QString &o) { outcome = o; };
+
+        QSignalSpy finished(&installer, &UpdateInstaller::sessionFinished);
+        installer.start();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+        QVERIFY(!installer.output().contains("LEAKED_SKIP_AUTOSNAP"));
+        QCOMPARE(installer.status(), "error");
+        QCOMPARE(outcome, "failed");
+
+        // 2. Normal exit 0 with benign words containing "error" -> finished/ok (no false positive)
+        script("updater", R"SH(
+printf 'Upgrading liberror 1.0 -> 1.1\n'
+printf 'The update has been applied\n'
+exit 0
+)SH");
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 2, 5000);
+        QString okOutcome;
+        installer.m_recoveryComplete = [&](const QString &, const QString &o) { okOutcome = o; };
+        installer.start();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 2, 5000);
+        QCOMPARE(installer.status(), "finished");
+        QCOMPARE(okOutcome, "ok");
+
+        // 3. Crash / non-normal exit of session tool -> unknown (never ok)
+        script("crash-session", "kill -9 $$\n");
+        installer.m_sessionTool = directory.filePath("crash-session");
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 3, 5000);
+        QString unknownOutcome;
+        installer.m_recoveryComplete = [&](const QString &, const QString &o) { unknownOutcome = o; };
+        installer.start();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 3, 5000);
+        QCOMPARE(installer.status(), "unknown");
+        QCOMPARE(unknownOutcome, "unknown");
     }
 };
 

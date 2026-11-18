@@ -121,6 +121,46 @@ void runDefaultRecoveryComplete(const QString &updateOpId, const QString &outcom
 
 } // namespace
 
+bool UpdateInstaller::officialRepoReady() const
+{
+    return isOfficialRepoScanComplete(m_scanner);
+}
+
+bool UpdateInstaller::isOfficialRepoScanComplete(const UpdateScanner *scanner, QString *reason)
+{
+    if (!scanner) {
+        if (reason)
+            *reason = QStringLiteral("Güncelleme tarayıcısı kullanılamıyor; resmî depo durumu doğrulanamadı.");
+        return false;
+    }
+
+    const QVariantList reports = scanner->reports();
+    if (reports.isEmpty()) {
+        if (reason)
+            *reason = QStringLiteral("Resmî depo tarama raporu eksik; tam sistem yükseltmesi başlatılamaz.");
+        return false;
+    }
+
+    const QVariantMap official = reports.at(0).toMap();
+    const QString state = official.value(QStringLiteral("state")).toString();
+    if (state != QStringLiteral("complete")) {
+        if (reason) {
+            const QString detail = official.value(QStringLiteral("detail")).toString().trimmed();
+            if (state == QStringLiteral("pending") || state == QStringLiteral("scanning")) {
+                *reason = QStringLiteral("Resmî depo taraması henüz tamamlanmadı; tam sistem yükseltmesi başlatılamaz.");
+            } else if (state == QStringLiteral("disabled")) {
+                *reason = QStringLiteral("Resmî depo taraması kapalı veya eksik; tam sistem yükseltmesi doğrulanamıyor.");
+            } else {
+                *reason = detail.isEmpty()
+                    ? QStringLiteral("Resmî depo taraması doğrulanamadı (%1); kısmi veya kör yükseltmeye izin verilmiyor.").arg(state)
+                    : QStringLiteral("Resmî depo taraması doğrulanamadı (%1); kısmi veya kör yükseltmeye izin verilmiyor. %2").arg(state, detail);
+            }
+        }
+        return false;
+    }
+    return true;
+}
+
 bool UpdateInstaller::isCriticalBootUpdate(const UpdateScanner *scanner)
 {
     if (!scanner)
@@ -162,6 +202,9 @@ UpdateInstaller::UpdateInstaller(UpdateScanner *scanner, QObject *parent)
     if (m_updater.isEmpty())
         m_updater = QStandardPaths::findExecutable("cachy-update");
 
+    if (m_scanner)
+        connect(m_scanner, &UpdateScanner::changed, this, &UpdateInstaller::changed);
+
     m_process.setProcessChannelMode(QProcess::MergedChannels);
     connect(&m_process, &QProcess::readyReadStandardOutput, this, &UpdateInstaller::readOutput);
     connect(&m_process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
@@ -175,12 +218,25 @@ UpdateInstaller::UpdateInstaller(UpdateScanner *scanner, QObject *parent)
         if (state != QProcess::NormalExit) {
             finish("unknown", "Kurulum işlemi beklenmedik biçimde sonlandı. Bazı paketler değişmiş olabilir; işlem çıktısını ve yenilenen raporu inceleyin.");
         } else if (code == 0) {
-            if (m_output.contains(QRegularExpression(QStringLiteral("(?:reboot required|yeniden başlatma gerekiyor|rebooting to finalize|yeniden başlatmayı düşünün)"), QRegularExpression::CaseInsensitiveOption))) {
+            static const QRegularExpression verifiedErrorRe(
+                QStringLiteral("(?:an error has occurred during the update process"
+                               "|güncelleme sırasında bir hata oluştu"
+                               "|failed to commit transaction"
+                               "|failed to prepare transaction"
+                               "|could not satisfy dependencies"
+                               "|unable to lock database"
+                               "|invalid or corrupted package"
+                               "|failed to synchronize all databases"
+                               "|işlem gerçekleştirilemedi"
+                               "|bağımlılıklar karşılanamadı"
+                               "|veritabanı kilitlenemedi)"),
+                QRegularExpression::CaseInsensitiveOption);
+            if (verifiedErrorRe.match(m_output).hasMatch()) {
+                finish("error", "Kurulum çıktısında işlem hatası tespit edildi. Bazı paketler değişmiş veya güncellenmemiş olabilir; işlem çıktısını ve yenilenen raporu inceleyin.");
+            } else if (m_output.contains(QRegularExpression(QStringLiteral("(?:reboot required|yeniden başlatma gerekiyor|rebooting to finalize|yeniden başlatmayı düşünün)"), QRegularExpression::CaseInsensitiveOption))) {
                 finish("finished", "Güncellemeler uygulandı. Çekirdek güncellemesinin tamamlanması için sistemi yeniden başlatmanız gerekir.");
-            } else if (m_output.contains(QRegularExpression(QStringLiteral("(?:an error has occurred during the update process|güncelleme sırasında bir hata oluştu)"), QRegularExpression::CaseInsensitiveOption))) {
-                finish("finished", "Kurulum tamamlandı, ancak bazı kaynaklarda hata oluştu. İşlem çıktısını ve yenilenen raporu inceleyin.");
             } else if (m_output.contains(QRegularExpression(QStringLiteral("(?:the update has been applied|güncelleme uygulandı)"), QRegularExpression::CaseInsensitiveOption))) {
-                finish("finished", "Güncellemeler başarıyla kuruldu. Paket durumu yenilenen rapordan kontrol edilebilir.");
+                finish("finished", "Güncellemeler başarıyla kuruldu. Paket durumu yenilenen raporu inceleyerek kontrol edilebilir.");
             } else {
                 finish("finished", "Kurulum oturumu sona erdi. Paket durumunu yenilenen rapordan ve işlem çıktısından kontrol edin.");
             }
@@ -213,6 +269,15 @@ void UpdateInstaller::start()
         m_status = "error";
         m_message = "Kurulum için gerekli sistem araçları bulunamadı.";
         emit changed();
+        return;
+    }
+
+    QString officialRepoReason;
+    if (!isOfficialRepoScanComplete(m_scanner, &officialRepoReason)) {
+        m_status = QStringLiteral("error");
+        m_message = officialRepoReason;
+        emit changed();
+        emit sessionFinished();
         return;
     }
 
@@ -254,6 +319,7 @@ void UpdateInstaller::start()
     m_decoder = QStringDecoder(QStringDecoder::Utf8);
     emit outputChanged();
     auto environment = QProcessEnvironment::systemEnvironment();
+    environment.remove(QStringLiteral("SKIP_AUTOSNAP"));
     environment.insert("TERM", "dumb");
     environment.insert("NO_COLOR", "1");
     m_process.setProcessEnvironment(environment);

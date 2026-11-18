@@ -46,7 +46,7 @@ Item {
             Button {
                 objectName: "startUpdateInstallation"
                 text: installer.busy ? "Kurulum sürüyor…" : "Güncellemeleri kur…"
-                enabled: !scanner.busy && !installer.busy && scanner.hasUpdates
+                enabled: !scanner.busy && !installer.busy && scanner.hasUpdates && installer.officialRepoReady
                 onClicked: installConfirmation.open()
             }
         }
@@ -94,6 +94,17 @@ Item {
             textFormat: Text.PlainText
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
+        }
+
+        Label {
+            objectName: "officialRepoGateNotice"
+            color: reportPage.reportText
+            text: "Resmî depo taraması tamamlanmadan kısmi veya kör sistem yükseltmesi başlatılamaz. Taramayı yenileyin."
+            visible: !scanner.busy && scanner.hasUpdates && !installer.officialRepoReady
+            textFormat: Text.PlainText
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            opacity: 0.85
         }
 
         ScrollView {
@@ -364,7 +375,7 @@ Item {
             Button {
                 objectName: "confirmUpdateInstallation"
                 text: "Kurulumu başlat"
-                enabled: !scanner.busy && !installer.busy && scanner.hasUpdates
+                enabled: !scanner.busy && !installer.busy && scanner.hasUpdates && installer.officialRepoReady
                 onClicked: {
                     installConfirmation.close()
                     installer.start()
