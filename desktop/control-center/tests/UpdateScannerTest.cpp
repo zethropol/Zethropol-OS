@@ -55,14 +55,19 @@ private slots:
         script("paru", "printf 'aur:%s\\n' \"$*\" >> '" + log
                + "'\nprintf 'browser 1-1 -> 2-1\\nignored 1 -> 2 [ignored]\\n'\n");
         script("flatpak", "printf 'flatpak:%s\\n' \"$*\" >> '" + log
-               + "'\nprintf 'org.app.Editor\\tEditor\\t2.0\\norg.app.Runtime\\tRuntime\\t\\n'\n");
+               + "'\nprintf 'org.app.Editor\\tEditor\\t2.0\\norg.app.Runtime\\tRuntime\\n'\n");
         UpdateScanner scanner;
         configure(scanner);
         QSignalSpy finished(&scanner, &UpdateScanner::scanFinished);
         QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
         QCOMPARE(report(scanner, 0)["packages"].toList().size(), 1);
         QCOMPARE(report(scanner, 1)["packages"].toList().size(), 1);
-        QCOMPARE(report(scanner, 2)["packages"].toList().size(), 2);
+        const auto flatpakPackages = report(scanner, 2)["packages"].toList();
+        QCOMPARE(flatpakPackages.size(), 2);
+        QCOMPARE(flatpakPackages[0].toMap()["newVersion"].toString(), "2.0");
+        QCOMPARE(flatpakPackages[1].toMap()["identifier"].toString(), "org.app.Runtime");
+        QCOMPARE(flatpakPackages[1].toMap()["name"].toString(), "Runtime");
+        QCOMPARE(flatpakPackages[1].toMap()["newVersion"].toString(), "");
         QCOMPARE(report(scanner, 2)["state"].toString(), "complete");
         QVERIFY(!scanner.completedAt().isEmpty());
         QFile file(QString::fromUtf8(log));
@@ -157,6 +162,54 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
         QCOMPARE(report(scanner, 1)["state"].toString(), "error");
         QVERIFY(report(scanner, 1)["detail"].toString().contains("aur connection refused"));
+    }
+
+    void flatpakTwoColumnRuntimeAndMalformedOutputsAreClassifiedAccurately()
+    {
+        script("flatpak", "printf 'org.kde.Platform\\tKDE Application Platform\\n'\n");
+        UpdateScanner scanner;
+        configure(scanner);
+        QSignalSpy finished(&scanner, &UpdateScanner::scanFinished);
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+        QCOMPARE(report(scanner, 2)["state"].toString(), "complete");
+        QCOMPARE(report(scanner, 2)["detail"].toString(), "1 güncelleme bulundu.");
+        const auto packages = report(scanner, 2)["packages"].toList();
+        QCOMPARE(packages.size(), 1);
+        QCOMPARE(packages[0].toMap()["identifier"].toString(), "org.kde.Platform");
+        QCOMPARE(packages[0].toMap()["name"].toString(), "KDE Application Platform");
+        QCOMPARE(packages[0].toMap()["newVersion"].toString(), "");
+
+        script("flatpak", "exit 0\n");
+        scanner.scan();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 2, 5000);
+        QCOMPARE(report(scanner, 2)["state"].toString(), "complete");
+        QCOMPARE(report(scanner, 2)["detail"].toString(), "Güncelleme bulunamadı.");
+        QVERIFY(report(scanner, 2)["packages"].toList().isEmpty());
+
+        script("flatpak", "printf 'single-column\\n'\n");
+        scanner.scan();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 3, 5000);
+        QCOMPARE(report(scanner, 2)["state"].toString(), "warning");
+        QVERIFY(report(scanner, 2)["detail"].toString().contains("eksik olabilir"));
+        QVERIFY(report(scanner, 2)["packages"].toList().isEmpty());
+
+        script("flatpak", "printf '\\tMissing Id\\t1.0\\n'\n");
+        scanner.scan();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 4, 5000);
+        QCOMPARE(report(scanner, 2)["state"].toString(), "warning");
+        QVERIFY(report(scanner, 2)["packages"].toList().isEmpty());
+
+        script("flatpak", "printf 'org.app.Extra\\tExtra\\t1.0\\textra\\n'\n");
+        scanner.scan();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 5, 5000);
+        QCOMPARE(report(scanner, 2)["state"].toString(), "warning");
+        QVERIFY(report(scanner, 2)["packages"].toList().isEmpty());
+
+        script("flatpak", "printf 'error: Unable to load summary from remote flathub\\n' >&2\nexit 1\n");
+        scanner.scan();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 6, 5000);
+        QCOMPARE(report(scanner, 2)["state"].toString(), "error");
+        QVERIFY(report(scanner, 2)["detail"].toString().contains("Unable to load summary"));
     }
 };
 

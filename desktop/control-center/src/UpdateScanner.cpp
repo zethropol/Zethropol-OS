@@ -190,12 +190,15 @@ void UpdateScanner::finish(int index, QProcess *process, int exitCode,
                 continue;
             if (index == 2) {
                 const auto fields = line.split('\t');
-                if (fields.size() != 3 || fields[0].trimmed().isEmpty()) {
+                if (fields.size() < 2 || fields.size() > 3 || fields[0].trimmed().isEmpty()) {
                     unparsed = true;
                     continue;
                 }
-                packages.append(QVariantMap{{"name", fields[1].isEmpty() ? fields[0] : fields[1]},
-                    {"identifier", fields[0]}, {"currentVersion", ""}, {"newVersion", fields[2].trimmed()}});
+                const QString id = fields[0].trimmed();
+                const QString name = fields[1].trimmed();
+                const QString version = fields.size() == 3 ? fields[2].trimmed() : QString();
+                packages.append(QVariantMap{{"name", name.isEmpty() ? id : name},
+                    {"identifier", id}, {"currentVersion", ""}, {"newVersion", version}});
             } else {
                 // Match the update tool's exclusion of ignored AUR updates.
                 if (index == 1 && line.trimmed().endsWith("[ignored]"))
