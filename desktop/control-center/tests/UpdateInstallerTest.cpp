@@ -559,6 +559,80 @@ exit 0
         QCOMPARE(installer.status(), "unknown");
         QCOMPARE(unknownOutcome, "unknown");
     }
+
+    void aurAndFlatpakErrorsAndIncompleteScansAreClassifiedSafely()
+    {
+        // 1. Official repo succeeds, AUR build error with exit 0 -> error, Recovery failed
+        script("checkupdates", "printf 'corepkg 1.0 -> 1.1\\n'\n");
+        script("paru", "printf 'aurpkg 1.0 -> 2.0\\n'\n");
+        script("flatpak", "exit 0\n");
+        script("updater", R"SH(
+printf 'Updating Packages...\n'
+printf 'Updating AUR Packages...\n'
+printf '==> ERROR: A failure occurred in build().\n'
+exit 0
+)SH");
+
+        UpdateScanner scanner;
+        QSignalSpy scanned(&scanner, &UpdateScanner::scanFinished);
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 1, 5000);
+
+        UpdateInstaller installer(&scanner);
+        QVERIFY(!installer.liveExecutionEnabled());
+        installer.m_updater = directory.filePath("updater");
+        installer.m_liveExecutionEnabled = true;
+
+        QString aurOutcome;
+        installer.m_recoveryGate = [](const QString &, bool) {
+            return PreUpdateGateResult{true, QStringLiteral("ok"), QStringLiteral("Verified"), 61};
+        };
+        installer.m_recoveryComplete = [&](const QString &, const QString &o) { aurOutcome = o; };
+
+        QSignalSpy finished(&installer, &UpdateInstaller::sessionFinished);
+        installer.start();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+        QCOMPARE(installer.status(), "error");
+        QCOMPARE(aurOutcome, "failed");
+
+        // 2. Official repo succeeds, Flatpak update error with exit 0 -> error, Recovery failed
+        script("updater", R"SH(
+printf 'Updating Packages...\n'
+printf 'Updating Flatpak Packages...\n'
+printf 'error: Failed to update org.kde.Platform: remote failure\n'
+exit 0
+)SH");
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 2, 5000);
+        QString flatpakOutcome;
+        installer.m_recoveryComplete = [&](const QString &, const QString &o) { flatpakOutcome = o; };
+        installer.start();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 2, 5000);
+        QCOMPARE(installer.status(), "error");
+        QCOMPARE(flatpakOutcome, "failed");
+
+        // 3. Clean exit 0 with benign "error" in package/app name -> finished/ok (no false positive)
+        script("updater", R"SH(
+printf 'Updating Packages...\n'
+printf 'Upgrading liberror-tools 1.0 -> 1.1\n'
+printf 'Updating org.example.ErrorViewer\n'
+printf 'The update has been applied\n'
+exit 0
+)SH");
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 3, 5000);
+        QString cleanOutcome;
+        installer.m_recoveryComplete = [&](const QString &, const QString &o) { cleanOutcome = o; };
+        installer.start();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 3, 5000);
+        QCOMPARE(installer.status(), "finished");
+        QCOMPARE(cleanOutcome, "ok");
+
+        // 4. Official repo complete, AUR/Flatpak scan error or warning -> conservative critical classification preserved
+        script("paru", "printf 'aur unreachable\\n' >&2\nexit 1\n");
+        script("flatpak", "printf 'malformed-line\\n'\n");
+        scanner.scan();
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 5, 5000);
+        QVERIFY(installer.officialRepoReady());
+        QVERIFY(UpdateInstaller::isCriticalBootUpdate(&scanner));
+    }
 };
 
 QTEST_MAIN(UpdateInstallerTest)

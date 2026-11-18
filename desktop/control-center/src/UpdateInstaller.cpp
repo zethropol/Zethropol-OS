@@ -227,6 +227,8 @@ UpdateInstaller::UpdateInstaller(UpdateScanner *scanner, QObject *parent)
                                "|unable to lock database"
                                "|invalid or corrupted package"
                                "|failed to synchronize all databases"
+                               "|==>\\s*ERROR:"
+                               "|error:\\s*Failed to (?:install|update)"
                                "|işlem gerçekleştirilemedi"
                                "|bağımlılıklar karşılanamadı"
                                "|veritabanı kilitlenemedi)"),
