@@ -136,4 +136,21 @@ if(BUILD_TESTING)
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
         TIMEOUT 90)
 
+    qt_add_executable(control_center_tabs_test
+        tests/TabRegressionTest.cpp
+        ${CONTROL_CENTER_SRCS}
+        ${ZETHROPOL_DBUS_SRCS})
+    qt_add_resources(control_center_tabs_test "tabs_test_qml"
+        PREFIX "/Zethropol/ControlCenter"
+        FILES qml/Main.qml qml/SystemState.qml qml/HardwarePage.qml qml/ProcessesPage.qml qml/UpdateReport.qml)
+    target_include_directories(control_center_tabs_test PRIVATE src)
+    target_link_libraries(control_center_tabs_test PRIVATE
+        Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::DBus Qt6::Test)
+    add_test(NAME control_center_tabs_test
+        COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/tests/hardware-private-bus.sh
+            $<TARGET_FILE:control_center_tabs_test>)
+    set_tests_properties(control_center_tabs_test PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+        TIMEOUT 90)
+
 endif()

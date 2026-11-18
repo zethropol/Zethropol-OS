@@ -937,8 +937,11 @@ ApplicationWindow {
                                             opacity: 0.65
                                         }
                                         Label {
-                                            text: MonitoringBridge.state.gpu_vram_used_gb !== null && MonitoringBridge.state.gpu_vram_total_gb !== null
-                                                  ? "VRAM: " + Number(MonitoringBridge.state.gpu_vram_used_gb).toFixed(2) + " / " + Number(MonitoringBridge.state.gpu_vram_total_gb).toFixed(2) + " GB"
+                                            text: typeof MonitoringBridge.state.gpu_vram_used_gb === "number"
+                                                  && isFinite(MonitoringBridge.state.gpu_vram_used_gb)
+                                                  && typeof MonitoringBridge.state.gpu_vram_total_gb === "number"
+                                                  && isFinite(MonitoringBridge.state.gpu_vram_total_gb)
+                                                  ? "VRAM: " + MonitoringBridge.state.gpu_vram_used_gb.toFixed(2) + " / " + MonitoringBridge.state.gpu_vram_total_gb.toFixed(2) + " GB"
                                                   : "VRAM: Unknown"
                                             opacity: 0.65
                                         }
@@ -983,8 +986,11 @@ ApplicationWindow {
 
                                         Label { text: "Storage"; font.pixelSize: 20 }
                                         Label {
-                                            text: MonitoringBridge.state.storage_used_gb !== null && MonitoringBridge.state.storage_capacity_gb !== null
-                                                  ? "Usage: " + Number(MonitoringBridge.state.storage_used_gb).toFixed(1) + " / " + Number(MonitoringBridge.state.storage_capacity_gb).toFixed(1) + " GB"
+                                            text: typeof MonitoringBridge.state.storage_used_gb === "number"
+                                                  && isFinite(MonitoringBridge.state.storage_used_gb)
+                                                  && typeof MonitoringBridge.state.storage_capacity_gb === "number"
+                                                  && isFinite(MonitoringBridge.state.storage_capacity_gb)
+                                                  ? "Usage: " + MonitoringBridge.state.storage_used_gb.toFixed(1) + " / " + MonitoringBridge.state.storage_capacity_gb.toFixed(1) + " GB"
                                                   : "Usage: Unknown"
                                             font.pixelSize: 16
                                         }
