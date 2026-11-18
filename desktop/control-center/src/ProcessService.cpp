@@ -51,6 +51,30 @@ QString formatStateName(const QString &code)
     return code;
 }
 
+QString readProcText(const QString &path, qint64 maxBytes = 65536)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+        return {};
+    const QByteArray data = file.read(maxBytes);
+    file.close();
+    return QString::fromUtf8(data);
+}
+
+qint64 parseMemUnitMultiplierBytes(const QString &unit)
+{
+    const QString lower = unit.trimmed().toLower();
+    if (lower == QStringLiteral("kb") || lower == QStringLiteral("kib"))
+        return 1024LL;
+    if (lower == QStringLiteral("mb") || lower == QStringLiteral("mib"))
+        return 1024LL * 1024LL;
+    if (lower == QStringLiteral("gb") || lower == QStringLiteral("gib"))
+        return 1024LL * 1024LL * 1024LL;
+    if (lower == QStringLiteral("b"))
+        return 1LL;
+    return 1024LL;
+}
+
 } // namespace
 
 ProcessService::ProcessService(QObject *parent)
@@ -248,17 +272,21 @@ qint64 ProcessService::readSystemTotalCpuTicks()
 
 qint64 ProcessService::readSystemTotalMemory()
 {
-    QFile file(QStringLiteral("/proc/meminfo"));
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+    // procfs files report st_size == 0, so QTextStream::atEnd() returns true prematurely.
+    const QString text = readProcText(QStringLiteral("/proc/meminfo"));
+    if (text.isEmpty())
         return 0;
 
-    QTextStream in(&file);
-    while (!in.atEnd()) {
-        const QString line = in.readLine();
+    for (const QString &line : text.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
         if (line.startsWith(QStringLiteral("MemTotal:"))) {
             const QStringList parts = line.simplified().split(QChar(32), Qt::SkipEmptyParts);
             if (parts.size() >= 2) {
-                return parts.at(1).toLongLong() * 1024;
+                bool ok = false;
+                const qint64 value = parts.at(1).toLongLong(&ok);
+                if (ok && value >= 0) {
+                    const qint64 mult = parts.size() >= 3 ? parseMemUnitMultiplierBytes(parts.at(2)) : 1024LL;
+                    return value * mult;
+                }
             }
         }
     }
@@ -267,6 +295,8 @@ qint64 ProcessService::readSystemTotalMemory()
 
 QString ProcessService::formatMemory(qint64 bytes)
 {
+    if (bytes <= 0)
+        return QStringLiteral("0 KB");
     if (bytes < 1024 * 1024)
         return QStringLiteral("%1 KB").arg(bytes / 1024);
     if (bytes < 1024LL * 1024 * 1024)
@@ -477,23 +507,26 @@ void ProcessService::scanProcesses()
             info.cmdline = QStringLiteral("[%1]").arg(info.name);
         }
 
-        // Read /proc/[pid]/status
-        QFile statusFile(QStringLiteral("/proc/%1/status").arg(pid));
-        if (statusFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            QTextStream in(&statusFile);
-            while (!in.atEnd()) {
-                const QString line = in.readLine();
+        // Read /proc/[pid]/status via read() because procfs virtual files have st_size == 0.
+        const QString statusText = readProcText(QStringLiteral("/proc/%1/status").arg(pid));
+        if (!statusText.isEmpty()) {
+            for (const QString &line : statusText.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
                 if (line.startsWith(QStringLiteral("Uid:"))) {
                     const QStringList parts = line.simplified().split(QChar(32), Qt::SkipEmptyParts);
                     if (parts.size() >= 2)
                         info.uid = static_cast<uid_t>(parts.at(1).toUInt());
                 } else if (line.startsWith(QStringLiteral("VmRSS:"))) {
                     const QStringList parts = line.simplified().split(QChar(32), Qt::SkipEmptyParts);
-                    if (parts.size() >= 2)
-                        info.vmRssKb = parts.at(1).toLongLong();
+                    if (parts.size() >= 2) {
+                        bool ok = false;
+                        const qint64 value = parts.at(1).toLongLong(&ok);
+                        if (ok && value >= 0) {
+                            const qint64 mult = parts.size() >= 3 ? parseMemUnitMultiplierBytes(parts.at(2)) : 1024LL;
+                            info.vmRssKb = (value * mult) / 1024LL;
+                        }
+                    }
                 }
             }
-            statusFile.close();
         }
 
         info.uid = readProcessUid(pid);

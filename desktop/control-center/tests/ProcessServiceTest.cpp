@@ -45,6 +45,40 @@ private slots:
         child.kill();
         QVERIFY(child.waitForFinished());
     }
+
+    void memoryAndProcfsParsingAreAccurate() {
+        ProcessService service;
+        QVERIFY(service.totalMemoryBytes() > 0);
+        QVERIFY(service.usedMemoryBytes() > 0);
+        QVERIFY(service.usedMemoryFormatted() != QStringLiteral("0 KB"));
+
+        const int selfPid = static_cast<int>(QCoreApplication::applicationPid());
+        const QVariantMap details = service.getProcessDetails(selfPid);
+        QCOMPARE(details.value(QStringLiteral("pid")).toInt(), selfPid);
+        const QString selfMemFmt = details.value(QStringLiteral("memoryFormatted")).toString();
+        QVERIFY(selfMemFmt != QStringLiteral("0 KB"));
+        QVERIFY(selfMemFmt.endsWith(QStringLiteral(" KB"))
+                || selfMemFmt.endsWith(QStringLiteral(" MB"))
+                || selfMemFmt.endsWith(QStringLiteral(" GB")));
+        QVERIFY(details.value(QStringLiteral("memoryPercent")).toDouble() >= 0.0);
+
+        qint64 selfRssKb = 0;
+        for (const QVariant &v : service.processes()) {
+            const QVariantMap m = v.toMap();
+            if (m.value(QStringLiteral("pid")).toInt() == selfPid) {
+                selfRssKb = m.value(QStringLiteral("memoryRaw")).toLongLong();
+                break;
+            }
+        }
+        QVERIFY(selfRssKb > 0);
+
+        // Kernel thread (PID 2) has 0 KB RSS safely; invalid PID returns empty details safely
+        const QVariantMap kthread = service.getProcessDetails(2);
+        if (!kthread.isEmpty()) {
+            QCOMPARE(kthread.value(QStringLiteral("memoryFormatted")).toString(), QStringLiteral("0 KB"));
+        }
+        QVERIFY(service.getProcessDetails(-1).isEmpty());
+    }
 };
 
 QTEST_GUILESS_MAIN(ProcessServiceTest)

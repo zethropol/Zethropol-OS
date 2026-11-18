@@ -13,6 +13,22 @@ Item {
     property string pendingKillName: ""
     property var pendingKillStartTime: 0
 
+    readonly property int colNameWidth: 250
+    readonly property int colPidWidth: 80
+    readonly property int colCpuWidth: 80
+    readonly property int colRamWidth: 100
+    readonly property int colUserWidth: 100
+    readonly property int colStatusMinWidth: 230
+    readonly property int colActionWidth: 100
+    readonly property int colSpacing: 8
+    readonly property int rowSideMargin: 12
+    readonly property int scrollBarReserve: processVerticalScrollBar.visible
+                                            ? Math.ceil(processVerticalScrollBar.width)
+                                            : 0
+    readonly property int tableMinWidth: rowSideMargin * 2 + colNameWidth + colPidWidth + colCpuWidth
+                                         + colRamWidth + colUserWidth + colStatusMinWidth + colActionWidth
+                                         + colSpacing * 6 + scrollBarReserve
+
     Connections {
         target: ProcessBridge
         function onProcessRequiresForceKill(pid, name, startTime) {
@@ -290,232 +306,351 @@ Item {
             }
         }
 
-        // Table Header
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 36
-            color: rootWindow.palette.alternateBase
-            radius: 4
-            border.width: 1
-            border.color: rootWindow.palette.mid
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 12
-                anchors.rightMargin: 12
-                spacing: 8
-
-                Button {
-                    text: "İşlem Adı " + (ProcessBridge.sortField === "name" ? (ProcessBridge.sortAscending ? "▲" : "▼") : "")
-                    flat: true
-                    Layout.preferredWidth: 260
-                    onClicked: ProcessBridge.sortBy("name")
-                }
-                Button {
-                    text: "PID " + (ProcessBridge.sortField === "pid" ? (ProcessBridge.sortAscending ? "▲" : "▼") : "")
-                    flat: true
-                    Layout.preferredWidth: 90
-                    onClicked: ProcessBridge.sortBy("pid")
-                }
-                Button {
-                    text: "CPU % " + (ProcessBridge.sortField === "cpu" ? (ProcessBridge.sortAscending ? "▲" : "▼") : "")
-                    flat: true
-                    Layout.preferredWidth: 90
-                    onClicked: ProcessBridge.sortBy("cpu")
-                }
-                Button {
-                    text: "RAM " + (ProcessBridge.sortField === "memory" ? (ProcessBridge.sortAscending ? "▲" : "▼") : "")
-                    flat: true
-                    Layout.preferredWidth: 110
-                    onClicked: ProcessBridge.sortBy("memory")
-                }
-                Label {
-                    text: "Kullanıcı"
-                    font.bold: true
-                    Layout.preferredWidth: 100
-                }
-                Label {
-                    text: "Durum / Tür"
-                    font.bold: true
-                    Layout.fillWidth: true
-                }
-                Label {
-                    text: "Eylem"
-                    font.bold: true
-                    Layout.preferredWidth: 110
-                }
-            }
-        }
-
-        // Process List View
-        ListView {
-            id: processListView
+        // Synchronized Table Area (horizontal scroll on narrow windows prevents column drift)
+        Flickable {
+            id: tableHorizontalScroll
+            objectName: "processTableHorizontalScroll"
             Layout.fillWidth: true
             Layout.fillHeight: true
+            contentWidth: Math.max(width, processesPage.tableMinWidth)
+            contentHeight: height
+            boundsBehavior: Flickable.StopAtBounds
             clip: true
-            spacing: 4
-            model: processesPage.viewMode === "tree" ? ProcessBridge.treeProcesses : ProcessBridge.processes
+            ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
 
-            delegate: Rectangle {
-                id: rowRect
-                width: processListView.width
-                height: 44
-                radius: 4
-                color: (processesPage.selectedPid === modelData.pid) ?
-                       rootWindow.palette.highlight :
-                       (index % 2 === 0 ? rootWindow.palette.base : rootWindow.palette.alternateBase)
-                border.width: (processesPage.selectedPid === modelData.pid) ? 1 : 0
-                border.color: rootWindow.palette.highlight
+            ColumnLayout {
+                width: tableHorizontalScroll.contentWidth
+                height: tableHorizontalScroll.height
+                spacing: 6
 
-                MouseArea {
-                    anchors.fill: parent
-                    onClicked: {
-                        processesPage.selectedPid = modelData.pid
-                        processesPage.selectedProcess = ProcessBridge.getProcessDetails(modelData.pid)
+                // Table Header
+                Rectangle {
+                    id: tableHeader
+                    objectName: "processTableHeader"
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 36
+                    color: rootWindow.palette.alternateBase
+                    radius: 4
+                    border.width: 1
+                    border.color: rootWindow.palette.mid
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: processesPage.rowSideMargin
+                        anchors.rightMargin: processesPage.rowSideMargin + processesPage.scrollBarReserve
+                        spacing: processesPage.colSpacing
+
+                        Button {
+                            objectName: "headerColName"
+                            text: "İşlem Adı" + (ProcessBridge.sortField === "name" ? (ProcessBridge.sortAscending ? " ▲" : " ▼") : "")
+                            flat: true
+                            leftPadding: 0
+                            rightPadding: 0
+                            Layout.preferredWidth: processesPage.colNameWidth
+                            Layout.minimumWidth: processesPage.colNameWidth
+                            Layout.maximumWidth: processesPage.colNameWidth
+                            contentItem: Label {
+                                text: parent.text
+                                font.bold: true
+                                horizontalAlignment: Text.AlignLeft
+                                verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
+                                color: rootWindow.palette.text
+                            }
+                            onClicked: ProcessBridge.sortBy("name")
+                        }
+                        Button {
+                            objectName: "headerColPid"
+                            text: "PID" + (ProcessBridge.sortField === "pid" ? (ProcessBridge.sortAscending ? " ▲" : " ▼") : "")
+                            flat: true
+                            leftPadding: 0
+                            rightPadding: 0
+                            Layout.preferredWidth: processesPage.colPidWidth
+                            Layout.minimumWidth: processesPage.colPidWidth
+                            Layout.maximumWidth: processesPage.colPidWidth
+                            contentItem: Label {
+                                text: parent.text
+                                font.bold: true
+                                horizontalAlignment: Text.AlignLeft
+                                verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
+                                color: rootWindow.palette.text
+                            }
+                            onClicked: ProcessBridge.sortBy("pid")
+                        }
+                        Button {
+                            objectName: "headerColCpu"
+                            text: "CPU %" + (ProcessBridge.sortField === "cpu" ? (ProcessBridge.sortAscending ? " ▲" : " ▼") : "")
+                            flat: true
+                            leftPadding: 0
+                            rightPadding: 0
+                            Layout.preferredWidth: processesPage.colCpuWidth
+                            Layout.minimumWidth: processesPage.colCpuWidth
+                            Layout.maximumWidth: processesPage.colCpuWidth
+                            contentItem: Label {
+                                text: parent.text
+                                font.bold: true
+                                horizontalAlignment: Text.AlignLeft
+                                verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
+                                color: rootWindow.palette.text
+                            }
+                            onClicked: ProcessBridge.sortBy("cpu")
+                        }
+                        Button {
+                            objectName: "headerColRam"
+                            text: "RAM" + (ProcessBridge.sortField === "memory" ? (ProcessBridge.sortAscending ? " ▲" : " ▼") : "")
+                            flat: true
+                            leftPadding: 0
+                            rightPadding: 0
+                            Layout.preferredWidth: processesPage.colRamWidth
+                            Layout.minimumWidth: processesPage.colRamWidth
+                            Layout.maximumWidth: processesPage.colRamWidth
+                            contentItem: Label {
+                                text: parent.text
+                                font.bold: true
+                                horizontalAlignment: Text.AlignLeft
+                                verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
+                                color: rootWindow.palette.text
+                            }
+                            onClicked: ProcessBridge.sortBy("memory")
+                        }
+                        Label {
+                            objectName: "headerColUser"
+                            text: "Kullanıcı"
+                            font.bold: true
+                            elide: Text.ElideRight
+                            Layout.preferredWidth: processesPage.colUserWidth
+                            Layout.minimumWidth: processesPage.colUserWidth
+                            Layout.maximumWidth: processesPage.colUserWidth
+                        }
+                        Label {
+                            objectName: "headerColStatus"
+                            text: "Durum / Tür"
+                            font.bold: true
+                            elide: Text.ElideRight
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: processesPage.colStatusMinWidth
+                        }
+                        Label {
+                            objectName: "headerColAction"
+                            text: "Eylem"
+                            font.bold: true
+                            elide: Text.ElideRight
+                            Layout.preferredWidth: processesPage.colActionWidth
+                            Layout.minimumWidth: processesPage.colActionWidth
+                            Layout.maximumWidth: processesPage.colActionWidth
+                        }
                     }
                 }
 
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 12
-                    anchors.rightMargin: 12
-                    spacing: 8
+                // Process List View
+                ListView {
+                    id: processListView
+                    objectName: "processListView"
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+                    spacing: 4
+                    model: processesPage.viewMode === "tree" ? ProcessBridge.treeProcesses : ProcessBridge.processes
 
-                    // Name column (with tree indent if in tree mode)
-                    RowLayout {
-                        Layout.preferredWidth: 260
-                        spacing: 4
+                    delegate: Rectangle {
+                        id: rowRect
+                        objectName: "processRowDelegate"
+                        width: processListView.width
+                        height: 44
+                        radius: 4
+                        color: (processesPage.selectedPid === modelData.pid) ?
+                               rootWindow.palette.highlight :
+                               (index % 2 === 0 ? rootWindow.palette.base : rootWindow.palette.alternateBase)
+                        border.width: (processesPage.selectedPid === modelData.pid) ? 1 : 0
+                        border.color: rootWindow.palette.highlight
 
-                        Item {
-                            visible: processesPage.viewMode === "tree"
-                            Layout.preferredWidth: modelData.depth ? (modelData.depth * 18) : 0
-                            Layout.preferredHeight: 1
-                        }
-
-                        Label {
-                            visible: processesPage.viewMode === "tree" && modelData.depth > 0
-                            text: "└─ "
-                            opacity: 0.5
-                            font.family: "monospace"
-                        }
-
-                        Label {
-                            text: modelData.name
-                            font.bold: true
-                            Layout.fillWidth: true
-                            elide: Text.ElideRight
-                            color: (processesPage.selectedPid === modelData.pid) ? rootWindow.palette.highlightedText : rootWindow.palette.text
-                        }
-                    }
-
-                    // PID
-                    Label {
-                        text: String(modelData.pid)
-                        Layout.preferredWidth: 90
-                        font.family: "monospace"
-                        color: (processesPage.selectedPid === modelData.pid) ? rootWindow.palette.highlightedText : rootWindow.palette.text
-                    }
-
-                    // CPU%
-                    Label {
-                        text: modelData.cpuPercent + "%"
-                        Layout.preferredWidth: 90
-                        font.bold: modelData.cpuRaw > 0.0
-                        color: (processesPage.selectedPid === modelData.pid) ? rootWindow.palette.highlightedText : rootWindow.palette.text
-                    }
-
-                    // RAM
-                    Label {
-                        text: modelData.memoryFormatted
-                        Layout.preferredWidth: 110
-                        color: (processesPage.selectedPid === modelData.pid) ? rootWindow.palette.highlightedText : rootWindow.palette.text
-                    }
-
-                    // User
-                    Label {
-                        text: modelData.user
-                        Layout.preferredWidth: 100
-                        elide: Text.ElideRight
-                        color: (processesPage.selectedPid === modelData.pid) ? rootWindow.palette.highlightedText : rootWindow.palette.text
-                    }
-
-                    // State / Type & Badges
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 6
-
-                        Label {
-                            text: modelData.state
-                            opacity: 0.8
-                            elide: Text.ElideRight
-                            color: (processesPage.selectedPid === modelData.pid) ? rootWindow.palette.highlightedText : rootWindow.palette.text
-                        }
-
-                        Rectangle {
-                            visible: modelData.isCritical
-                            Layout.preferredHeight: 20
-                            Layout.preferredWidth: 70
-                            radius: 3
-                            color: "#d9534f"
-                            Label {
-                                anchors.centerIn: parent
-                                text: "🛡️ Kritik"
-                                font.pixelSize: 10
-                                color: "white"
-                                font.bold: true
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                processesPage.selectedPid = modelData.pid
+                                processesPage.selectedProcess = ProcessBridge.getProcessDetails(modelData.pid)
                             }
                         }
 
-                        Rectangle {
-                            visible: !modelData.canTerminate && !modelData.isCritical
-                            Layout.preferredHeight: 20
-                            Layout.preferredWidth: 75
-                            radius: 3
-                            color: "#6c757d"
-                            Label {
-                                anchors.centerIn: parent
-                                text: "🔒 Yetkisiz"
-                                font.pixelSize: 10
-                                color: "white"
-                            }
-                        }
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: processesPage.rowSideMargin
+                            anchors.rightMargin: processesPage.rowSideMargin + processesPage.scrollBarReserve
+                            spacing: processesPage.colSpacing
 
-                        Rectangle {
-                            visible: modelData.isBackground && !modelData.isCritical
-                            Layout.preferredHeight: 20
-                            Layout.preferredWidth: 70
-                            radius: 3
-                            color: "#3a4a58"
+                            // Name column (with tree indent if in tree mode)
+                            RowLayout {
+                                objectName: "rowColName"
+                                Layout.preferredWidth: processesPage.colNameWidth
+                                Layout.minimumWidth: processesPage.colNameWidth
+                                Layout.maximumWidth: processesPage.colNameWidth
+                                clip: true
+                                spacing: 4
+
+                                Item {
+                                    visible: processesPage.viewMode === "tree"
+                                    Layout.preferredWidth: modelData.depth ? Math.min(modelData.depth * 18, 90) : 0
+                                    Layout.preferredHeight: 1
+                                }
+
+                                Label {
+                                    visible: processesPage.viewMode === "tree" && modelData.depth > 0
+                                    text: "└─ "
+                                    opacity: 0.5
+                                    font.family: "monospace"
+                                }
+
+                                Label {
+                                    text: modelData.name
+                                    font.bold: true
+                                    Layout.fillWidth: true
+                                    Layout.minimumWidth: 0
+                                    elide: Text.ElideRight
+                                    color: (processesPage.selectedPid === modelData.pid) ? rootWindow.palette.highlightedText : rootWindow.palette.text
+                                }
+                            }
+
+                            // PID
                             Label {
-                                anchors.centerIn: parent
-                                text: "Arka Plan"
-                                font.pixelSize: 10
-                                color: "white"
+                                objectName: "rowColPid"
+                                text: String(modelData.pid)
+                                Layout.preferredWidth: processesPage.colPidWidth
+                                Layout.minimumWidth: processesPage.colPidWidth
+                                Layout.maximumWidth: processesPage.colPidWidth
+                                elide: Text.ElideRight
+                                font.family: "monospace"
+                                color: (processesPage.selectedPid === modelData.pid) ? rootWindow.palette.highlightedText : rootWindow.palette.text
+                            }
+
+                            // CPU%
+                            Label {
+                                objectName: "rowColCpu"
+                                text: modelData.cpuPercent + "%"
+                                Layout.preferredWidth: processesPage.colCpuWidth
+                                Layout.minimumWidth: processesPage.colCpuWidth
+                                Layout.maximumWidth: processesPage.colCpuWidth
+                                elide: Text.ElideRight
+                                font.bold: modelData.cpuRaw > 0.0
+                                color: (processesPage.selectedPid === modelData.pid) ? rootWindow.palette.highlightedText : rootWindow.palette.text
+                            }
+
+                            // RAM
+                            Label {
+                                objectName: "rowColRam"
+                                text: modelData.memoryFormatted
+                                Layout.preferredWidth: processesPage.colRamWidth
+                                Layout.minimumWidth: processesPage.colRamWidth
+                                Layout.maximumWidth: processesPage.colRamWidth
+                                elide: Text.ElideRight
+                                color: (processesPage.selectedPid === modelData.pid) ? rootWindow.palette.highlightedText : rootWindow.palette.text
+                            }
+
+                            // User
+                            Label {
+                                objectName: "rowColUser"
+                                text: modelData.user
+                                Layout.preferredWidth: processesPage.colUserWidth
+                                Layout.minimumWidth: processesPage.colUserWidth
+                                Layout.maximumWidth: processesPage.colUserWidth
+                                elide: Text.ElideRight
+                                color: (processesPage.selectedPid === modelData.pid) ? rootWindow.palette.highlightedText : rootWindow.palette.text
+                            }
+
+                            // State / Type & Badges
+                            RowLayout {
+                                objectName: "rowColStatus"
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: processesPage.colStatusMinWidth
+                                clip: true
+                                spacing: 6
+
+                                Label {
+                                    text: modelData.state
+                                    Layout.fillWidth: true
+                                    Layout.minimumWidth: 40
+                                    opacity: 0.8
+                                    elide: Text.ElideRight
+                                    color: (processesPage.selectedPid === modelData.pid) ? rootWindow.palette.highlightedText : rootWindow.palette.text
+                                }
+
+                                Rectangle {
+                                    visible: modelData.isCritical
+                                    Layout.preferredHeight: 20
+                                    Layout.preferredWidth: 70
+                                    Layout.minimumWidth: 70
+                                    radius: 3
+                                    color: "#d9534f"
+                                    Label {
+                                        anchors.centerIn: parent
+                                        text: "🛡️ Kritik"
+                                        font.pixelSize: 10
+                                        color: "white"
+                                        font.bold: true
+                                    }
+                                }
+
+                                Rectangle {
+                                    visible: !modelData.canTerminate && !modelData.isCritical
+                                    Layout.preferredHeight: 20
+                                    Layout.preferredWidth: 75
+                                    Layout.minimumWidth: 75
+                                    radius: 3
+                                    color: "#6c757d"
+                                    Label {
+                                        anchors.centerIn: parent
+                                        text: "🔒 Yetkisiz"
+                                        font.pixelSize: 10
+                                        color: "white"
+                                    }
+                                }
+
+                                Rectangle {
+                                    visible: modelData.isBackground && !modelData.isCritical
+                                    Layout.preferredHeight: 20
+                                    Layout.preferredWidth: 70
+                                    Layout.minimumWidth: 70
+                                    radius: 3
+                                    color: "#3a4a58"
+                                    Label {
+                                        anchors.centerIn: parent
+                                        text: "Arka Plan"
+                                        font.pixelSize: 10
+                                        color: "white"
+                                    }
+                                }
+                            }
+
+                            // Action Button (End Process)
+                            Item {
+                                objectName: "rowColAction"
+                                Layout.preferredWidth: processesPage.colActionWidth
+                                Layout.minimumWidth: processesPage.colActionWidth
+                                Layout.maximumWidth: processesPage.colActionWidth
+                                Layout.preferredHeight: 28
+
+                                Button {
+                                    anchors.fill: parent
+                                    text: "Kapat"
+                                    enabled: modelData.canTerminate && !ProcessBridge.actionBusy
+                                    visible: modelData.canTerminate
+                                    onClicked: {
+                                        ProcessBridge.terminateProcess(modelData.pid, modelData.startTime)
+                                    }
+                                }
                             }
                         }
                     }
 
-                    // Action Button (End Process)
-                    Button {
-                        text: "Kapat"
-                        Layout.preferredWidth: 90
-                        Layout.preferredHeight: 28
-                        enabled: modelData.canTerminate && !ProcessBridge.actionBusy
-                        visible: modelData.canTerminate
-                        onClicked: {
-                            ProcessBridge.terminateProcess(modelData.pid, modelData.startTime)
-                        }
-                    }
-
-                    Item {
-                        visible: !modelData.canTerminate
-                        Layout.preferredWidth: 90
-                        Layout.preferredHeight: 28
+                    ScrollBar.vertical: ScrollBar {
+                        id: processVerticalScrollBar
+                        objectName: "processVerticalScrollBar"
+                        policy: ScrollBar.AsNeeded
                     }
                 }
             }
-
-            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
         }
 
         // Selected Process Inspector & Subprocesses

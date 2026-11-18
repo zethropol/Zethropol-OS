@@ -341,6 +341,138 @@ private slots:
         QVERIFY2(warnings.isEmpty(),
                  qPrintable(QStringLiteral("Unexpected QML warnings count: %1").arg(warnings.count())));
     }
+
+    void processesTabColumnAlignmentAndMemoryDisplay()
+    {
+        QTemporaryDir emptyPathDir;
+        QVERIFY(emptyPathDir.isValid());
+        const QByteArray previousPath = qgetenv("PATH");
+        const QByteArray previousConfig = qgetenv("XDG_CONFIG_HOME");
+        const bool hadConfig = qEnvironmentVariableIsSet("XDG_CONFIG_HOME");
+        qputenv("PATH", emptyPathDir.path().toUtf8());
+        qputenv("XDG_CONFIG_HOME", emptyPathDir.path().toUtf8());
+        const auto restoreEnv = qScopeGuard([&] {
+            qputenv("PATH", previousPath);
+            if (hadConfig)
+                qputenv("XDG_CONFIG_HOME", previousConfig);
+            else
+                qunsetenv("XDG_CONFIG_HOME");
+        });
+
+        HardwareServiceClient hardware;
+        UpdateScanner scanner;
+        UpdateInstaller installer(&scanner);
+        RecoveryService recovery;
+        SecurityService security;
+        ServiceService services;
+        ApplicationService applications;
+        ProcessService processes;
+        NotificationService notifications;
+        ZethropolPowerClient power;
+        ZethropolMonitoringClient monitoring;
+
+        QTRY_VERIFY_WITH_TIMEOUT(!scanner.busy(), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
+
+        // Real ProcessService must read non-zero RAM/RSS from /proc
+        QVERIFY(processes.totalMemoryBytes() > 0);
+        QVERIFY(processes.usedMemoryBytes() > 0);
+        QVERIFY(processes.usedMemoryFormatted() != QStringLiteral("0 KB"));
+        QVERIFY(!processes.processes().isEmpty());
+
+        QQmlApplicationEngine engine;
+        QSignalSpy warnings(&engine, &QQmlEngine::warnings);
+        for (const auto &pair : QList<QPair<QString, QObject *>>{
+                 {"HardwareBridge", &hardware},
+                 {"UpdateBridge", &scanner},
+                 {"UpdateInstallBridge", &installer},
+                 {"RecoveryBridge", &recovery},
+                 {"SecurityBridge", &security},
+                 {"ServiceBridge", &services},
+                 {"ApplicationBridge", &applications},
+                 {"ProcessBridge", &processes},
+                 {"NotificationBridge", &notifications},
+                 {"PowerBridge", &power},
+                 {"MonitoringBridge", &monitoring}}) {
+            engine.rootContext()->setContextProperty(pair.first, pair.second);
+        }
+
+        engine.load(QUrl(QStringLiteral("qrc:/Zethropol/ControlCenter/qml/Main.qml")));
+        QVERIFY(!engine.rootObjects().isEmpty());
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+        QVERIFY(window);
+        auto *pages = window->findChild<QQuickItem *>(QStringLiteral("controlCenterPages"));
+        QVERIFY(pages);
+        QVERIFY(pages->setProperty("currentIndex", 11)); // Processes tab
+        QTest::qWait(80);
+
+        auto *procPage = window->findChild<QQuickItem *>(QStringLiteral("processesPage"));
+        auto *listView = window->findChild<QQuickItem *>(QStringLiteral("processListView"));
+        auto *vScroll = window->findChild<QQuickItem *>(QStringLiteral("processVerticalScrollBar"));
+        auto *hScroll = window->findChild<QQuickItem *>(QStringLiteral("processTableHorizontalScroll"));
+        QVERIFY(procPage && listView && vScroll && hScroll);
+
+        const QString pageTexts = collectTexts(procPage);
+        QVERIFY(pageTexts.contains(processes.usedMemoryFormatted()));
+        QVERIFY(!pageTexts.contains(QStringLiteral("NaN")));
+        QVERIFY(!pageTexts.contains(QStringLiteral("undefined")));
+
+        auto verifyColumnAlignment = [&]() {
+            const QStringList headerNames = {
+                QStringLiteral("headerColName"), QStringLiteral("headerColPid"),
+                QStringLiteral("headerColCpu"), QStringLiteral("headerColRam"),
+                QStringLiteral("headerColUser"), QStringLiteral("headerColStatus"),
+                QStringLiteral("headerColAction")
+            };
+            const QStringList rowNames = {
+                QStringLiteral("rowColName"), QStringLiteral("rowColPid"),
+                QStringLiteral("rowColCpu"), QStringLiteral("rowColRam"),
+                QStringLiteral("rowColUser"), QStringLiteral("rowColStatus"),
+                QStringLiteral("rowColAction")
+            };
+
+            // Find first realized row delegate inside ListView contentItem
+            auto *contentItem = listView->property("contentItem").value<QQuickItem *>();
+            QVERIFY(contentItem);
+            QQuickItem *firstRow = nullptr;
+            for (QQuickItem *child : contentItem->childItems()) {
+                if (child->objectName() == QStringLiteral("processRowDelegate") && child->isVisible()) {
+                    firstRow = child;
+                    break;
+                }
+            }
+            QVERIFY(firstRow);
+
+            for (int i = 0; i < headerNames.size(); ++i) {
+                auto *hdr = procPage->findChild<QQuickItem *>(headerNames[i]);
+                auto *cell = firstRow->findChild<QQuickItem *>(rowNames[i]);
+                QVERIFY2(hdr && cell, qPrintable(QStringLiteral("Missing col %1").arg(headerNames[i])));
+                const qreal hdrX = hdr->mapToScene(QPointF(0, 0)).x();
+                const qreal cellX = cell->mapToScene(QPointF(0, 0)).x();
+                QVERIFY2(qAbs(hdrX - cellX) <= 1.0,
+                         qPrintable(QStringLiteral("Column %1 X mismatch: header=%2 row=%3")
+                                        .arg(headerNames[i]).arg(hdrX).arg(cellX)));
+                QVERIFY2(qAbs(hdr->width() - cell->width()) <= 1.0,
+                         qPrintable(QStringLiteral("Column %1 width mismatch: header=%2 row=%3")
+                                        .arg(headerNames[i]).arg(hdr->width()).arg(cell->width())));
+            }
+        };
+
+        // 1. Normal window width (1280x800) with vertical scrollbar active
+        window->resize(1280, 800);
+        QTest::qWait(80);
+        QVERIFY(vScroll->property("visible").toBool());
+        verifyColumnAlignment();
+
+        // 2. Narrow window width (700x600) -> horizontal scroll activates without column drift
+        window->resize(700, 600);
+        QTest::qWait(80);
+        QVERIFY(hScroll->property("contentWidth").toReal() > hScroll->width());
+        verifyColumnAlignment();
+
+        QVERIFY2(warnings.isEmpty(),
+                 qPrintable(QStringLiteral("Unexpected QML warnings count: %1").arg(warnings.count())));
+    }
 };
 
 QTEST_MAIN(TabRegressionTest)
