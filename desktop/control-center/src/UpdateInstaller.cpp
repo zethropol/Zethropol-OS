@@ -4,9 +4,11 @@
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusReply>
+#include <QFile>
 #include <QProcessEnvironment>
 #include <QRegularExpression>
 #include <QStandardPaths>
+#include <QSysInfo>
 #include <QThread>
 #include <QUuid>
 
@@ -119,6 +121,65 @@ void runDefaultRecoveryComplete(const QString &updateOpId, const QString &outcom
     bus.call(msg, QDBus::Block, 5000);
 }
 
+PostUpdateHealthEvidence runDefaultPostUpdateHealthProbe(
+    const QString &updateOpId, quint32 snapshotId, const QString &sessionStatus)
+{
+    PostUpdateHealthEvidence ev;
+    ev.pacmanLockPresent = QFile::exists(QStringLiteral("/var/lib/pacman/db.lck"));
+
+    const QString systemctlBin = QStandardPaths::findExecutable(QStringLiteral("systemctl"));
+    if (!systemctlBin.isEmpty()) {
+        QProcess sysProc;
+        sysProc.start(systemctlBin, {QStringLiteral("--failed"), QStringLiteral("--no-legend"), QStringLiteral("--plain")});
+        if (sysProc.waitForFinished(3000) && sysProc.exitStatus() == QProcess::NormalExit && sysProc.exitCode() == 0) {
+            const QString out = QString::fromUtf8(sysProc.readAllStandardOutput());
+            const QStringList lines = out.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+            ev.systemdChecked = true;
+            ev.failedSystemdUnits = lines.size();
+        } else {
+            ev.systemdDetail = QStringLiteral("systemctl --failed sorgusu başarısız veya zaman aşımına uğradı.");
+        }
+    } else {
+        ev.systemdDetail = QStringLiteral("systemctl aracı bulunamadı.");
+    }
+
+    const QString kernelRel = QSysInfo::kernelVersion().trimmed();
+    if (!kernelRel.isEmpty()) {
+        ev.activeKernelCheckDone = true;
+        ev.activeKernelImagePresent = QFile::exists(QStringLiteral("/usr/lib/modules/%1/vmlinuz").arg(kernelRel));
+    }
+
+    const QDBusConnection bus = QDBusConnection::systemBus();
+    if (bus.isConnected() && snapshotId > 0 && !updateOpId.isEmpty()) {
+        QDBusMessage msg = QDBusMessage::createMethodCall(
+            QStringLiteral("org.zethropol.Recovery"),
+            QStringLiteral("/org/zethropol/Recovery"),
+            QStringLiteral("org.zethropol.Recovery.v1"),
+            QStringLiteral("AssessPostUpdateRecovery"));
+        const QString recoveryOutcome = (sessionStatus == QStringLiteral("finished"))
+            ? QStringLiteral("ok")
+            : (sessionStatus == QStringLiteral("unknown") ? QStringLiteral("unknown") : QStringLiteral("failed"));
+        // Never assert health_check_ok=true from the client side.
+        msg << updateOpId << QVariant::fromValue(snapshotId) << recoveryOutcome << false;
+        const QDBusMessage reply = bus.call(msg, QDBus::Block, 5000);
+        if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
+            const QDBusReply<QVariantMap> parsed(reply);
+            if (parsed.isValid()) {
+                const QVariantMap map = parsed.value();
+                ev.recoveryAssessmentStatus = map.value(QStringLiteral("assessmentStatus")).toString();
+                ev.recoveryAssessmentSummary = map.value(QStringLiteral("summary")).toString();
+                const QString preflightOverall = map.value(QStringLiteral("preflightOverallStatus")).toString();
+                ev.bootVerified = (preflightOverall == QStringLiteral("ready"));
+                ev.bootDegraded = (preflightOverall == QStringLiteral("blocked"));
+            }
+        }
+    }
+    if (ev.recoveryAssessmentStatus.isEmpty())
+        ev.recoveryAssessmentStatus = QStringLiteral("unknown");
+
+    return ev;
+}
+
 } // namespace
 
 bool UpdateInstaller::officialRepoReady() const
@@ -197,7 +258,8 @@ UpdateInstaller::UpdateInstaller(UpdateScanner *scanner, QObject *parent)
       m_sessionTool(QStandardPaths::findExecutable("script")),
       m_updater(QStandardPaths::findExecutable("arch-update")),
       m_recoveryGate(runDefaultRecoveryPreGate),
-      m_recoveryComplete(runDefaultRecoveryComplete)
+      m_recoveryComplete(runDefaultRecoveryComplete),
+      m_healthProbe(runDefaultPostUpdateHealthProbe)
 {
     if (m_updater.isEmpty())
         m_updater = QStandardPaths::findExecutable("cachy-update");
@@ -286,6 +348,13 @@ void UpdateInstaller::start()
     m_updateOperationId = QUuid::createUuid().toString(QUuid::WithoutBraces);
     m_verifiedSnapshotId = 0;
     m_recoveryGuidance.clear();
+    m_healthStatus.clear();
+    m_healthSummary.clear();
+    m_cleanupStatus.clear();
+    m_cleanupSummary.clear();
+    m_rebootStatus.clear();
+    m_rebootRequired = false;
+    m_rebootSafetyNotice.clear();
 
     if (m_recoveryGateEnabled) {
         const bool criticalBoot = isCriticalBootUpdate(m_scanner);
@@ -432,7 +501,120 @@ void UpdateInstaller::finish(const QString &status, const QString &message)
             "Güncelleme öncesi snapshot #%1 korundu; sistem sağlığı bağımsız olarak doğrulanana kadar otomatik silinmez.")
                                  .arg(m_verifiedSnapshotId);
     }
+    evaluatePostUpdateState();
     emit changed();
     m_scanner->scan();
     emit sessionFinished();
+}
+
+void UpdateInstaller::evaluatePostUpdateState()
+{
+    const PostUpdateHealthEvidence ev = m_healthProbe
+        ? m_healthProbe(m_updateOperationId, m_verifiedSnapshotId, m_status)
+        : PostUpdateHealthEvidence{};
+
+    const bool rebootHintInOutput = m_output.contains(QRegularExpression(
+        QStringLiteral("(?:reboot required|yeniden başlatma gerekiyor|rebooting to finalize|yeniden başlatmayı düşünün)"),
+        QRegularExpression::CaseInsensitiveOption));
+    const bool missingKernelImage = ev.activeKernelCheckDone && !ev.activeKernelImagePresent;
+
+    if (ev.pacmanLockPresent
+        || ev.recoveryAssessmentStatus.startsWith(QStringLiteral("blocked"))
+        || m_status == QStringLiteral("blocked")) {
+        m_healthStatus = QStringLiteral("blocked");
+        QStringList reasons;
+        if (ev.pacmanLockPresent)
+            reasons << QStringLiteral("/var/lib/pacman/db.lck kilidi mevcut");
+        if (!ev.recoveryAssessmentSummary.isEmpty())
+            reasons << ev.recoveryAssessmentSummary;
+        m_healthSummary = reasons.isEmpty()
+            ? QStringLiteral("Aktif güvenlik engeli veya belirsiz işlem durumu nedeniyle sistem sağlığı engelli.")
+            : reasons.join(QStringLiteral(" "));
+    } else if (m_status == QStringLiteral("error")
+               || m_status == QStringLiteral("cancelled")
+               || (ev.systemdChecked && ev.failedSystemdUnits > 0)
+               || ev.bootDegraded
+               || (missingKernelImage && !rebootHintInOutput)
+               || ev.recoveryAssessmentStatus == QStringLiteral("recovery-recommended")
+               || ev.recoveryAssessmentStatus == QStringLiteral("external-recovery-required")
+               || ev.recoveryAssessmentStatus == QStringLiteral("snapshot-unavailable")) {
+        m_healthStatus = QStringLiteral("degraded");
+        QStringList reasons;
+        if (m_status == QStringLiteral("error") || m_status == QStringLiteral("cancelled"))
+            reasons << QStringLiteral("Güncelleme oturumu hatayla/kesintiyle sonuçlandı.");
+        if (ev.systemdChecked && ev.failedSystemdUnits > 0)
+            reasons << QStringLiteral("%1 başarısız systemd birimi tespit edildi.").arg(ev.failedSystemdUnits);
+        if (ev.bootDegraded)
+            reasons << (ev.bootDetail.isEmpty()
+                            ? QStringLiteral("Boot, kernel/initramfs veya Limine doğrulaması başarısız.")
+                            : ev.bootDetail);
+        if (missingKernelImage && !rebootHintInOutput)
+            reasons << QStringLiteral("Aktif çekirdek imajı bulunamadı; yalnızca yeniden başlatma gereksinimi olarak yorumlanamaz.");
+        m_healthSummary = reasons.isEmpty()
+            ? QStringLiteral("Sistem sağlığında doğrulanmış sorun tespit edildi.")
+            : reasons.join(QStringLiteral(" "));
+    } else if (m_status == QStringLiteral("finished")
+               && ev.systemdChecked && ev.failedSystemdUnits == 0
+               && ev.activeKernelCheckDone && ev.activeKernelImagePresent
+               && ev.bootVerified
+               && !ev.recoveryAssessmentStatus.isEmpty()
+               && ev.recoveryAssessmentStatus != QStringLiteral("unknown")
+               && ev.recoveryAssessmentStatus != QStringLiteral("not-available")) {
+        m_healthStatus = QStringLiteral("healthy");
+        m_healthSummary = QStringLiteral(
+            "Bağımsız sağlık kontrolleri (pacman kilidi yok, 0 başarısız systemd birimi, doğrulanmış boot/Recovery durumu) geçti.");
+    } else {
+        m_healthStatus = QStringLiteral("unknown");
+        QStringList gaps;
+        if (m_status == QStringLiteral("unknown"))
+            gaps << QStringLiteral("Güncelleme oturumu belirsiz sonlandı.");
+        if (!ev.systemdChecked || ev.failedSystemdUnits < 0)
+            gaps << (ev.systemdDetail.isEmpty() ? QStringLiteral("systemd birimleri doğrulanamadı.") : ev.systemdDetail);
+        if (!ev.activeKernelCheckDone)
+            gaps << QStringLiteral("Aktif çekirdek sürümü/dosyası doğrulanamadı.");
+        if (!ev.bootVerified)
+            gaps << (ev.bootDetail.isEmpty() ? QStringLiteral("Boot/Limine bütünlüğü bağımsız doğrulanamadı.") : ev.bootDetail);
+        if (ev.recoveryAssessmentStatus == QStringLiteral("unknown")
+            || ev.recoveryAssessmentStatus == QStringLiteral("not-available")
+            || ev.recoveryAssessmentStatus.isEmpty())
+            gaps << QStringLiteral("Recovery sağlık değerlendirmesi kesin kanıt üretmedi.");
+        m_healthSummary = gaps.isEmpty()
+            ? QStringLiteral("Yeterli bağımsız sağlık kanıtı bulunamadı.")
+            : gaps.join(QStringLiteral(" "));
+    }
+
+    if (m_status != QStringLiteral("finished")) {
+        m_cleanupStatus = QStringLiteral("blocked");
+        m_cleanupSummary = QStringLiteral(
+            "Güncelleme başarılı veya doğrulanmış olmadığı için otomatik temizlik yapılmadı. "
+            "Snapper snapshot'ları, günlükler, yetim paketler ve önbellek kanıtları korundu.");
+    } else {
+        m_cleanupStatus = QStringLiteral("unknown");
+        m_cleanupSummary = QStringLiteral(
+            "Control Center otomatik temizlik çalıştırmaz (snapshot, yetim paket, önbellek, boot ve günlükler silinmez). "
+            "Etkileşimli arch-update oturumunda paccache/yetim/Flatpak adımları kullanıcı tarafından yürütülmüş olabileceğinden temizlik sonucu ayrıca doğrulanmamıştır.");
+    }
+
+    if (missingKernelImage || rebootHintInOutput) {
+        m_rebootRequired = true;
+        m_rebootStatus = QStringLiteral("recommended");
+    } else if (!ev.activeKernelCheckDone || m_status == QStringLiteral("unknown")) {
+        m_rebootRequired = false;
+        m_rebootStatus = QStringLiteral("unknown");
+    } else {
+        m_rebootRequired = false;
+        m_rebootStatus = QStringLiteral("not-required");
+    }
+
+    if (m_healthStatus == QStringLiteral("healthy") && m_rebootRequired) {
+        m_rebootSafetyNotice = QStringLiteral(
+            "Güncellemenin tamamlanması için yeniden başlatma gerekiyor. Otomatik yeniden başlatma yapılmaz; açık kullanıcı onayıyla yeniden başlatabilirsiniz.");
+    } else if (m_healthStatus != QStringLiteral("healthy")) {
+        m_rebootSafetyNotice = QStringLiteral(
+            "Sistem sağlığı tam doğrulanmadığı için (%1) güvenli yeniden başlatma garantisi verilemez. "
+            "Yeniden başlatma öncesi Recovery ön kontrolünü ve işlem çıktısını inceleyin; otomatik yeniden başlatma yapılmaz.")
+                                   .arg(m_healthStatus);
+    } else {
+        m_rebootSafetyNotice = QStringLiteral("Bekleyen zorunlu çekirdek yeniden başlatması tespit edilmedi.");
+    }
 }

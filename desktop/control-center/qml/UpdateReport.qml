@@ -107,6 +107,45 @@ Item {
             opacity: 0.85
         }
 
+        ColumnLayout {
+            objectName: "postUpdateAssessmentPanel"
+            visible: !installer.busy && installer.healthStatus.length > 0
+            Layout.fillWidth: true
+            spacing: 4
+
+            Label {
+                objectName: "postUpdateHealthSummary"
+                color: reportPage.reportText
+                text: "Sistem sağlığı (" + ({"healthy": "Sağlıklı", "degraded": "Bozulmuş",
+                                           "unknown": "Doğrulanamadı", "blocked": "Engelli"}[installer.healthStatus] || installer.healthStatus)
+                      + "): " + installer.healthSummary
+                textFormat: Text.PlainText
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                opacity: 0.85
+            }
+
+            Label {
+                objectName: "postUpdateCleanupSummary"
+                color: reportPage.reportText
+                text: "Temizlik durumu (" + installer.cleanupStatus + "): " + installer.cleanupSummary
+                textFormat: Text.PlainText
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                opacity: 0.75
+            }
+
+            Label {
+                objectName: "postUpdateRebootNotice"
+                color: reportPage.reportText
+                text: "Yeniden başlatma (" + installer.rebootStatus + "): " + installer.rebootSafetyNotice
+                textFormat: Text.PlainText
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                opacity: 0.85
+            }
+        }
+
         ScrollView {
             id: reportScroll
             visible: !installer.busy

@@ -15,6 +15,20 @@ struct PreUpdateGateResult {
     quint32 snapshotId = 0;
 };
 
+struct PostUpdateHealthEvidence {
+    bool pacmanLockPresent = false;
+    bool systemdChecked = false;
+    int failedSystemdUnits = -1;
+    QString systemdDetail;
+    bool bootVerified = false;
+    bool bootDegraded = false;
+    bool activeKernelImagePresent = false;
+    bool activeKernelCheckDone = false;
+    QString bootDetail;
+    QString recoveryAssessmentStatus;
+    QString recoveryAssessmentSummary;
+};
+
 class UpdateInstaller : public QObject
 {
     Q_OBJECT
@@ -25,6 +39,13 @@ class UpdateInstaller : public QObject
     Q_PROPERTY(QString recoveryGuidance READ recoveryGuidance NOTIFY changed)
     Q_PROPERTY(bool liveExecutionEnabled READ liveExecutionEnabled CONSTANT)
     Q_PROPERTY(bool officialRepoReady READ officialRepoReady NOTIFY changed)
+    Q_PROPERTY(QString healthStatus READ healthStatus NOTIFY changed)
+    Q_PROPERTY(QString healthSummary READ healthSummary NOTIFY changed)
+    Q_PROPERTY(QString cleanupStatus READ cleanupStatus NOTIFY changed)
+    Q_PROPERTY(QString cleanupSummary READ cleanupSummary NOTIFY changed)
+    Q_PROPERTY(QString rebootStatus READ rebootStatus NOTIFY changed)
+    Q_PROPERTY(bool rebootRequired READ rebootRequired NOTIFY changed)
+    Q_PROPERTY(QString rebootSafetyNotice READ rebootSafetyNotice NOTIFY changed)
 
 public:
     explicit UpdateInstaller(UpdateScanner *scanner, QObject *parent = nullptr);
@@ -35,6 +56,13 @@ public:
     QString recoveryGuidance() const { return m_recoveryGuidance; }
     bool liveExecutionEnabled() const { return m_liveExecutionEnabled; }
     bool officialRepoReady() const;
+    QString healthStatus() const { return m_healthStatus; }
+    QString healthSummary() const { return m_healthSummary; }
+    QString cleanupStatus() const { return m_cleanupStatus; }
+    QString cleanupSummary() const { return m_cleanupSummary; }
+    QString rebootStatus() const { return m_rebootStatus; }
+    bool rebootRequired() const { return m_rebootRequired; }
+    QString rebootSafetyNotice() const { return m_rebootSafetyNotice; }
     static bool isOfficialRepoScanComplete(const UpdateScanner *scanner, QString *reason = nullptr);
     static bool isCriticalBootUpdate(const UpdateScanner *scanner);
     Q_INVOKABLE void start();
@@ -50,6 +78,7 @@ private:
     friend class UpdateInstallerTest;
     void readOutput();
     void finish(const QString &status, const QString &message);
+    void evaluatePostUpdateState();
 
     UpdateScanner *m_scanner;
     QProcess m_process;
@@ -66,6 +95,14 @@ private:
     QString m_updateOperationId;
     quint32 m_verifiedSnapshotId = 0;
     QString m_recoveryGuidance;
+    QString m_healthStatus;
+    QString m_healthSummary;
+    QString m_cleanupStatus;
+    QString m_cleanupSummary;
+    QString m_rebootStatus;
+    bool m_rebootRequired = false;
+    QString m_rebootSafetyNotice;
     std::function<PreUpdateGateResult(const QString &updateOpId, bool criticalBootUpdate)> m_recoveryGate;
     std::function<void(const QString &updateOpId, const QString &outcome)> m_recoveryComplete;
+    std::function<PostUpdateHealthEvidence(const QString &updateOpId, quint32 snapshotId, const QString &sessionStatus)> m_healthProbe;
 };

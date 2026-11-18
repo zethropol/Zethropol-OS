@@ -633,6 +633,162 @@ exit 0
         QVERIFY(installer.officialRepoReady());
         QVERIFY(UpdateInstaller::isCriticalBootUpdate(&scanner));
     }
+
+    void postUpdateHealthCleanupAndRebootSafetyBoundaries()
+    {
+        script("checkupdates", "printf 'corepkg 1.0 -> 1.1\\n'\n");
+        script("paru", "exit 0\n");
+        script("flatpak", "exit 0\n");
+        script("updater", "printf 'The update has been applied\\n'\nexit 0\n");
+
+        UpdateScanner scanner;
+        QSignalSpy scanned(&scanner, &UpdateScanner::scanFinished);
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 1, 5000);
+
+        UpdateInstaller installer(&scanner);
+        QVERIFY(!installer.liveExecutionEnabled());
+        installer.m_updater = directory.filePath("updater");
+        installer.m_liveExecutionEnabled = true;
+        installer.m_recoveryGate = [](const QString &, bool) {
+            return PreUpdateGateResult{true, QStringLiteral("ok"), QStringLiteral("Verified"), 71};
+        };
+
+        // 1. exit 0 + empty systemctl alone without boot/Recovery evidence -> unknown (never healthy)
+        installer.m_healthProbe = [](const QString &, quint32, const QString &) {
+            PostUpdateHealthEvidence ev;
+            ev.systemdChecked = true;
+            ev.failedSystemdUnits = 0;
+            ev.activeKernelCheckDone = true;
+            ev.activeKernelImagePresent = true;
+            ev.bootVerified = false;
+            ev.recoveryAssessmentStatus = QStringLiteral("unknown");
+            return ev;
+        };
+        QSignalSpy finished(&installer, &UpdateInstaller::sessionFinished);
+        installer.start();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+        QCOMPARE(installer.status(), "finished");
+        QCOMPARE(installer.healthStatus(), "unknown");
+        QCOMPARE(installer.cleanupStatus(), "unknown");
+        QVERIFY(installer.cleanupSummary().contains("doğrulanmamıştır"));
+        QVERIFY(!installer.rebootRequired());
+        QVERIFY(installer.rebootSafetyNotice().contains("güvenli yeniden başlatma garantisi verilemez"));
+
+        // Verify QML shows separate session, health, cleanup, and reboot fields
+        QQmlEngine engine;
+        QQmlComponent component(&engine, QUrl::fromLocalFile(UPDATE_REPORT_QML));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QObject> root(component.createWithInitialProperties(
+            {{"scanner", QVariant::fromValue(&scanner)}, {"installer", QVariant::fromValue(&installer)}}));
+        QVERIFY(root);
+        auto *panel = root->findChild<QObject *>("postUpdateAssessmentPanel");
+        auto *healthLbl = root->findChild<QObject *>("postUpdateHealthSummary");
+        auto *cleanupLbl = root->findChild<QObject *>("postUpdateCleanupSummary");
+        auto *rebootLbl = root->findChild<QObject *>("postUpdateRebootNotice");
+        QVERIFY(panel && healthLbl && cleanupLbl && rebootLbl);
+        QVERIFY(panel->property("visible").toBool());
+        QVERIFY(healthLbl->property("text").toString().contains("Doğrulanamadı"));
+        QVERIFY(cleanupLbl->property("text").toString().contains("unknown"));
+        QVERIFY(rebootLbl->property("text").toString().contains("garantisi verilemez"));
+
+        // 2. Failed systemd units -> degraded
+        installer.m_healthProbe = [](const QString &, quint32, const QString &) {
+            PostUpdateHealthEvidence ev;
+            ev.systemdChecked = true;
+            ev.failedSystemdUnits = 2;
+            ev.activeKernelCheckDone = true;
+            ev.activeKernelImagePresent = true;
+            ev.bootVerified = true;
+            ev.recoveryAssessmentStatus = QStringLiteral("healthy");
+            return ev;
+        };
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 2, 5000);
+        installer.start();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 2, 5000);
+        QCOMPARE(installer.healthStatus(), "degraded");
+        QVERIFY(installer.healthSummary().contains("2 başarısız systemd"));
+
+        // 3. systemctl unreachable -> unknown
+        installer.m_healthProbe = [](const QString &, quint32, const QString &) {
+            PostUpdateHealthEvidence ev;
+            ev.systemdChecked = false;
+            ev.failedSystemdUnits = -1;
+            ev.systemdDetail = QStringLiteral("systemctl erişilemez");
+            ev.activeKernelCheckDone = true;
+            ev.activeKernelImagePresent = true;
+            ev.bootVerified = true;
+            ev.recoveryAssessmentStatus = QStringLiteral("healthy");
+            return ev;
+        };
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 3, 5000);
+        installer.start();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 3, 5000);
+        QCOMPARE(installer.healthStatus(), "unknown");
+        QVERIFY(installer.healthSummary().contains("systemctl erişilemez"));
+
+        // 4. Active pacman lock or Recovery blocked -> blocked
+        installer.m_healthProbe = [](const QString &, quint32, const QString &) {
+            PostUpdateHealthEvidence ev;
+            ev.pacmanLockPresent = true;
+            ev.systemdChecked = true;
+            ev.failedSystemdUnits = 0;
+            ev.recoveryAssessmentStatus = QStringLiteral("blocked-lock");
+            return ev;
+        };
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 4, 5000);
+        installer.start();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 4, 5000);
+        QCOMPARE(installer.healthStatus(), "blocked");
+
+        // 5. Kernel/Limine verification failed -> never healthy (degraded)
+        installer.m_healthProbe = [](const QString &, quint32, const QString &) {
+            PostUpdateHealthEvidence ev;
+            ev.systemdChecked = true;
+            ev.failedSystemdUnits = 0;
+            ev.activeKernelCheckDone = true;
+            ev.activeKernelImagePresent = false;
+            ev.bootVerified = false;
+            ev.bootDegraded = true;
+            ev.bootDetail = QStringLiteral("Limine doğrulaması başarısız");
+            ev.recoveryAssessmentStatus = QStringLiteral("external-recovery-required");
+            return ev;
+        };
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 5, 5000);
+        installer.start();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 5, 5000);
+        QCOMPARE(installer.healthStatus(), "degraded");
+        QVERIFY(installer.rebootRequired());
+        QVERIFY(installer.rebootSafetyNotice().contains("garantisi verilemez"));
+
+        // 6. Failed update -> no cleanup (blocked)
+        script("updater", "exit 5\n");
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 6, 5000);
+        installer.start();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 6, 5000);
+        QCOMPARE(installer.status(), "error");
+        QCOMPARE(installer.cleanupStatus(), "blocked");
+        QVERIFY(installer.cleanupSummary().contains("otomatik temizlik yapılmadı"));
+
+        // 7. Full verified healthy + reboot required -> healthy and reboot recommended without auto-reboot
+        script("updater", "printf 'Reboot required to finalize kernel update\\n'\nexit 0\n");
+        installer.m_healthProbe = [](const QString &, quint32, const QString &) {
+            PostUpdateHealthEvidence ev;
+            ev.systemdChecked = true;
+            ev.failedSystemdUnits = 0;
+            ev.activeKernelCheckDone = true;
+            ev.activeKernelImagePresent = true;
+            ev.bootVerified = true;
+            ev.recoveryAssessmentStatus = QStringLiteral("healthy");
+            return ev;
+        };
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 7, 5000);
+        installer.start();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 7, 5000);
+        QCOMPARE(installer.healthStatus(), "healthy");
+        QVERIFY(installer.rebootRequired());
+        QCOMPARE(installer.rebootStatus(), "recommended");
+        QVERIFY(installer.rebootSafetyNotice().contains("açık kullanıcı onayıyla"));
+    }
 };
 
 QTEST_MAIN(UpdateInstallerTest)
