@@ -1,25 +1,27 @@
 pkgname=zethropol-diagnostics
 pkgver=0.1.0
-pkgrel=1
+pkgrel=3
 pkgdesc="Zethropol Diagnostics D-Bus service"
 url="https://github.com/zethropol/Zethropol-OS"
 arch=("x86_64")
 license=("MIT")
 depends=("glibc" "dbus" "systemd")
 makedepends=("cargo")
-
-# Replace this with the full commit hash after the Diagnostics source is committed and pushed.
-_commit="ff86546a897fb80616354bd231d4a7da1e2529ae"
-source=("Zethropol-OS::git+https://github.com/zethropol/Zethropol-OS.git#commit=${_commit}")
-sha256sums=("SKIP")
+source=("${pkgname}-${pkgver}-${pkgrel}-src.tar.gz")
+sha256sums=("cd86907c4fef43ae058f49e2b01e67266176ca5da638dfb3f5676164af0fca7b")
 
 build() {
-    cd "$srcdir/Zethropol-OS/services/diagnostics"
-    cargo build --release --locked
+    cd "$srcdir/${pkgname}-${pkgver}/services/diagnostics"
+    cargo build --release --locked --offline
+}
+
+check() {
+    cd "$srcdir/${pkgname}-${pkgver}/services/diagnostics"
+    cargo test --locked --offline
 }
 
 package() {
-    cd "$srcdir/Zethropol-OS/services/diagnostics"
+    cd "$srcdir/${pkgname}-${pkgver}/services/diagnostics"
 
     install -Dm755 target/release/diagnostics "$pkgdir/usr/lib/zethropol/zethropol-diagnostics"
     install -Dm644 deployment/dbus/org.zethropol.Diagnostics.conf "$pkgdir/etc/dbus-1/system.d/org.zethropol.Diagnostics.conf"

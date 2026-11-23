@@ -79,6 +79,63 @@ private slots:
         }
         QVERIFY(service.getProcessDetails(-1).isEmpty());
     }
+
+    void truncatedCommAndDesktopSessionProcessesProtected() {
+        // 15-byte kernel TASK_COMM_LEN truncated names MUST match protection
+        QVERIFY(ProcessService::isCriticalProcessIdentity(QStringLiteral("systemd-journal")));
+        QVERIFY(ProcessService::isCriticalProcessIdentity(QStringLiteral("systemd-resolve")));
+        QVERIFY(ProcessService::isCriticalProcessIdentity(QStringLiteral("polkit-kde-auth")));
+        QVERIFY(ProcessService::isCriticalProcessIdentity(QStringLiteral("startplasma-way")));
+        // Full names and exe/argv0 basenames MUST match protection
+        QVERIFY(ProcessService::isCriticalProcessIdentity(QStringLiteral("kwin_wayland")));
+        QVERIFY(ProcessService::isCriticalProcessIdentity(QStringLiteral("plasmashell")));
+        QVERIFY(ProcessService::isCriticalProcessIdentity(QStringLiteral("pipewire")));
+        QVERIFY(ProcessService::isCriticalProcessIdentity(QStringLiteral("wireplumber")));
+        QVERIFY(ProcessService::isCriticalProcessIdentity(QStringLiteral("unknown"), QStringLiteral("/usr/lib/systemd/systemd-journald")));
+        QVERIFY(ProcessService::isCriticalProcessIdentity(QStringLiteral("unknown"), QStringLiteral("/usr/bin/kwin_wayland (deleted)")));
+        // Ordinary user tools remain manageable
+        QVERIFY(!ProcessService::isCriticalProcessIdentity(QStringLiteral("sleep"), QStringLiteral("/usr/bin/sleep")));
+    }
+
+    void treeProcessesHasNoDuplicatePids() {
+        ProcessService service;
+        const QVariantList tree = service.treeProcesses();
+        QVERIFY(!tree.isEmpty());
+        QSet<int> seen;
+        for (const QVariant &v : tree) {
+            const int pid = v.toMap().value(QStringLiteral("pid")).toInt();
+            QVERIFY2(!seen.contains(pid), qPrintable(QStringLiteral("Duplicate PID in tree: %1").arg(pid)));
+            seen.insert(pid);
+        }
+    }
+
+    void isolatedTerminateAndForceKillFlow() {
+        // 1. Clean SIGTERM on normal sleep process
+        QProcess normalChild;
+        normalChild.start(QStringLiteral("/usr/bin/sleep"), {QStringLiteral("30")});
+        QVERIFY(normalChild.waitForStarted());
+        ProcessService service;
+        const int normalPid = static_cast<int>(normalChild.processId());
+        const quint64 normalStart = service.processStartTime(normalPid);
+        QVERIFY(service.canTerminate(normalPid));
+        QVERIFY(service.terminateProcess(normalPid, normalStart));
+        QVERIFY(normalChild.waitForFinished(3000));
+        QTRY_VERIFY_WITH_TIMEOUT(!service.actionBusy(), 3000);
+
+        // 2. Child ignoring SIGTERM triggers processRequiresForceKill and allows confirmed SIGKILL
+        QProcess stubbornChild;
+        stubbornChild.start(QStringLiteral("/bin/sh"), {QStringLiteral("-c"), QStringLiteral("trap '' TERM; while true; do sleep 1; done")});
+        QVERIFY(stubbornChild.waitForStarted());
+        QTest::qWait(150);
+        const int stubbornPid = static_cast<int>(stubbornChild.processId());
+        const quint64 stubbornStart = service.processStartTime(stubbornPid);
+        QSignalSpy forceKillSpy(&service, &ProcessService::processRequiresForceKill);
+        QVERIFY(service.terminateProcess(stubbornPid, stubbornStart));
+        QTRY_COMPARE_WITH_TIMEOUT(forceKillSpy.count(), 1, 4000);
+        QVERIFY(!service.forceKillProcess(stubbornPid, stubbornStart, false));
+        QVERIFY(service.forceKillProcess(stubbornPid, stubbornStart, true));
+        QVERIFY(stubbornChild.waitForFinished(3000));
+    }
 };
 
 QTEST_GUILESS_MAIN(ProcessServiceTest)

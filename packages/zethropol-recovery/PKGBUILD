@@ -1,0 +1,34 @@
+pkgname=zethropol-recovery
+pkgver=0.1.0
+pkgrel=2
+pkgdesc="Zethropol Recovery D-Bus service"
+url="https://github.com/zethropol/Zethropol-OS"
+arch=("x86_64")
+license=("MIT")
+depends=("glibc" "dbus" "systemd" "polkit")
+optdepends=("snapper: Btrfs recovery point backend")
+makedepends=("cargo")
+source=("${pkgname}-${pkgver}-${pkgrel}-src.tar.gz")
+sha256sums=("13d0bcb9d95ea68fcaf7f5c4f6cbe742f4909b004cb2e73671fafafc7d4229c3")
+
+build() {
+    cd "$srcdir/${pkgname}-${pkgver}/services/recovery"
+    cargo build --release --locked --offline
+}
+
+check() {
+    cd "$srcdir/${pkgname}-${pkgver}/services/recovery"
+    cargo test --locked --offline
+}
+
+package() {
+    local _srcroot="$srcdir/${pkgname}-${pkgver}"
+    cd "$_srcroot/services/recovery"
+
+    install -Dm755 target/release/recovery "$pkgdir/usr/lib/zethropol/zethropol-recovery"
+    install -Dm644 deployment/dbus/org.zethropol.Recovery.conf "$pkgdir/etc/dbus-1/system.d/org.zethropol.Recovery.conf"
+    install -Dm644 deployment/dbus/org.zethropol.Recovery.service "$pkgdir/usr/share/dbus-1/system-services/org.zethropol.Recovery.service"
+    install -Dm644 deployment/systemd/zethropol-recovery.service "$pkgdir/usr/lib/systemd/system/zethropol-recovery.service"
+    install -Dm644 deployment/polkit/org.zethropol.recovery.policy "$pkgdir/usr/share/polkit-1/actions/org.zethropol.recovery.policy"
+    install -Dm644 "$_srcroot/LICENSE" "$pkgdir/usr/share/licenses/${pkgname}/LICENSE"
+}

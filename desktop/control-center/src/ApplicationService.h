@@ -21,9 +21,13 @@ public:
     bool removing() const;
     QString removeStatus() const;
 
+    static bool isValidPackageName(const QString &package);
+    static bool isProtectedPackage(const QString &package);
+    static QHash<QString, QString> parsePacmanOwnerOutput(const QString &stdoutText);
+
 public slots:
     void refresh();
-    void removeApplication(const QString &package);
+    void removeApplication(const QString &package, bool userConfirmed = false);
 
 signals:
     void stateChanged();

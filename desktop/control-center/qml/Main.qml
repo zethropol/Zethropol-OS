@@ -807,7 +807,7 @@ ApplicationWindow {
                                         }
 
                                         Label {
-                                            text: "Version: " + SystemState.desktopVersion
+                                            text: (SystemState.isKdePlasma ? "Plasma Version: " : "Version: ") + SystemState.desktopVersion
                                             opacity: 0.65
                                         }
 
@@ -1018,11 +1018,17 @@ ApplicationWindow {
 
                                         Label { text: "Network"; font.pixelSize: 20 }
                                         Label {
-                                            text: "Download: " + Number(MonitoringBridge.state.network_download_mbps || 0).toFixed(2) + " Mbps"
+                                            text: typeof MonitoringBridge.state.network_download_mbps === "number"
+                                                  && isFinite(MonitoringBridge.state.network_download_mbps)
+                                                  ? "Download: " + MonitoringBridge.state.network_download_mbps.toFixed(2) + " Mbps"
+                                                  : "Download: Unknown"
                                             font.pixelSize: 16
                                         }
                                         Label {
-                                            text: "Upload: " + Number(MonitoringBridge.state.network_upload_mbps || 0).toFixed(2) + " Mbps"
+                                            text: typeof MonitoringBridge.state.network_upload_mbps === "number"
+                                                  && isFinite(MonitoringBridge.state.network_upload_mbps)
+                                                  ? "Upload: " + MonitoringBridge.state.network_upload_mbps.toFixed(2) + " Mbps"
+                                                  : "Upload: Unknown"
                                             opacity: 0.65
                                         }
                                         Label {
@@ -1455,8 +1461,8 @@ ApplicationWindow {
                                             width: ListView.view.width
                                             height: 104
                                             radius: 10
-                                            border.color: "red"
-                                            border.width: 2
+                                            border.color: rootWindow.palette.mid
+                                            border.width: 1
 
                                             RowLayout {
                                                 anchors.fill: parent
@@ -1538,8 +1544,8 @@ ApplicationWindow {
                                             width: ListView.view.width
                                             height: 88
                                             radius: 10
-                                            border.color: "green"
-                                            border.width: 2
+                                            border.color: rootWindow.palette.mid
+                                            border.width: 1
 
                                             RowLayout {
                                                 anchors.fill: parent
@@ -1600,11 +1606,14 @@ ApplicationWindow {
                                                 }
 
                                                 Button {
+                                                    objectName: "deleteRecoveryPointButton"
                                                     Layout.preferredWidth: 120
                                                     Layout.alignment: Qt.AlignVCenter
-                                                    text: RecoveryBridge.actionBusy ? "Busy..." : "Delete"
-                                                    enabled: !RecoveryBridge.actionBusy
-                                                    onClicked: RecoveryBridge.deleteRecoveryPoint(modelData.id)
+                                                    text: modelData.deletable === false
+                                                          ? "Protected"
+                                                          : (RecoveryBridge.actionBusy ? "Busy..." : "Delete")
+                                                    enabled: !RecoveryBridge.actionBusy && modelData.deletable !== false
+                                                    onClicked: RecoveryBridge.requestDeleteRecoveryPoint(modelData.id)
                                                 }
                                             }
                                         }
@@ -1613,6 +1622,58 @@ ApplicationWindow {
                                             visible: RecoveryBridge.available && RecoveryBridge.recoveryPoints.length === 0
                                             text: "No standalone recovery points found"
                                             opacity: 0.6
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        objectName: "recoveryDeleteConfirmPanel"
+                                        visible: RecoveryBridge.deleteConfirmationPending && RecoveryBridge.pendingDeleteSnapshotId > 0
+                                        color: rootWindow.palette.alternateBase
+                                        Layout.fillWidth: true
+                                        implicitHeight: deleteConfirmColumn.implicitHeight + 24
+                                        radius: 10
+                                        border.width: 1
+                                        border.color: rootWindow.palette.mid
+
+                                        ColumnLayout {
+                                            id: deleteConfirmColumn
+                                            anchors.fill: parent
+                                            anchors.margins: 12
+                                            spacing: 8
+
+                                            Label {
+                                                text: "Confirm deletion of recovery point #" + RecoveryBridge.pendingDeleteSnapshotId
+                                                textFormat: Text.PlainText
+                                                font.bold: true
+                                                wrapMode: Text.WordWrap
+                                                Layout.fillWidth: true
+                                            }
+
+                                            Label {
+                                                text: RecoveryBridge.pendingDeleteDescription !== ""
+                                                      ? RecoveryBridge.pendingDeleteDescription
+                                                      : "This standalone manual recovery snapshot will be permanently deleted after administrator authorization."
+                                                textFormat: Text.PlainText
+                                                opacity: 0.8
+                                                wrapMode: Text.WordWrap
+                                                Layout.fillWidth: true
+                                            }
+
+                                            RowLayout {
+                                                spacing: 8
+                                                Button {
+                                                    objectName: "confirmDeleteRecoveryPointButton"
+                                                    text: "Confirm Delete"
+                                                    enabled: !RecoveryBridge.actionBusy
+                                                    onClicked: RecoveryBridge.confirmDeleteRecoveryPoint()
+                                                }
+                                                Button {
+                                                    objectName: "cancelDeleteRecoveryPointButton"
+                                                    text: "Cancel"
+                                                    enabled: !RecoveryBridge.actionBusy
+                                                    onClicked: RecoveryBridge.cancelDeleteRecoveryPoint()
+                                                }
+                                            }
                                         }
                                     }
 
@@ -2181,19 +2242,19 @@ ApplicationWindow {
 
                                             Button {
                                                 text: "Start"
-                                                enabled: !ServiceBridge.busy && modelData.active !== "active"
+                                                enabled: !ServiceBridge.busy && (modelData.canStart !== undefined ? modelData.canStart : modelData.active !== "active")
                                                 onClicked: ServiceBridge.startService(modelData.name)
                                             }
 
                                             Button {
                                                 text: "Stop"
-                                                enabled: !ServiceBridge.busy && modelData.active === "active"
+                                                enabled: !ServiceBridge.busy && (modelData.canStop !== undefined ? modelData.canStop : modelData.active === "active")
                                                 onClicked: ServiceBridge.stopService(modelData.name)
                                             }
 
                                             Button {
                                                 text: "Restart"
-                                                enabled: !ServiceBridge.busy && modelData.active === "active"
+                                                enabled: !ServiceBridge.busy && (modelData.canRestart !== undefined ? modelData.canRestart : modelData.active === "active")
                                                 onClicked: ServiceBridge.restartService(modelData.name)
                                             }
 
@@ -2302,7 +2363,7 @@ ApplicationWindow {
                                         }
 
                                         Button {
-                                            visible: modelData.removable
+                                            visible: modelData.removable && !modelData.protected
                                             text: "Remove"
                                             enabled: !ApplicationBridge.removing
                                             onClicked: removeDialog.open()
@@ -2319,14 +2380,16 @@ ApplicationWindow {
                                                     spacing: 12
 
                                                     Label {
-                                                        text: "Remove <b>" + modelData.name + "</b>?"
-                                                        textFormat: Text.RichText
+                                                        text: "Remove " + modelData.name + "?"
+                                                        textFormat: Text.PlainText
+                                                        font.bold: true
                                                         wrapMode: Text.WordWrap
                                                         Layout.fillWidth: true
                                                     }
 
                                                     Label {
                                                         text: "Package: " + modelData.package
+                                                        textFormat: Text.PlainText
                                                         opacity: 0.6
                                                         Layout.fillWidth: true
                                                         wrapMode: Text.WordWrap
@@ -2334,13 +2397,14 @@ ApplicationWindow {
 
                                                     Label {
                                                         text: "This will uninstall the package from the system."
+                                                        textFormat: Text.PlainText
                                                         opacity: 0.6
                                                         Layout.fillWidth: true
                                                         wrapMode: Text.WordWrap
                                                     }
                                                 }
 
-                                                onAccepted: ApplicationBridge.removeApplication(modelData.package)
+                                                onAccepted: ApplicationBridge.removeApplication(modelData.package, true)
                                             }
                                         }
                                     }

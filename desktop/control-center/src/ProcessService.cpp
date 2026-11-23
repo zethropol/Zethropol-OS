@@ -16,16 +16,63 @@ namespace {
 
 const QSet<QString> s_criticalProcessNames = {
     QStringLiteral("systemd"),
+    // Include both full names and Linux 15-byte TASK_COMM_LEN truncated names
     QStringLiteral("systemd-journald"),
+    QStringLiteral("systemd-journal"),
     QStringLiteral("systemd-logind"),
     QStringLiteral("systemd-udevd"),
     QStringLiteral("systemd-resolved"),
+    QStringLiteral("systemd-resolve"),
     QStringLiteral("dbus-broker"),
     QStringLiteral("dbus-daemon"),
     QStringLiteral("polkitd"),
     QStringLiteral("auditd"),
-    QStringLiteral("kthreadd")
+    QStringLiteral("kthreadd"),
+    // Critical active desktop session processes (protect against accidental 1-click session loss)
+    QStringLiteral("kwin_wayland"),
+    QStringLiteral("kwin_x11"),
+    QStringLiteral("plasmashell"),
+    QStringLiteral("startplasma-wayland"),
+    QStringLiteral("startplasma-way"),
+    QStringLiteral("startplasma-x11"),
+    QStringLiteral("xwayland"),
+    QStringLiteral("polkit-kde-authentication-agent-1"),
+    QStringLiteral("polkit-kde-auth"),
+    QStringLiteral("pipewire"),
+    QStringLiteral("wireplumber"),
+    QStringLiteral("sddm"),
+    QStringLiteral("sddm-helper"),
+    QStringLiteral("plasmalogin")
 };
+
+QString basenameOfExecutable(const QString &rawPath)
+{
+    QString cleaned = rawPath.trimmed();
+    if (cleaned.endsWith(QStringLiteral(" (deleted)")))
+        cleaned.chop(10);
+    const int slash = cleaned.lastIndexOf(QLatin1Char('/'));
+    if (slash >= 0)
+        cleaned = cleaned.mid(slash + 1);
+    return cleaned.toLower();
+}
+
+QString readProcessExeOrArgv0Basename(int pid)
+{
+    const QString exeLink = QFileInfo(QStringLiteral("/proc/%1/exe").arg(pid)).symLinkTarget();
+    if (!exeLink.isEmpty())
+        return basenameOfExecutable(exeLink);
+
+    QFile cmdlineFile(QStringLiteral("/proc/%1/cmdline").arg(pid));
+    if (cmdlineFile.open(QIODevice::ReadOnly)) {
+        const QByteArray raw = cmdlineFile.read(4096);
+        cmdlineFile.close();
+        const int nul = raw.indexOf('\0');
+        const QByteArray argv0 = (nul >= 0) ? raw.left(nul) : raw;
+        if (!argv0.isEmpty())
+            return basenameOfExecutable(QString::fromUtf8(argv0));
+    }
+    return {};
+}
 
 QString usernameFromUid(uid_t uid)
 {
@@ -357,16 +404,28 @@ QString ProcessService::readProcessName(int pid) const
     return QString();
 }
 
+bool ProcessService::isCriticalProcessIdentity(const QString &comm, const QString &exeOrArgv0)
+{
+    const QString commLower = comm.trimmed().toLower();
+    if (!commLower.isEmpty() && s_criticalProcessNames.contains(commLower))
+        return true;
+
+    const QString exeBase = basenameOfExecutable(exeOrArgv0);
+    if (!exeBase.isEmpty() && s_criticalProcessNames.contains(exeBase))
+        return true;
+
+    return false;
+}
+
 bool ProcessService::isCritical(int pid) const
 {
     if (pid <= 2)
         return true;
 
-    if (pid == static_cast<int>(::getpid()))
+    if (pid == static_cast<int>(::getpid()) || pid == static_cast<int>(::getppid()))
         return true;
 
-    const QString name = readProcessName(pid).toLower();
-    if (s_criticalProcessNames.contains(name))
+    if (isCriticalProcessIdentity(readProcessName(pid), readProcessExeOrArgv0Basename(pid)))
         return true;
 
     // Check if it's a kernel thread (ppid == 2)
@@ -553,12 +612,15 @@ void ProcessService::scanProcesses()
         info.memoryFormatted = formatMemory(memBytes);
 
         // Protection and role
-        info.isCritical = (info.pid <= 2 || info.ppid == 2 || info.pid == static_cast<int>(::getpid())
-                           || s_criticalProcessNames.contains(info.name.toLower()));
+        const QString exeBase = readProcessExeOrArgv0Basename(info.pid);
+        info.isCritical = (info.pid <= 2 || info.ppid == 2
+                           || info.pid == static_cast<int>(::getpid())
+                           || info.pid == static_cast<int>(::getppid())
+                           || isCriticalProcessIdentity(info.name, exeBase));
 
         if (info.isCritical) {
             info.canTerminate = false;
-            info.protectionReason = QStringLiteral("Kritik Sistem Süreci (Korumalı)");
+            info.protectionReason = QStringLiteral("Kritik Sistem/Oturum Süreci (Korumalı)");
         } else if (currentUid != 0 && info.uid != currentUid) {
             info.canTerminate = false;
             info.protectionReason = QStringLiteral("Yetkisiz (Farklı kullanıcı)");
@@ -708,9 +770,11 @@ void ProcessService::applyFilterAndSort()
     }
 
     QVariantList treeList;
+    QSet<int> visited;
     std::function<void(int, int)> addTreeNode = [&](int pid, int depth) {
-        if (!mapByPid.contains(pid))
+        if (!mapByPid.contains(pid) || visited.contains(pid))
             return;
+        visited.insert(pid);
         QVariantMap node = mapByPid.value(pid);
         node.insert(QStringLiteral("depth"), depth);
         treeList.append(node);
@@ -718,7 +782,7 @@ void ProcessService::applyFilterAndSort()
         const QVariantList children = node.value(QStringLiteral("childPids")).toList();
         for (const QVariant &c : children) {
             int childPid = c.toInt();
-            if (mapByPid.contains(childPid)) {
+            if (mapByPid.contains(childPid) && !visited.contains(childPid)) {
                 addTreeNode(childPid, depth + 1);
             }
         }
@@ -727,8 +791,8 @@ void ProcessService::applyFilterAndSort()
     for (const QVariant &item : flatList) {
         QVariantMap m = item.toMap();
         int ppid = m.value(QStringLiteral("ppid")).toInt();
-        // Root nodes: ppid <= 1 or parent not in map
-        if (ppid <= 1 || !mapByPid.contains(ppid)) {
+        // Root nodes: ppid <= 0 or parent not present in filtered map (avoid duplicating PID 1 children)
+        if (ppid <= 0 || !mapByPid.contains(ppid)) {
             addTreeNode(m.value(QStringLiteral("pid")).toInt(), 0);
         }
     }
@@ -774,6 +838,9 @@ QVariantMap ProcessService::getProcessDetails(int pid) const
 
 bool ProcessService::terminateProcess(int pid, quint64 expectedStartTime)
 {
+    if (m_actionBusy)
+        return false;
+
     m_statusMessage.clear();
 
     // 1. Backend-level verification: critical process protection
@@ -825,10 +892,22 @@ bool ProcessService::terminateProcess(int pid, quint64 expectedStartTime)
         m_actionBusy = false;
         emit actionBusyChanged();
 
-        // Check if process is still alive and identical
+        // Check if process is still alive (not zombie) and identical
         if (::kill(pid, 0) == 0) {
+            bool isZombie = false;
+            QFile stFile(QStringLiteral("/proc/%1/stat").arg(pid));
+            if (stFile.open(QIODevice::ReadOnly)) {
+                const QByteArray stData = stFile.readAll();
+                stFile.close();
+                const int lp = stData.lastIndexOf(')');
+                if (lp >= 0) {
+                    const QByteArray after = stData.mid(lp + 1).trimmed();
+                    if (!after.isEmpty() && after.at(0) == 'Z')
+                        isZombie = true;
+                }
+            }
             quint64 checkStartTime = readProcessStartTime(pid);
-            if (checkStartTime != 0 && checkStartTime == actualStartTime) {
+            if (!isZombie && checkStartTime != 0 && checkStartTime == actualStartTime) {
                 // Process is still running and did not respond to SIGTERM
                 m_statusMessage = QStringLiteral("İşlem (PID: %1, %2) SIGTERM sinyaline yanıt vermedi.").arg(pid).arg(procName);
                 emit statusMessageChanged();
@@ -849,6 +928,9 @@ bool ProcessService::terminateProcess(int pid, quint64 expectedStartTime)
 
 bool ProcessService::forceKillProcess(int pid, quint64 expectedStartTime, bool userConfirmed)
 {
+    if (m_actionBusy)
+        return false;
+
     m_statusMessage.clear();
 
     // 1. Enforce explicit user confirmation requirement on backend

@@ -9,6 +9,10 @@ BusName=org.zethropol.Services
 ExecStart=/usr/lib/zethropol/zethropol-services
 Restart=on-failure
 RestartSec=2s
-
 PrivateTmp=true
 ProtectSystem=full
+ProtectHome=true
+PrivateDevices=true
+ProtectKernelModules=true
+NoNewPrivileges=true
+LockPersonality=true

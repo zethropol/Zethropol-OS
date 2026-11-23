@@ -227,7 +227,9 @@ private:
         paths.polkitPolicyFile = writeFile(
             dir,
             QStringLiteral("polkit/org.zethropol.recovery.policy"),
-            QByteArrayLiteral("<action id=\"org.zethropol.recovery.rollback\"/>\n"));
+            QByteArrayLiteral(
+                "<action id=\"org.zethropol.recovery.modify\"/>\n"
+                "<action id=\"org.zethropol.recovery.rollback\"/>\n"));
 
         const QByteArray snapperScript =
             "CREATED_FILE='" + paths.createdStateFile.toUtf8() + "'\n"

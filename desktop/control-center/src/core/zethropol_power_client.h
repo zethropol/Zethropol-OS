@@ -13,6 +13,7 @@ public:
     ~ZethropolPowerClient() override;
 
     QVariantMap state() const { return m_state; }
+    bool signalConnected() const { return m_signalConnected; }
 
 public slots:
     void refreshState();
@@ -29,11 +30,12 @@ signals:
     void errorOccurred(const QString &message);
 
 private slots:
-    void handleDbusSignal(const QVariant &state);
+    void handleDbusSignal(const QVariantMap &state);
 
 private:
     QDBusInterface *m_interface;
     QVariantMap m_state;
+    bool m_signalConnected = false;
 
     void parseResult(const QVariantMap &result);
     void invokeOperation(const QString &method, const QVariantList &args = {});

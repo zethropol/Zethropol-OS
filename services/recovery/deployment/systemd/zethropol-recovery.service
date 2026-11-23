@@ -11,6 +11,10 @@ Restart=on-failure
 RestartSec=2s
 PrivateTmp=true
 ProtectSystem=full
+ProtectKernelModules=true
+ProtectControlGroups=true
+NoNewPrivileges=true
+LockPersonality=true
 
 [Install]
 WantedBy=multi-user.target

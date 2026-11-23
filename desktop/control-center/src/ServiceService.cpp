@@ -1,13 +1,85 @@
 #include "ServiceService.h"
 
+#include <QDBusArgument>
+#include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDBusPendingCallWatcher>
+#include <QDBusVariant>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QRegularExpression>
+#include <QSet>
 #include <QTimer>
 #include <QVariantMap>
 #include <functional>
 
 namespace {
+
+const QSet<QString> s_validActions = {
+    QStringLiteral("start"),
+    QStringLiteral("stop"),
+    QStringLiteral("restart"),
+    QStringLiteral("enable"),
+    QStringLiteral("disable")
+};
+
+const QSet<QString> s_quarantinedServices = {
+    QStringLiteral("zethropol-performance.service")
+};
+
+const QSet<QString> s_protectedCriticalServices = {
+    QStringLiteral("dbus.service"),
+    QStringLiteral("dbus-broker.service"),
+    QStringLiteral("systemd-journald.service"),
+    QStringLiteral("systemd-logind.service"),
+    QStringLiteral("systemd-udevd.service"),
+    QStringLiteral("polkit.service"),
+    QStringLiteral("zethropol-services.service"),
+    QStringLiteral("zethropol-recovery.service"),
+    QStringLiteral("display-manager.service"),
+    QStringLiteral("sddm.service"),
+    QStringLiteral("plasmalogin.service"),
+    QStringLiteral("gdm.service")
+};
+
+QVariant decodeServiceDbusValue(const QVariant &value)
+{
+    if (value.userType() == qMetaTypeId<QDBusVariant>())
+        return decodeServiceDbusValue(value.value<QDBusVariant>().variant());
+
+    if (value.userType() != qMetaTypeId<QDBusArgument>())
+        return value;
+
+    const auto arg = value.value<QDBusArgument>();
+    if (arg.currentType() == QDBusArgument::StructureType) {
+        QVariantMap map;
+        bool ok = false;
+        QString code, message, opId;
+        arg.beginStructure();
+        arg >> ok >> code >> message >> opId;
+        arg.endStructure();
+        map.insert(QStringLiteral("success"), ok);
+        map.insert(QStringLiteral("code"), code);
+        map.insert(QStringLiteral("message"), message);
+        map.insert(QStringLiteral("operation_id"), opId);
+        return map;
+    }
+    if (arg.currentType() == QDBusArgument::MapType) {
+        QVariantMap map;
+        arg.beginMap();
+        while (!arg.atEnd()) {
+            arg.beginMapEntry();
+            QString k;
+            QVariant v;
+            arg >> k >> v;
+            map.insert(k, decodeServiceDbusValue(v));
+            arg.endMapEntry();
+        }
+        arg.endMap();
+        return map;
+    }
+    return value;
+}
 
 void readServiceCommand(QObject *owner, const QString &program, const QStringList &arguments,
                         std::function<void(bool, const QString &)> complete)
@@ -47,16 +119,71 @@ void readServiceCommand(QObject *owner, const QString &program, const QStringLis
 
 } // namespace
 
+bool ServiceService::isValidServiceName(const QString &name)
+{
+    if (name.isEmpty() || name.size() > 256)
+        return false;
+    if (name.startsWith(QLatin1Char('-')) || name.startsWith(QLatin1Char('.')))
+        return false;
+    if (!name.endsWith(QStringLiteral(".service")) || name.endsWith(QStringLiteral("@.service")))
+        return false;
+    if (name.contains(QLatin1Char('/')) || name.contains(QLatin1Char('\\'))
+        || name.contains(QStringLiteral("..")))
+        return false;
+    static const QRegularExpression allowedRe(QStringLiteral("^[A-Za-z0-9_.@:-]+\\.service$"));
+    return allowedRe.match(name).hasMatch();
+}
+
+bool ServiceService::isQuarantinedService(const QString &name)
+{
+    return s_quarantinedServices.contains(name);
+}
+
+bool ServiceService::isProtectedAction(const QString &name, const QString &action)
+{
+    if (s_quarantinedServices.contains(name))
+        return true;
+    if (s_protectedCriticalServices.contains(name)
+        && (action == QStringLiteral("stop")
+            || action == QStringLiteral("disable")
+            || action == QStringLiteral("restart"))) {
+        return true;
+    }
+    return false;
+}
+
+bool ServiceService::validateServiceRequest(const QString &name, const QString &action, QString *reason)
+{
+    if (!s_validActions.contains(action)) {
+        if (reason)
+            *reason = QStringLiteral("Desteklenmeyen servis işlemi.");
+        return false;
+    }
+    if (!isValidServiceName(name)) {
+        if (reason)
+            *reason = QStringLiteral("Geçersiz systemd servis adı.");
+        return false;
+    }
+    if (isQuarantinedService(name)) {
+        if (reason)
+            *reason = QStringLiteral("Karantinadaki servis (%1) Services üzerinden yönetilemez.").arg(name);
+        return false;
+    }
+    if (isProtectedAction(name, action)) {
+        if (reason)
+            *reason = QStringLiteral("Kritik sistem servisi (%1) durdurulamaz, devre dışı bırakılamaz veya yeniden başlatılamaz.").arg(name);
+        return false;
+    }
+    return true;
+}
+
 ServiceService::ServiceService(QObject *parent)
     : QObject(parent)
 {
     refresh();
 }
 
-QVariantList ServiceService::services() const
-{
-    return m_services;
-}
+QVariantList ServiceService::services() const { return m_services; }
 
 QVariantList ServiceService::failedServices() const
 {
@@ -68,38 +195,18 @@ QVariantList ServiceService::failedServices() const
     return failed;
 }
 
-int ServiceService::total() const
-{
-    return m_total;
-}
-
-int ServiceService::active() const
-{
-    return m_active;
-}
-
-int ServiceService::failed() const
-{
-    return m_failed;
-}
-
-bool ServiceService::busy() const
-{
-    return m_busy;
-}
-
-QString ServiceService::actionStatus() const
-{
-    return m_actionStatus;
-}
-
+int ServiceService::total() const { return m_total; }
+int ServiceService::active() const { return m_active; }
+int ServiceService::failed() const { return m_failed; }
+bool ServiceService::busy() const { return m_busy; }
+QString ServiceService::actionStatus() const { return m_actionStatus; }
 QString ServiceService::failureDetailsName() const { return m_failureDetailsName; }
 QString ServiceService::failureDetailsText() const { return m_failureDetailsText; }
 bool ServiceService::failureDetailsBusy() const { return m_failureDetailsBusy; }
 
 void ServiceService::loadFailureDetails(const QString &name)
 {
-    if (m_failureDetailsBusy)
+    if (m_failureDetailsBusy || !isValidServiceName(name))
         return;
     bool failed = false;
     for (const QVariant &item : failedServices()) {
@@ -193,7 +300,12 @@ void ServiceService::loadFailureDetails(const QString &name)
 
 void ServiceService::refresh()
 {
+    auto environment = QProcessEnvironment::systemEnvironment();
+    environment.insert(QStringLiteral("SYSTEMD_COLORS"), QStringLiteral("0"));
+    environment.insert(QStringLiteral("LC_ALL"), QStringLiteral("C"));
+
     QProcess unitsProcess;
+    unitsProcess.setProcessEnvironment(environment);
     unitsProcess.start(QStringLiteral("/usr/bin/systemctl"),
                        {QStringLiteral("list-units"),
                         QStringLiteral("--type=service"),
@@ -201,16 +313,27 @@ void ServiceService::refresh()
                         QStringLiteral("--no-legend"),
                         QStringLiteral("--plain"),
                         QStringLiteral("--no-pager")});
-    unitsProcess.waitForFinished(5000);
+    const bool unitsOk = unitsProcess.waitForFinished(5000)
+        && unitsProcess.exitStatus() == QProcess::NormalExit
+        && unitsProcess.exitCode() == 0;
 
     QProcess filesProcess;
+    filesProcess.setProcessEnvironment(environment);
     filesProcess.start(QStringLiteral("/usr/bin/systemctl"),
                        {QStringLiteral("list-unit-files"),
                         QStringLiteral("--type=service"),
                         QStringLiteral("--no-legend"),
                         QStringLiteral("--plain"),
                         QStringLiteral("--no-pager")});
-    filesProcess.waitForFinished(5000);
+    const bool filesOk = filesProcess.waitForFinished(5000)
+        && filesProcess.exitStatus() == QProcess::NormalExit
+        && filesProcess.exitCode() == 0;
+
+    if (!unitsOk && !filesOk) {
+        m_actionStatus = QStringLiteral("Servis listesi okunamadı (systemd erişilemez).");
+        emit stateChanged();
+        return;
+    }
 
     QVariantMap servicesByName;
 
@@ -220,28 +343,27 @@ void ServiceService::refresh()
                    Qt::SkipEmptyParts);
 
     for (const QString &line : unitLines) {
+        const QString trimmed = line.trimmed();
         const QStringList fields =
-            line.trimmed().split(QRegularExpression(QStringLiteral("[[:space:]]+")),
-                                 Qt::KeepEmptyParts);
+            trimmed.split(QRegularExpression(QStringLiteral("[[:space:]]+")),
+                          Qt::SkipEmptyParts);
 
         if (fields.size() < 4)
             continue;
 
+        const QString name = fields.at(0);
+        if (!isValidServiceName(name))
+            continue;
+
         QVariantMap service;
-        service.insert(QStringLiteral("name"), fields.at(0));
+        service.insert(QStringLiteral("name"), name);
         service.insert(QStringLiteral("load"), fields.at(1));
         service.insert(QStringLiteral("active"), fields.at(2));
         service.insert(QStringLiteral("sub"), fields.at(3));
-
-        const QString description =
-            line.section(QRegularExpression(QStringLiteral("[[:space:]]+")),
-                         4)
-                .trimmed();
-
-        service.insert(QStringLiteral("description"), description);
+        service.insert(QStringLiteral("description"), fields.mid(4).join(QLatin1Char(' ')));
         service.insert(QStringLiteral("enabled"), QStringLiteral("unknown"));
 
-        servicesByName.insert(fields.at(0), service);
+        servicesByName.insert(name, service);
     }
 
     const QStringList fileLines =
@@ -258,6 +380,9 @@ void ServiceService::refresh()
             continue;
 
         const QString name = fields.at(0);
+        if (!isValidServiceName(name))
+            continue;
+
         QVariantMap service = servicesByName.value(name).toMap();
 
         if (service.isEmpty()) {
@@ -272,19 +397,23 @@ void ServiceService::refresh()
         const bool masked =
             unitFileState == QStringLiteral("masked") ||
             unitFileState == QStringLiteral("masked-runtime");
+        const bool quarantined = isQuarantinedService(name);
+        const bool protectedCritical = s_protectedCriticalServices.contains(name);
 
-        const bool canEnable =
-            unitFileState == QStringLiteral("disabled") ||
-            unitFileState == QStringLiteral("indirect");
+        const bool canEnable = !masked && !quarantined &&
+            (unitFileState == QStringLiteral("disabled") ||
+             unitFileState == QStringLiteral("indirect"));
 
-        const bool canDisable =
-            unitFileState == QStringLiteral("enabled") ||
-            unitFileState == QStringLiteral("enabled-runtime") ||
-            unitFileState == QStringLiteral("linked") ||
-            unitFileState == QStringLiteral("linked-runtime");
+        const bool canDisable = !masked && !quarantined && !protectedCritical &&
+            (unitFileState == QStringLiteral("enabled") ||
+             unitFileState == QStringLiteral("enabled-runtime") ||
+             unitFileState == QStringLiteral("linked") ||
+             unitFileState == QStringLiteral("linked-runtime"));
 
         service.insert(QStringLiteral("enabled"), unitFileState);
         service.insert(QStringLiteral("masked"), masked);
+        service.insert(QStringLiteral("quarantined"), quarantined);
+        service.insert(QStringLiteral("protected"), quarantined || protectedCritical);
         service.insert(QStringLiteral("canEnable"), canEnable);
         service.insert(QStringLiteral("canDisable"), canDisable);
         servicesByName.insert(name, service);
@@ -295,13 +424,23 @@ void ServiceService::refresh()
     int failedCount = 0;
 
     for (auto it = servicesByName.cbegin(); it != servicesByName.cend(); ++it) {
-        const QVariantMap service = it.value().toMap();
-        const QString activeState =
-            service.value(QStringLiteral("active")).toString();
+        QVariantMap service = it.value().toMap();
+        const QString name = service.value(QStringLiteral("name")).toString();
+        const bool masked = service.value(QStringLiteral("masked")).toBool();
+        const bool quarantined = isQuarantinedService(name);
+        const bool protectedCritical = s_protectedCriticalServices.contains(name);
+        service.insert(QStringLiteral("quarantined"), quarantined);
+        service.insert(QStringLiteral("protected"), quarantined || protectedCritical);
+        service.insert(QStringLiteral("canStart"), !masked && !quarantined
+            && service.value(QStringLiteral("active")).toString() != QStringLiteral("active"));
+        service.insert(QStringLiteral("canStop"), !quarantined && !protectedCritical
+            && service.value(QStringLiteral("active")).toString() == QStringLiteral("active"));
+        service.insert(QStringLiteral("canRestart"), !masked && !quarantined && !protectedCritical
+            && service.value(QStringLiteral("active")).toString() == QStringLiteral("active"));
 
+        const QString activeState = service.value(QStringLiteral("active")).toString();
         if (activeState == QStringLiteral("active"))
             ++activeCount;
-
         if (activeState == QStringLiteral("failed"))
             ++failedCount;
 
@@ -327,16 +466,18 @@ void ServiceService::refresh()
     emit stateChanged();
 }
 
-
-bool ServiceService::serviceExists(const QString &name) const
+bool ServiceService::serviceExists(const QString &name, QVariantMap *outService) const
 {
     if (name.isEmpty())
         return false;
 
     for (const QVariant &item : m_services) {
         const QVariantMap service = item.toMap();
-        if (service.value(QStringLiteral("name")).toString() == name)
+        if (service.value(QStringLiteral("name")).toString() == name) {
+            if (outService)
+                *outService = service;
             return true;
+        }
     }
 
     return false;
@@ -344,82 +485,85 @@ bool ServiceService::serviceExists(const QString &name) const
 
 void ServiceService::runAction(const QString &name, const QString &action)
 {
-    if (m_busy || !serviceExists(name))
+    if (m_busy)
         return;
 
+    QString validationError;
+    if (!validateServiceRequest(name, action, &validationError)) {
+        m_actionStatus = validationError;
+        emit stateChanged();
+        return;
+    }
+
+    QVariantMap serviceInfo;
+    if (!serviceExists(name, &serviceInfo)) {
+        m_actionStatus = QStringLiteral("Servis sistem listesinde bulunamadı: %1").arg(name);
+        emit stateChanged();
+        return;
+    }
+
+    if (serviceInfo.value(QStringLiteral("masked")).toBool()
+        && (action == QStringLiteral("start")
+            || action == QStringLiteral("enable")
+            || action == QStringLiteral("restart"))) {
+        m_actionStatus = QStringLiteral("Maskelenmiş servis (%1) başlatılamaz veya etkinleştirilemez.").arg(name);
+        emit stateChanged();
+        return;
+    }
+
+    const QDBusConnection bus = QDBusConnection::systemBus();
+    if (!bus.isConnected()) {
+        m_actionStatus = QStringLiteral("Sistem D-Bus bağlantısı kurulamadı; servis işlemi reddedildi.");
+        emit stateChanged();
+        return;
+    }
+
     m_busy = true;
-    m_actionStatus = QStringLiteral("%1 %2...").arg(action, name);
+    m_actionStatus = QStringLiteral("%1 %2…").arg(action, name);
     emit stateChanged();
 
-    auto *process = new QProcess(this);
+    const QDBusMessage msg = QDBusMessage::createMethodCall(
+        QStringLiteral("org.zethropol.Services"),
+        QStringLiteral("/org/zethropol/Services"),
+        QStringLiteral("org.zethropol.Services.v1"),
+        QStringLiteral("ManageService"))
+        << name
+        << action;
 
-    connect(process, &QProcess::errorOccurred, this,
-            [this, process](QProcess::ProcessError error) {
-        if (error == QProcess::FailedToStart)
-            m_actionStatus = QStringLiteral("Could not start service action.");
-        else
-            m_actionStatus = QStringLiteral("Service action failed.");
-
-        m_busy = false;
-        process->deleteLater();
-        emit stateChanged();
-    });
-
-    connect(process, &QProcess::finished, this,
-            [this, process, action](int exitCode, QProcess::ExitStatus exitStatus) {
-        const QString output =
-            QString::fromLocal8Bit(process->readAllStandardOutput()).trimmed();
-
-        if (exitStatus == QProcess::NormalExit && exitCode == 0) {
-            m_actionStatus =
-                QStringLiteral("Service %1 completed successfully.").arg(action);
+    auto *watcher = new QDBusPendingCallWatcher(bus.asyncCall(msg, 125000), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, watcher, action](QDBusPendingCallWatcher *) {
+        watcher->deleteLater();
+        const QDBusMessage reply = watcher->reply();
+        if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().isEmpty()) {
+            m_actionStatus = QStringLiteral("Servis yönetim arayüzüne (org.zethropol.Services) ulaşılamadı: %1")
+                .arg(reply.errorMessage());
             m_busy = false;
-            process->deleteLater();
-            refresh();
             emit stateChanged();
             return;
         }
 
-        m_actionStatus = !output.isEmpty()
-            ? output
-            : QStringLiteral("Service %1 failed.").arg(action);
+        const QVariantMap result = decodeServiceDbusValue(reply.arguments().constFirst()).toMap();
+        const bool ok = result.value(QStringLiteral("success")).toBool();
+        const QString message = result.value(QStringLiteral("message")).toString();
 
         m_busy = false;
-        process->deleteLater();
+        if (ok) {
+            m_actionStatus = message.isEmpty()
+                ? QStringLiteral("Servis %1 işlemi yetkilendirildi ve uygulandı.").arg(action)
+                : message;
+            QTimer::singleShot(500, this, &ServiceService::refresh);
+        } else {
+            m_actionStatus = message.isEmpty()
+                ? QStringLiteral("Servis %1 işlemi reddedildi veya başarısız oldu.").arg(action)
+                : message;
+        }
         emit stateChanged();
     });
-
-    process->setProgram(QStringLiteral("/usr/bin/pkexec"));
-    process->setArguments({
-        QStringLiteral("/usr/bin/systemctl"),
-        action,
-        name
-    });
-    process->setProcessChannelMode(QProcess::MergedChannels);
-    process->start();
 }
 
-void ServiceService::startService(const QString &name)
-{
-    runAction(name, QStringLiteral("start"));
-}
-
-void ServiceService::stopService(const QString &name)
-{
-    runAction(name, QStringLiteral("stop"));
-}
-
-void ServiceService::restartService(const QString &name)
-{
-    runAction(name, QStringLiteral("restart"));
-}
-
-void ServiceService::enableService(const QString &name)
-{
-    runAction(name, QStringLiteral("enable"));
-}
-
-void ServiceService::disableService(const QString &name)
-{
-    runAction(name, QStringLiteral("disable"));
-}
+void ServiceService::startService(const QString &name) { runAction(name, QStringLiteral("start")); }
+void ServiceService::stopService(const QString &name) { runAction(name, QStringLiteral("stop")); }
+void ServiceService::restartService(const QString &name) { runAction(name, QStringLiteral("restart")); }
+void ServiceService::enableService(const QString &name) { runAction(name, QStringLiteral("enable")); }
+void ServiceService::disableService(const QString &name) { runAction(name, QStringLiteral("disable")); }

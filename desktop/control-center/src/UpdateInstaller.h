@@ -1,8 +1,10 @@
 #pragma once
 
+#include <QDBusMessage>
 #include <QObject>
 #include <QProcess>
 #include <QStringDecoder>
+#include <QVariantMap>
 #include <functional>
 
 class UpdateScanner;
@@ -17,6 +19,9 @@ struct PreUpdateGateResult {
 
 struct PostUpdateHealthEvidence {
     bool pacmanLockPresent = false;
+    bool pacmanDbChecked = false;
+    bool pacmanDbOk = false;
+    QString pacmanDbDetail;
     bool systemdChecked = false;
     int failedSystemdUnits = -1;
     QString systemdDetail;
@@ -25,6 +30,8 @@ struct PostUpdateHealthEvidence {
     bool activeKernelImagePresent = false;
     bool activeKernelCheckDone = false;
     QString bootDetail;
+    bool recoverySnapshotVerified = false;
+    QString recoveryRecommendedLevel;
     QString recoveryAssessmentStatus;
     QString recoveryAssessmentSummary;
 };
@@ -39,6 +46,10 @@ class UpdateInstaller : public QObject
     Q_PROPERTY(QString recoveryGuidance READ recoveryGuidance NOTIFY changed)
     Q_PROPERTY(bool liveExecutionEnabled READ liveExecutionEnabled CONSTANT)
     Q_PROPERTY(bool officialRepoReady READ officialRepoReady NOTIFY changed)
+    Q_PROPERTY(bool officialUpdatesAvailable READ officialUpdatesAvailable NOTIFY changed)
+    Q_PROPERTY(bool aurUpdatesAvailable READ aurUpdatesAvailable NOTIFY changed)
+    Q_PROPERTY(bool flatpakUpdatesAvailable READ flatpakUpdatesAvailable NOTIFY changed)
+    Q_PROPERTY(QString activeScope READ activeScope NOTIFY changed)
     Q_PROPERTY(QString healthStatus READ healthStatus NOTIFY changed)
     Q_PROPERTY(QString healthSummary READ healthSummary NOTIFY changed)
     Q_PROPERTY(QString cleanupStatus READ cleanupStatus NOTIFY changed)
@@ -49,6 +60,8 @@ class UpdateInstaller : public QObject
 
 public:
     explicit UpdateInstaller(UpdateScanner *scanner, QObject *parent = nullptr);
+    ~UpdateInstaller() override;
+
     bool busy() const { return m_busy; }
     QString status() const { return m_status; }
     QString message() const { return m_message; }
@@ -56,6 +69,10 @@ public:
     QString recoveryGuidance() const { return m_recoveryGuidance; }
     bool liveExecutionEnabled() const { return m_liveExecutionEnabled; }
     bool officialRepoReady() const;
+    bool officialUpdatesAvailable() const;
+    bool aurUpdatesAvailable() const;
+    bool flatpakUpdatesAvailable() const;
+    QString activeScope() const { return m_activeScope; }
     QString healthStatus() const { return m_healthStatus; }
     QString healthSummary() const { return m_healthSummary; }
     QString cleanupStatus() const { return m_cleanupStatus; }
@@ -63,9 +80,20 @@ public:
     QString rebootStatus() const { return m_rebootStatus; }
     bool rebootRequired() const { return m_rebootRequired; }
     QString rebootSafetyNotice() const { return m_rebootSafetyNotice; }
+
     static bool isOfficialRepoScanComplete(const UpdateScanner *scanner, QString *reason = nullptr);
     static bool isCriticalBootUpdate(const UpdateScanner *scanner);
+    static bool decodeRecoveryOperationResult(const QDBusMessage &reply,
+                                              bool &ok,
+                                              QString &code,
+                                              QString &message,
+                                              QString &operationId);
+    static QVariantMap decodeRecoveryStringMap(const QDBusMessage &reply);
+    static QVariantMap decodeRecoveryEnvelopeData(const QDBusMessage &reply);
+
     Q_INVOKABLE void start();
+    Q_INVOKABLE void startScoped(const QString &scope);
+    Q_INVOKABLE void cancel();
     Q_INVOKABLE void sendInput(const QString &text);
     Q_INVOKABLE void sendKey(const QString &text);
 
@@ -84,6 +112,8 @@ private:
     QProcess m_process;
     QString m_sessionTool;
     QString m_updater;
+    QString m_pacmanLockPath = QStringLiteral("/var/lib/pacman/db.lck");
+    QString m_activeScope = QStringLiteral("official");
     QString m_status = "idle";
     QString m_message;
     QString m_rawOutput;

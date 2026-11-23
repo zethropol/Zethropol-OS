@@ -596,10 +596,12 @@ void RecoveryService::applyStateMap(const QVariantMap &data)
             dedupEvents.append(ev);
         }
 
+        m_currentSnapshotId = data.value(QStringLiteral("currentSnapshotId")).toInt();
+
         QSet<int> seenPointIds;
         QVariantList dedupPoints;
         for (const QVariant &v : rawPoints) {
-            const QVariantMap pt = v.toMap();
+            QVariantMap pt = v.toMap();
             if (!pt.contains(QStringLiteral("id")))
                 continue;
             bool ok = false;
@@ -607,6 +609,10 @@ void RecoveryService::applyStateMap(const QVariantMap &data)
             if (!ok || id < 0 || seenPointIds.contains(id))
                 continue;
             seenPointIds.insert(id);
+            QString protectionReason;
+            const bool protectedSnap = isSnapshotProtectedForDeletion(pt, m_currentSnapshotId, &protectionReason);
+            pt.insert(QStringLiteral("deletable"), !protectedSnap);
+            pt.insert(QStringLiteral("protectionReason"), protectionReason);
             dedupPoints.append(pt);
         }
 
@@ -616,7 +622,15 @@ void RecoveryService::applyStateMap(const QVariantMap &data)
         m_snapshotCount = data.contains(QStringLiteral("snapshotCount"))
             ? data.value(QStringLiteral("snapshotCount")).toInt()
             : m_snapshots.size();
-        m_currentSnapshotId = data.value(QStringLiteral("currentSnapshotId")).toInt();
+        if (m_selectedRollbackPointId > 0 && !seenSnapshotIds.contains(m_selectedRollbackPointId)) {
+            m_selectedRollbackPointId = 0;
+            m_preflightResult.clear();
+        }
+        if (m_pendingDeleteSnapshotId > 0 && !seenPointIds.contains(m_pendingDeleteSnapshotId)) {
+            m_deleteConfirmationPending = false;
+            m_pendingDeleteSnapshotId = 0;
+            m_pendingDeleteDescription.clear();
+        }
         if (title.isEmpty())
             title = QStringLiteral("Recovery is available");
         if (message.isEmpty()) {
@@ -1267,7 +1281,8 @@ void RecoveryService::startCreateOperation(const QString &description)
         << trimmedDescription
         << trimmedDescription;
 
-    auto *watcher = new QDBusPendingCallWatcher(connection.asyncCall(msg, m_operationTimeoutMs), this);
+    const int createCallTimeoutMs = (m_operationTimeoutMs == 8000) ? 125000 : m_operationTimeoutMs;
+    auto *watcher = new QDBusPendingCallWatcher(connection.asyncCall(msg, createCallTimeoutMs), this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, &RecoveryService::handleCreateReply);
 }
 
@@ -1559,50 +1574,213 @@ void RecoveryService::handlePreflightReply(QDBusPendingCallWatcher *watcher)
     emit stateChanged();
 }
 
-void RecoveryService::deleteRecoveryPoint(int snapshotId)
+bool RecoveryService::deleteConfirmationPending() const { return m_deleteConfirmationPending; }
+int RecoveryService::pendingDeleteSnapshotId() const { return m_pendingDeleteSnapshotId; }
+QString RecoveryService::pendingDeleteDescription() const { return m_pendingDeleteDescription; }
+
+bool RecoveryService::isSnapshotProtectedForDeletion(const QVariantMap &point, int currentSnapshotId, QString *reason)
+{
+    const int id = point.value(QStringLiteral("id")).toInt();
+    if (id <= 0 || point.value(QStringLiteral("isCurrent")).toBool() || (currentSnapshotId > 0 && id == currentSnapshotId)) {
+        if (reason)
+            *reason = QStringLiteral("Active or current root snapshot cannot be deleted.");
+        return true;
+    }
+    if (point.value(QStringLiteral("important")).toBool()) {
+        if (reason)
+            *reason = QStringLiteral("Important recovery snapshots cannot be deleted.");
+        return true;
+    }
+    if (point.value(QStringLiteral("isPre")).toBool()
+        || point.value(QStringLiteral("isPost")).toBool()
+        || point.value(QStringLiteral("pairedSnapshotId")).toInt() > 0
+        || point.value(QStringLiteral("preNumber")).toInt() > 0) {
+        if (reason)
+            *reason = QStringLiteral("Pre/post transaction snapshots cannot be deleted.");
+        return true;
+    }
+    const QString tag = point.value(QStringLiteral("zethropolTag")).toString().trimmed();
+    const QString desc = point.value(QStringLiteral("description")).toString();
+    if (tag.compare(QStringLiteral("pre-update"), Qt::CaseInsensitive) == 0
+        || desc.contains(QStringLiteral("pre-update"), Qt::CaseInsensitive)) {
+        if (reason)
+            *reason = QStringLiteral("Pre-update safety snapshots cannot be deleted.");
+        return true;
+    }
+    return false;
+}
+
+void RecoveryService::requestDeleteRecoveryPoint(int snapshotId)
 {
     if (m_actionBusy)
         return;
 
     if (snapshotId <= 0) {
+        m_lastOperationCode = QStringLiteral("invalid-argument");
         m_actionStatus = QStringLiteral("Invalid recovery point.");
         emit stateChanged();
         return;
     }
 
-    bool knownRecoveryPoint = false;
-
+    QVariantMap matchedPoint;
+    bool found = false;
     for (const QVariant &value : m_recoveryPoints) {
         const QVariantMap point = value.toMap();
         if (point.value(QStringLiteral("id")).toInt() == snapshotId) {
-            knownRecoveryPoint = true;
+            matchedPoint = point;
+            found = true;
             break;
         }
     }
 
-    if (!knownRecoveryPoint) {
+    if (!found) {
+        m_lastOperationCode = QStringLiteral("not-found");
         m_actionStatus = QStringLiteral("Recovery point is not available for deletion.");
         emit stateChanged();
         return;
     }
 
-    if (m_checking || process.state() != QProcess::NotRunning || actionProcess.state() != QProcess::NotRunning) {
-        m_actionStatus = QStringLiteral("Recovery service is busy.");
+    QString protectionReason;
+    if (isSnapshotProtectedForDeletion(matchedPoint, m_currentSnapshotId, &protectionReason)) {
+        m_deleteConfirmationPending = false;
+        m_pendingDeleteSnapshotId = 0;
+        m_pendingDeleteDescription.clear();
+        m_lastOperationCode = QStringLiteral("protected-snapshot");
+        m_actionStatus = protectionReason;
+        emit stateChanged();
+        return;
+    }
+
+    m_deleteConfirmationPending = true;
+    m_pendingDeleteSnapshotId = snapshotId;
+    m_pendingDeleteDescription = matchedPoint.value(QStringLiteral("description")).toString();
+    m_actionStatus = QStringLiteral("Explicit confirmation required to delete recovery point #%1.").arg(snapshotId);
+    emit stateChanged();
+}
+
+void RecoveryService::cancelDeleteRecoveryPoint()
+{
+    m_deleteConfirmationPending = false;
+    m_pendingDeleteSnapshotId = 0;
+    m_pendingDeleteDescription.clear();
+    m_lastOperationCode = QStringLiteral("cancelled");
+    m_actionStatus = QStringLiteral("Recovery point deletion cancelled.");
+    emit stateChanged();
+}
+
+void RecoveryService::confirmDeleteRecoveryPoint()
+{
+    if (m_actionBusy || !m_deleteConfirmationPending || m_pendingDeleteSnapshotId <= 0)
+        return;
+
+    const int snapshotId = m_pendingDeleteSnapshotId;
+    m_deleteConfirmationPending = false;
+    m_pendingDeleteSnapshotId = 0;
+    m_pendingDeleteDescription.clear();
+
+    QVariantMap matchedPoint;
+    bool found = false;
+    for (const QVariant &value : m_recoveryPoints) {
+        const QVariantMap point = value.toMap();
+        if (point.value(QStringLiteral("id")).toInt() == snapshotId) {
+            matchedPoint = point;
+            found = true;
+            break;
+        }
+    }
+    QString protectionReason;
+    if (!found || isSnapshotProtectedForDeletion(matchedPoint, m_currentSnapshotId, &protectionReason)) {
+        m_lastOperationCode = QStringLiteral("protected-snapshot");
+        m_actionStatus = protectionReason.isEmpty()
+            ? QStringLiteral("Recovery point is protected or no longer eligible for deletion.")
+            : protectionReason;
+        emit stateChanged();
+        return;
+    }
+
+    const QDBusConnection connection = QDBusConnection::systemBus();
+    if (!connection.isConnected()) {
+        m_lastOperationCode = QStringLiteral("not-available");
+        m_actionStatus = QStringLiteral("Cannot delete recovery point: System D-Bus connection is unavailable.");
         emit stateChanged();
         return;
     }
 
     m_actionBusy = true;
     m_actionOperation = QStringLiteral("delete");
+    m_lastOperationCode = QStringLiteral("running");
     m_actionStatus = QStringLiteral("Deleting recovery point #%1...").arg(snapshotId);
     emit stateChanged();
 
-    actionProcess.setProgram(QStringLiteral("/usr/bin/pkexec"));
-    actionProcess.setArguments({
-        QStringLiteral("/usr/bin/snapper"),
-        QStringLiteral("delete"),
-        QString::number(snapshotId)
-    });
-    actionProcess.setProcessChannelMode(QProcess::SeparateChannels);
-    actionProcess.start();
+    const QDBusMessage msg = QDBusMessage::createMethodCall(
+        QStringLiteral("org.zethropol.Recovery"),
+        QStringLiteral("/org/zethropol/Recovery"),
+        QStringLiteral("org.zethropol.Recovery.v1"),
+        QStringLiteral("DeleteRecoveryPoint"))
+        << static_cast<uint>(snapshotId);
+
+    const int deleteCallTimeoutMs = (m_operationTimeoutMs == 8000) ? 125000 : m_operationTimeoutMs;
+    auto *watcher = new QDBusPendingCallWatcher(connection.asyncCall(msg, deleteCallTimeoutMs), this);
+    watcher->setProperty("deletedSnapshotId", snapshotId);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, &RecoveryService::handleDeleteReply);
+}
+
+void RecoveryService::handleDeleteReply(QDBusPendingCallWatcher *watcher)
+{
+    if (!watcher)
+        return;
+    const int deletedId = watcher->property("deletedSnapshotId").toInt();
+    watcher->deleteLater();
+    m_actionBusy = false;
+
+    const QDBusMessage reply = watcher->reply();
+    if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().isEmpty()) {
+        const QString errName = reply.errorName();
+        if (errName.contains(QStringLiteral("Timeout")) || errName.contains(QStringLiteral("NoReply"))) {
+            m_lastOperationCode = QStringLiteral("timeout");
+            m_actionStatus = QStringLiteral("Recovery point deletion timed out.");
+        } else {
+            m_lastOperationCode = QStringLiteral("not-available");
+            m_actionStatus = QStringLiteral("Cannot delete recovery point: Recovery D-Bus service is unreachable.");
+        }
+        emit stateChanged();
+        return;
+    }
+
+    const QVariantList args = reply.arguments();
+    bool ok = false;
+    QString code;
+    QString message;
+    if (args.size() >= 3 && args.at(0).userType() == QMetaType::Bool) {
+        ok = args.at(0).toBool();
+        code = args.at(1).toString();
+        message = args.at(2).toString();
+    } else {
+        const QVariant first = dbusValueToVariant(args.constFirst());
+        if (first.userType() == QMetaType::QVariantMap) {
+            const QVariantMap map = first.toMap();
+            ok = map.value(QStringLiteral("success")).toBool();
+            code = map.value(QStringLiteral("code")).toString();
+            message = map.value(QStringLiteral("message")).toString();
+        }
+    }
+
+    m_lastOperationCode = code.isEmpty() ? (ok ? QStringLiteral("ok") : QStringLiteral("failed")) : code;
+    m_actionStatus = message.isEmpty()
+        ? (ok ? QStringLiteral("Recovery point #%1 deleted.").arg(deletedId)
+              : QStringLiteral("Recovery point deletion failed."))
+        : message;
+    if (ok && m_selectedRollbackPointId == deletedId) {
+        m_selectedRollbackPointId = 0;
+        m_preflightResult.clear();
+    }
+    emit stateChanged();
+    if (ok)
+        refresh();
+}
+
+void RecoveryService::deleteRecoveryPoint(int snapshotId)
+{
+    // Never execute deletion directly without explicit two-step confirmation & D-Bus Polkit boundary.
+    requestDeleteRecoveryPoint(snapshotId);
 }

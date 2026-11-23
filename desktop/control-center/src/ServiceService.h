@@ -32,6 +32,11 @@ public:
     QString failureDetailsText() const;
     bool failureDetailsBusy() const;
 
+    static bool isValidServiceName(const QString &name);
+    static bool isQuarantinedService(const QString &name);
+    static bool isProtectedAction(const QString &name, const QString &action);
+    static bool validateServiceRequest(const QString &name, const QString &action, QString *reason = nullptr);
+
 public slots:
     void refresh();
     void loadFailureDetails(const QString &name);
@@ -45,7 +50,7 @@ signals:
     void stateChanged();
 
 private:
-    bool serviceExists(const QString &name) const;
+    bool serviceExists(const QString &name, QVariantMap *outService = nullptr) const;
     void runAction(const QString &name, const QString &action);
 
     QVariantList m_services;

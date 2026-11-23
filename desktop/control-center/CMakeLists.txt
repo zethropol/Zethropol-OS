@@ -114,6 +114,22 @@ if(BUILD_TESTING)
     add_test(NAME control_center_process_service_test
              COMMAND control_center_process_service_test)
 
+    qt_add_executable(control_center_security_remediation_test
+        tests/SecurityRemediationTest.cpp
+        src/ServiceService.cpp
+        src/ServiceService.h
+        src/ApplicationService.cpp
+        src/ApplicationService.h
+        src/RecoveryService.cpp
+        src/RecoveryService.h)
+    target_include_directories(control_center_security_remediation_test PRIVATE src)
+    target_link_libraries(control_center_security_remediation_test PRIVATE Qt6::Core Qt6::DBus Qt6::Test)
+    target_compile_definitions(control_center_security_remediation_test PRIVATE
+        PROCESSES_PAGE_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/ProcessesPage.qml"
+        MAIN_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/Main.qml")
+    add_test(NAME control_center_security_remediation_test
+             COMMAND control_center_security_remediation_test)
+
     qt_add_executable(control_center_recovery_test
         tests/RecoveryTest.cpp
         ${CONTROL_CENTER_SRCS}

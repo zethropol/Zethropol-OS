@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QProcess>
+#include <QStringList>
 #include <QTemporaryDir>
 #include <QVariantList>
 
@@ -16,6 +17,8 @@ class UpdateScanner : public QObject
     Q_PROPERTY(QString summary READ summary NOTIFY changed)
     Q_PROPERTY(QString completedAt READ completedAt NOTIFY changed)
     Q_PROPERTY(bool hasUpdates READ hasUpdates NOTIFY changed)
+    Q_PROPERTY(QStringList orphanPackages READ orphanPackages NOTIFY changed)
+    Q_PROPERTY(int orphanCount READ orphanCount NOTIFY changed)
 
 public:
     explicit UpdateScanner(QObject *parent = nullptr);
@@ -26,6 +29,8 @@ public:
     QString summary() const;
     QString completedAt() const { return m_completedAt; }
     bool hasUpdates() const;
+    QStringList orphanPackages() const { return m_orphanPackages; }
+    int orphanCount() const { return m_orphanPackages.size(); }
     Q_INVOKABLE void scan();
 
 signals:
@@ -36,12 +41,14 @@ private:
     friend class UpdateScannerTest;
     friend class UpdateInstaller;
     void start(int index, const QString &program, const QStringList &arguments, int timeout);
+    void startOrphanScan(int timeout);
     void finish(int index, QProcess *process, int exitCode, QProcess::ExitStatus exitStatus);
     void update(int index, const QString &state, const QString &detail,
                 const QVariantList &packages = {});
     void finishIfReady();
 
     QVariantList m_reports;
+    QStringList m_orphanPackages;
     QList<QProcess *> m_processes;
     QTemporaryDir m_database;
     QString m_configurationPath;

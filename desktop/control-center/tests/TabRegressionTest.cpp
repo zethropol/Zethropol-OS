@@ -193,8 +193,9 @@ private slots:
                 QVERIFY(pageTexts.contains(QStringLiteral("Unknown")));
                 break;
             case 4: // Performance
-                QVERIFY(pageTexts.contains(QStringLiteral("Download: 0.00 Mbps")));
-                QVERIFY(pageTexts.contains(QStringLiteral("Upload: 0.00 Mbps")));
+                QVERIFY(pageTexts.contains(QStringLiteral("Download: Unknown")));
+                QVERIFY(pageTexts.contains(QStringLiteral("Upload: Unknown")));
+                QVERIFY(!pageTexts.contains(QStringLiteral("Download: 0.00 Mbps")));
                 break;
             case 5: // Power
                 QVERIFY(pageTexts.contains(QStringLiteral("Unknown")));

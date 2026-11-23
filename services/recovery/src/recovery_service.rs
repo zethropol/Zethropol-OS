@@ -59,6 +59,7 @@ pub struct DetectionConfig {
     pub simulated_boot_usage_percent: Option<u32>,
     pub polkit_policy_file: PathBuf,
     pub command_timeout: Duration,
+    pub polkit_timeout: Duration,
 }
 
 impl Default for DetectionConfig {
@@ -86,6 +87,7 @@ impl Default for DetectionConfig {
                 "/usr/share/polkit-1/actions/org.zethropol.recovery.policy",
             ),
             command_timeout: Duration::from_secs(4),
+            polkit_timeout: Duration::from_secs(120),
         }
     }
 }
@@ -177,6 +179,11 @@ impl DetectionConfig {
         if let Some(v) = get_var("ZETHROPOL_RECOVERY_TIMEOUT_MS") {
             if let Ok(ms) = v.parse::<u64>() {
                 cfg.command_timeout = Duration::from_millis(ms.max(50));
+            }
+        }
+        if let Some(v) = get_var("ZETHROPOL_RECOVERY_POLKIT_TIMEOUT_MS") {
+            if let Ok(ms) = v.parse::<u64>() {
+                cfg.polkit_timeout = Duration::from_millis(ms.max(50));
             }
         }
         cfg
@@ -1515,7 +1522,7 @@ pub fn check_polkit_action(
             valid_sender,
             "--allow-user-interaction",
         ],
-        config.command_timeout,
+        config.polkit_timeout,
     ) {
         Ok((0, _, _)) => Ok(()),
         Ok((code, stdout, stderr)) => {
@@ -2826,7 +2833,7 @@ pub fn run_rollback_preflight(
     let polkit_defined = fs::read_to_string(&config.polkit_policy_file)
         .map(|s| s.contains(POLKIT_ACTION_ROLLBACK))
         .unwrap_or(false)
-        || resolve_snapper_binary(&config.pkcheck_bin).is_some();
+        && resolve_snapper_binary(&config.pkcheck_bin).is_some();
     let c10 = if polkit_defined {
         check_record(
             "authorization_and_confirmation",
@@ -3665,6 +3672,196 @@ impl RecoveryManager {
             ),
             operation_id: String::new(),
             data: HashMap::new(),
+        }
+    }
+
+    pub(crate) fn snapshot_deletion_protection_reason(
+        snap: &SnapshotRecord,
+        current_snapshot_id: i32,
+    ) -> Option<&'static str> {
+        if snap.id <= 0 || snap.is_current || snap.id == current_snapshot_id {
+            return Some("Active or current root snapshot cannot be deleted.");
+        }
+        if snap.important {
+            return Some("Important recovery snapshots cannot be deleted.");
+        }
+        if snap.is_pre || snap.is_post || snap.paired_snapshot_id > 0 || snap.pre_number > 0 {
+            return Some("Pre/post transaction snapshots cannot be deleted.");
+        }
+        if snap.zethropol_tag.eq_ignore_ascii_case("pre-update")
+            || snap.description.to_ascii_lowercase().contains("pre-update")
+        {
+            return Some("Pre-update safety snapshots cannot be deleted.");
+        }
+        None
+    }
+
+    pub(crate) fn delete_recovery_point_with_caller(
+        &self,
+        cfg: &DetectionConfig,
+        caller: Option<&str>,
+        point_id: u32,
+    ) -> OperationResult {
+        if point_id == 0 {
+            return OperationResult {
+                success: false,
+                code: "invalid-argument".to_string(),
+                message: "Snapshot ID must be a positive integer (> 0).".to_string(),
+                operation_id: String::new(),
+                data: HashMap::new(),
+            };
+        }
+
+        let sender_name = match validate_dbus_sender(caller) {
+            Ok(sender) => sender.to_string(),
+            Err((code, message)) => {
+                return OperationResult {
+                    success: false,
+                    code,
+                    message,
+                    operation_id: String::new(),
+                    data: HashMap::new(),
+                };
+            }
+        };
+
+        {
+            let active = self.active_operation.lock().unwrap();
+            if active.is_some() {
+                return OperationResult {
+                    success: false,
+                    code: "busy".to_string(),
+                    message: "Another recovery operation is already in progress.".to_string(),
+                    operation_id: String::new(),
+                    data: HashMap::new(),
+                };
+            }
+        }
+
+        {
+            let res_guard = self.pre_update_reservation.lock().unwrap();
+            if let Some(ref res) = *res_guard {
+                let blocks_state = matches!(
+                    res.state,
+                    PreUpdateReservationState::Creating
+                        | PreUpdateReservationState::VerifiedReady
+                        | PreUpdateReservationState::ActiveUpdate
+                        | PreUpdateReservationState::AbortedOrOrphaned
+                );
+                if blocks_state || res.snapshot_id == Some(point_id) {
+                    return OperationResult {
+                        success: false,
+                        code: "protected-snapshot".to_string(),
+                        message: format!(
+                            "Snapshot #{} is protected by an active or reserved pre-update recovery state.",
+                            point_id
+                        ),
+                        operation_id: String::new(),
+                        data: HashMap::new(),
+                    };
+                }
+            }
+        }
+
+        let report = detect_recovery_state(cfg);
+        if report.status != DetectionStatus::InstalledAndConfigured
+            || !report.filesystem.eq_ignore_ascii_case("Btrfs")
+            || report.config_name != "root"
+        {
+            return OperationResult {
+                success: false,
+                code: report.status.result_code().to_string(),
+                message: report.status_message,
+                operation_id: String::new(),
+                data: HashMap::new(),
+            };
+        }
+
+        let target = report.snapshots.iter().find(|s| s.id == point_id as i32);
+        let Some(snap) = target else {
+            return OperationResult {
+                success: false,
+                code: "not-found".to_string(),
+                message: format!("Snapshot #{} was not found.", point_id),
+                operation_id: String::new(),
+                data: HashMap::new(),
+            };
+        };
+
+        if let Some(reason) =
+            Self::snapshot_deletion_protection_reason(snap, report.current_snapshot_id)
+        {
+            return OperationResult {
+                success: false,
+                code: "protected-snapshot".to_string(),
+                message: reason.to_string(),
+                operation_id: String::new(),
+                data: HashMap::new(),
+            };
+        }
+
+        if let Err((code, msg)) = check_polkit_authorization(cfg, &sender_name) {
+            return OperationResult {
+                success: false,
+                code,
+                message: msg,
+                operation_id: String::new(),
+                data: HashMap::new(),
+            };
+        }
+
+        let Some(snapper_bin) = resolve_snapper_binary(&cfg.snapper_bin) else {
+            return OperationResult {
+                success: false,
+                code: "not-available".to_string(),
+                message: "Snapper binary is unavailable.".to_string(),
+                operation_id: String::new(),
+                data: HashMap::new(),
+            };
+        };
+
+        let point_str = point_id.to_string();
+        match run_command_with_timeout(
+            &snapper_bin,
+            &["-c", &report.config_name, "delete", "--sync", &point_str],
+            cfg.command_timeout,
+        ) {
+            Ok((0, _, _)) => OperationResult {
+                success: true,
+                code: "ok".to_string(),
+                message: format!("Recovery point #{} deleted.", point_id),
+                operation_id: uuid::Uuid::new_v4().to_string(),
+                data: HashMap::new(),
+            },
+            Ok((_, stdout, stderr)) => {
+                let detail = if !stderr.trim().is_empty() {
+                    stderr.trim().to_string()
+                } else {
+                    stdout.trim().to_string()
+                };
+                OperationResult {
+                    success: false,
+                    code: "failed".to_string(),
+                    message: if detail.is_empty() {
+                        format!("Failed to delete snapshot #{}.", point_id)
+                    } else {
+                        detail
+                    },
+                    operation_id: String::new(),
+                    data: HashMap::new(),
+                }
+            }
+            Err(err) => OperationResult {
+                success: false,
+                code: if err.starts_with("timeout:") {
+                    "timeout".to_string()
+                } else {
+                    "failed".to_string()
+                },
+                message: format!("Snapshot deletion failed: {}", err),
+                operation_id: String::new(),
+                data: HashMap::new(),
+            },
         }
     }
 
@@ -5331,6 +5528,26 @@ impl RecoveryManager {
         Ok(self.rollback_to_point_with_caller(&cfg, caller.as_deref(), point_id))
     }
 
+    async fn delete_recovery_point(
+        &self,
+        #[zbus(header)] header: zbus::message::Header<'_>,
+        #[zbus(signal_emitter)] emitter: zbus::object_server::SignalEmitter<'_>,
+        point_id: u32,
+    ) -> Result<OperationResult, zbus::fdo::Error> {
+        let cfg = DetectionConfig::from_env();
+        let caller = header.sender().map(|s| s.to_string());
+        let res = self.delete_recovery_point_with_caller(&cfg, caller.as_deref(), point_id);
+        if res.success {
+            let updated_report = detect_recovery_state(&cfg);
+            let _ = RecoveryManager::state_changed(
+                &emitter,
+                encode_detection_envelope(&updated_report),
+            )
+            .await;
+        }
+        Ok(res)
+    }
+
     async fn create_pre_update_recovery_point(
         &self,
         #[zbus(header)] header: zbus::message::Header<'_>,
@@ -5640,6 +5857,7 @@ EOF
                 simulated_boot_usage_percent: Some(35),
                 polkit_policy_file,
                 command_timeout: Duration::from_secs(2),
+                polkit_timeout: Duration::from_secs(2),
             }
         }
     }
@@ -5893,8 +6111,8 @@ echo '{"root":[{"number":0,"type":"single","description":"current"}]}'
         let missing_err = check_polkit_action(&cfg, ":1.42", POLKIT_ACTION_ROLLBACK).unwrap_err();
         assert_eq!(missing_err.0, "permission-denied");
 
-        // Timeout -> timeout
-        cfg.command_timeout = Duration::from_millis(80);
+        // Timeout -> timeout (uses decoupled polkit_timeout)
+        cfg.polkit_timeout = Duration::from_millis(80);
         cfg.pkcheck_bin = fx.write_exec("bin/pkcheck", "sleep 2\nexit 0\n");
         let timeout_err = check_polkit_action(&cfg, ":1.42", POLKIT_ACTION_MODIFY).unwrap_err();
         assert_eq!(timeout_err.0, "timeout");
@@ -7525,5 +7743,82 @@ echo '{{"root":[{{"number":0,"type":"single","description":"current"}},{{"number
             !snapper_write_marker.exists(),
             "read-only assessment and policy evaluation must not invoke snapper create/delete"
         );
+    }
+
+    #[test]
+    fn polkit_interactive_timeout_is_decoupled_from_short_command_timeout() {
+        let cfg = DetectionConfig::default();
+        assert_eq!(cfg.command_timeout, Duration::from_secs(4));
+        assert!(
+            cfg.polkit_timeout >= Duration::from_secs(60),
+            "interactive Polkit auth must allow >= 60s for administrator password entry"
+        );
+    }
+
+    #[test]
+    fn delete_recovery_point_protects_important_current_pre_update_and_paired_snapshots() {
+        let fx = TestFixture::new();
+        let mut cfg = fx.base_config();
+        let delete_marker = fx.path("snapper-delete-called");
+        cfg.snapper_bin = fx.write_exec(
+            "bin/snapper",
+            &format!(
+                r#"if [ "$3" = "delete" ]; then
+  echo "$*" > "{}"
+  exit 0
+fi
+echo '{{"root":[
+  {{"number":0,"type":"single","description":"current"}},
+  {{"number":10,"type":"single","description":"Important manual","userdata":{{"important":"yes"}}}},
+  {{"number":11,"type":"single","description":"Pre-Update [update-op:u1]","userdata":{{"zethropol":"pre-update","important":"yes"}}}},
+  {{"number":12,"type":"pre","description":"pacman -U"}},
+  {{"number":13,"type":"post","pre-number":12,"description":"pkg"}},
+  {{"number":14,"type":"single","description":"Manual standalone","userdata":{{"zethropol":"manual"}}}}
+]}}'
+"#,
+                delete_marker.display()
+            ),
+        );
+        cfg.pkcheck_bin = fx.write_exec("bin/pkcheck", "exit 0\n");
+
+        let mgr = RecoveryManager::new();
+
+        // Snapshot 0 / current -> rejected
+        let r0 = mgr.delete_recovery_point_with_caller(&cfg, Some(":1.42"), 0);
+        assert!(!r0.success);
+        assert_eq!(r0.code, "invalid-argument");
+
+        // Important snapshot #10 -> rejected
+        let r10 = mgr.delete_recovery_point_with_caller(&cfg, Some(":1.42"), 10);
+        assert!(!r10.success);
+        assert_eq!(r10.code, "protected-snapshot");
+
+        // Pre-update snapshot #11 -> rejected
+        let r11 = mgr.delete_recovery_point_with_caller(&cfg, Some(":1.42"), 11);
+        assert!(!r11.success);
+        assert_eq!(r11.code, "protected-snapshot");
+
+        // Paired pre (#12) & post (#13) -> rejected
+        let r12 = mgr.delete_recovery_point_with_caller(&cfg, Some(":1.42"), 12);
+        assert!(!r12.success);
+        assert_eq!(r12.code, "protected-snapshot");
+        let r13 = mgr.delete_recovery_point_with_caller(&cfg, Some(":1.42"), 13);
+        assert!(!r13.success);
+        assert_eq!(r13.code, "protected-snapshot");
+        assert!(!delete_marker.exists(), "protected snapshots must never invoke snapper delete");
+
+        // Polkit denial blocks even standalone manual snapshot #14
+        let mut denied_cfg = cfg.clone();
+        denied_cfg.pkcheck_bin = fx.write_exec("bin/pkcheck-deny", "exit 1\n");
+        let r14_denied = mgr.delete_recovery_point_with_caller(&denied_cfg, Some(":1.42"), 14);
+        assert!(!r14_denied.success);
+        assert_eq!(r14_denied.code, "permission-denied");
+        assert!(!delete_marker.exists());
+
+        // Authorized standalone manual snapshot #14 -> allowed with explicit -c root delete --sync 14
+        let r14_ok = mgr.delete_recovery_point_with_caller(&cfg, Some(":1.42"), 14);
+        assert!(r14_ok.success, "expected standalone manual deletion to succeed: {:?}", r14_ok);
+        let logged = fs::read_to_string(&delete_marker).unwrap();
+        assert!(logged.contains("-c root delete --sync 14"), "unexpected snapper args: {logged}");
     }
 }

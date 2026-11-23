@@ -1,29 +1,31 @@
 pkgname=zethropol-services
 pkgver=0.1.0
-pkgrel=1
+pkgrel=2
 pkgdesc="Zethropol Services D-Bus service"
 url="https://github.com/zethropol/Zethropol-OS"
 arch=("x86_64")
 license=("MIT")
-depends=("glibc" "dbus" "systemd")
+depends=("glibc" "dbus" "systemd" "polkit")
 makedepends=("cargo")
-_commit=c41ff578cff2d158180e05c39445b6207778442b
-source=("git+https://github.com/zethropol/Zethropol-OS.git#commit=$_commit")
-sha256sums=("SKIP")
+source=("${pkgname}-${pkgver}-${pkgrel}-src.tar.gz")
+sha256sums=("60f73642781e89d042ab62d44e3f080d83f1c9df8d7df90957d07528a39c6bea")
 
 build() {
-    cd "$srcdir/Zethropol-OS/services/services"
-    cargo build --release --locked
+    cd "$srcdir/${pkgname}-${pkgver}/services/services"
+    cargo build --release --locked --offline
+}
+
+check() {
+    cd "$srcdir/${pkgname}-${pkgver}/services/services"
+    cargo test --locked --offline
 }
 
 package() {
-    cd "$srcdir/Zethropol-OS/services/services"
+    cd "$srcdir/${pkgname}-${pkgver}/services/services"
 
-    install -Dm755 "target/release/services"         "$pkgdir/usr/lib/zethropol/zethropol-services"
-
-    install -Dm644 "deployment/dbus/org.zethropol.Services.conf"         "$pkgdir/etc/dbus-1/system.d/org.zethropol.Services.conf"
-
-    install -Dm644 "deployment/dbus/org.zethropol.Services.service"         "$pkgdir/usr/share/dbus-1/system-services/org.zethropol.Services.service"
-
-    install -Dm644 "deployment/systemd/zethropol-services.service"         "$pkgdir/usr/lib/systemd/system/zethropol-services.service"
+    install -Dm755 target/release/services "$pkgdir/usr/lib/zethropol/zethropol-services"
+    install -Dm644 deployment/dbus/org.zethropol.Services.conf "$pkgdir/etc/dbus-1/system.d/org.zethropol.Services.conf"
+    install -Dm644 deployment/dbus/org.zethropol.Services.service "$pkgdir/usr/share/dbus-1/system-services/org.zethropol.Services.service"
+    install -Dm644 deployment/systemd/zethropol-services.service "$pkgdir/usr/lib/systemd/system/zethropol-services.service"
+    install -Dm644 deployment/polkit/org.zethropol.services.policy "$pkgdir/usr/share/polkit-1/actions/org.zethropol.services.policy"
 }

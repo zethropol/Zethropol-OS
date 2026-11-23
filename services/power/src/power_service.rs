@@ -9,6 +9,32 @@ use zbus::zvariant::{OwnedValue, Str};
 
 use crate::models::PowerMap;
 
+const PKCHECK_BIN: &str = "/usr/bin/pkcheck";
+const POWER_MODIFY_ACTION: &str = "org.zethropol.power.modify";
+const ALLOWED_POWER_PROFILES: &[&str] = &["power-saver", "balanced", "performance"];
+const MAX_GOVERNOR_LEN: usize = 32;
+
+pub fn validate_power_profile(profile: &str) -> Result<(), &'static str> {
+    if ALLOWED_POWER_PROFILES.contains(&profile) {
+        Ok(())
+    } else {
+        Err("Invalid power profile")
+    }
+}
+
+pub fn validate_governor(governor: &str) -> Result<(), &'static str> {
+    if governor.is_empty()
+        || governor.len() > MAX_GOVERNOR_LEN
+        || !governor
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
+    {
+        Err("invalid governor")
+    } else {
+        Ok(())
+    }
+}
+
 pub struct PowerService;
 
 impl PowerService {
@@ -19,20 +45,25 @@ impl PowerService {
     async fn authorize(&self, header: &zbus::message::Header<'_>) -> Result<(), zbus::fdo::Error> {
         let sender = header
             .sender()
-            .ok_or_else(|| zbus::fdo::Error::Failed("invalid caller".to_string()))?;
+            .ok_or_else(|| zbus::fdo::Error::Failed("invalid caller".to_string()))?
+            .to_string();
 
-        let status = Command::new("pkcheck")
-            .args([
-                "--action-id",
-                "org.zethropol.power.modify",
-                "--system-bus-name",
-                sender.as_str(),
-                "--allow-user-interaction",
-            ])
-            .status()
-            .map_err(|error| zbus::fdo::Error::Failed(error.to_string()))?;
+        let authorized = tokio::task::spawn_blocking(move || {
+            Command::new(PKCHECK_BIN)
+                .args([
+                    "--action-id",
+                    POWER_MODIFY_ACTION,
+                    "--system-bus-name",
+                    &sender,
+                    "--allow-user-interaction",
+                ])
+                .status()
+        })
+        .await
+        .map_err(|error| zbus::fdo::Error::Failed(error.to_string()))?
+        .map_err(|error| zbus::fdo::Error::Failed(error.to_string()))?;
 
-        if !status.success() {
+        if !authorized.success() {
             return Err(zbus::fdo::Error::AccessDenied(
                 "Authentication required or permission denied".to_string(),
             ));
@@ -111,7 +142,10 @@ impl PowerService {
 
     async fn current_state(&self) -> Result<PowerMap, zbus::fdo::Error> {
         let mut power = self.hardware_state().await?;
-        let profile = self.power_profile().await?;
+        let profile = self
+            .power_profile()
+            .await
+            .unwrap_or_else(|_| "unknown".to_string());
         power.insert(
             "profile".to_string(),
             OwnedValue::from(Str::from(profile.as_str())),
@@ -162,13 +196,7 @@ impl PowerService {
     }
 
     fn apply_governor(governor: &str) -> Result<(), String> {
-        if governor.is_empty()
-            || governor.contains('/')
-            || governor.contains(' ')
-            || governor.contains('\0')
-        {
-            return Err("invalid governor".to_string());
-        }
+        validate_governor(governor).map_err(|e| e.to_string())?;
 
         let root = Path::new("/sys/devices/system/cpu/cpufreq");
         let entries = fs::read_dir(root).map_err(|error| error.to_string())?;
@@ -225,16 +253,11 @@ impl PowerService {
         #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
         profile: &str,
     ) -> Result<PowerMap, zbus::fdo::Error> {
-        self.authorize(&header).await?;
-
-        if profile.is_empty() || profile.contains('/') {
-            return Ok(Self::result(
-                false,
-                "invalid-profile",
-                "Invalid power profile",
-                "",
-            ));
+        if let Err(msg) = validate_power_profile(profile) {
+            return Ok(Self::result(false, "invalid-profile", msg, ""));
         }
+
+        self.authorize(&header).await?;
 
         let operation_id = Self::operation_id();
 
@@ -256,10 +279,9 @@ impl PowerService {
 
         match result {
             Ok(_) => {
-                let state = self.current_state().await?;
-                Self::state_changed(&emitter, state)
-                    .await
-                    .map_err(|error| zbus::fdo::Error::Failed(error.to_string()))?;
+                if let Ok(state) = self.current_state().await {
+                    let _ = Self::state_changed(&emitter, state).await;
+                }
                 Ok(Self::result(
                     true,
                     "ok",
@@ -282,16 +304,19 @@ impl PowerService {
         #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
         governor: &str,
     ) -> Result<PowerMap, zbus::fdo::Error> {
+        if let Err(msg) = validate_governor(governor) {
+            return Ok(Self::result(false, "invalid-governor", msg, ""));
+        }
+
         self.authorize(&header).await?;
 
         let operation_id = Self::operation_id();
 
         match Self::apply_governor(governor) {
             Ok(()) => {
-                let state = self.current_state().await?;
-                Self::state_changed(&emitter, state)
-                    .await
-                    .map_err(|error| zbus::fdo::Error::Failed(error.to_string()))?;
+                if let Ok(state) = self.current_state().await {
+                    let _ = Self::state_changed(&emitter, state).await;
+                }
                 Ok(Self::result(
                     true,
                     "ok",
@@ -387,6 +412,39 @@ impl PowerService {
                 &error.to_string(),
                 &operation_id,
             )),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn power_profile_allowlist_accepts_known_and_rejects_arbitrary() {
+        for ok in ["power-saver", "balanced", "performance"] {
+            assert!(validate_power_profile(ok).is_ok());
+        }
+        for bad in [
+            "",
+            "balanced ",
+            "balanced\n",
+            "turbo",
+            "../balanced",
+            "performance;id",
+            "BALANCED",
+        ] {
+            assert!(validate_power_profile(bad).is_err(), "expected err for {bad:?}");
+        }
+    }
+
+    #[test]
+    fn governor_validation_rejects_invalid_inputs() {
+        assert!(validate_governor("schedutil").is_ok());
+        assert!(validate_governor("powersave").is_ok());
+        assert!(validate_governor("performance").is_ok());
+        for bad in ["", "sched util", "../bad", "BAD", "a;b", "x\0y"] {
+            assert!(validate_governor(bad).is_err(), "expected err for {bad:?}");
         }
     }
 }

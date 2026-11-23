@@ -1,0 +1,102 @@
+pkgname=zethropol-control-center
+pkgver=0.1.0
+pkgrel=3
+pkgdesc="Zethropol OS desktop control center"
+arch=('x86_64')
+url="https://github.com/zethropol/Zethropol-OS"
+license=('MIT')
+depends=(
+    'glibc'
+    'gcc-libs'
+    'qt6-base'
+    'qt6-declarative'
+    'libglvnd'
+    'dbus'
+    'systemd'
+    'polkit'
+    'pacman'
+    'pacman-contrib'
+    'util-linux'
+    'zethropol-hardware>=0.1.0-3'
+    'zethropol-monitoring>=0.1.0-2'
+    'zethropol-power>=0.1.0-2'
+    'zethropol-recovery>=0.1.0-2'
+    'zethropol-services>=0.1.0-2'
+)
+makedepends=('cmake')
+optdepends=(
+    'plasma-integration: KDE Plasma platform theme integration'
+    'polkit-kde-agent: KDE Plasma Polkit authentication agent'
+    'libnotify: desktop notifications via notify-send'
+    'cachy-update: CachyOS/Arch update tooling'
+    'flatpak: Flatpak update scanning and updates'
+    'paru: AUR update scanning and updates'
+    'snapper: Btrfs snapshot backend for Recovery'
+    'fwupd: firmware metadata via zethropol-hardware'
+    'smartmontools: SMART diagnostics via zethropol-hardware'
+    'zethropol-diagnostics: Zethropol Diagnostics D-Bus service'
+    'zethropol-security: Zethropol Security D-Bus service'
+)
+source=("${pkgname}-${pkgver}-${pkgrel}-src.tar.gz")
+sha256sums=('93f89fc923cb7d04f0c33c5fbae2ac03b8f46881dfef97d0e112fbfe94e5d6c7')
+
+build() {
+    cmake -S "$srcdir/${pkgname}-${pkgver}/desktop/control-center" \
+          -B "$srcdir/build" \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/usr \
+          -DBUILD_TESTING=ON
+    cmake --build "$srcdir/build" --parallel --target control_center
+}
+
+check() {
+    cmake --build "$srcdir/build" --parallel \
+          --target control_center_update_scanner_test \
+                   control_center_update_installer_test \
+                   control_center_process_service_test \
+                   control_center_security_remediation_test \
+                   control_center_tabs_test \
+                   control_center_hardware_test
+
+    "$srcdir/build/control_center_update_scanner_test"
+    QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
+        "$srcdir/build/control_center_update_installer_test"
+    "$srcdir/build/control_center_process_service_test"
+    "$srcdir/build/control_center_security_remediation_test"
+    QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
+        sh "$srcdir/${pkgname}-${pkgver}/desktop/control-center/tests/hardware-private-bus.sh" \
+        "$srcdir/build/control_center_tabs_test"
+    QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
+        sh "$srcdir/${pkgname}-${pkgver}/desktop/control-center/tests/hardware-private-bus.sh" \
+        "$srcdir/build/control_center_hardware_test" \
+        refreshErrorAndRecovery \
+        hardwareAndPerformanceUseStandardSystemBus \
+        missingSensorsAndHybridQml \
+        systemInfoNormalizationAndFormatting \
+        powerClientStateChangedSignal
+}
+
+package() {
+    local _srcroot="$srcdir/${pkgname}-${pkgver}"
+    local _qmlroot="$pkgdir/usr/lib/qt6/qml/Zethropol/ControlCenter"
+
+    install -Dm755 "$srcdir/build/control_center" \
+        "$pkgdir/usr/bin/control_center"
+    ln -s control_center "$pkgdir/usr/bin/zethropol-control-center"
+
+    install -Dm644 "$srcdir/build/Zethropol/ControlCenter/control_center.qmltypes" \
+        "$_qmlroot/control_center.qmltypes"
+    install -Dm644 "$srcdir/build/Zethropol/ControlCenter/qmldir" \
+        "$_qmlroot/qmldir"
+
+    local _qml
+    for _qml in HardwarePage.qml Main.qml ProcessesPage.qml SystemState.qml UpdateReport.qml; do
+        install -Dm644 "$srcdir/build/Zethropol/ControlCenter/qml/$_qml" \
+            "$_qmlroot/qml/$_qml"
+    done
+
+    install -Dm644 "$_srcroot/desktop/control-center/zethropol-control-center.desktop" \
+        "$pkgdir/usr/share/applications/zethropol-control-center.desktop"
+    install -Dm644 "$_srcroot/LICENSE" \
+        "$pkgdir/usr/share/licenses/${pkgname}/LICENSE"
+}

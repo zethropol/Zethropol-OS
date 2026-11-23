@@ -61,19 +61,21 @@ Item {
         contentItem: ColumnLayout {
             spacing: 12
             Label {
-                text: "<b>" + pendingKillName + "</b> (PID: " + pendingKillPid + ") SIGTERM sinyaline yanıt vermedi ve hâlâ çalışıyor."
-                textFormat: Text.RichText
+                text: pendingKillName + " (PID: " + pendingKillPid + ") SIGTERM sinyaline yanıt vermedi ve hâlâ çalışıyor."
+                textFormat: Text.PlainText
+                font.bold: true
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
             }
             Label {
-                text: "Bu işlemi <b>SIGKILL</b> sinyali ile zorla sonlandırmak istiyor musunuz?"
-                textFormat: Text.RichText
+                text: "Bu işlemi SIGKILL sinyali ile zorla sonlandırmak istiyor musunuz?"
+                textFormat: Text.PlainText
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
             }
             Label {
                 text: "Uyarı: Zorla sonlandırılan süreçler kaydedilmemiş verilerini kaybedebilir."
+                textFormat: Text.PlainText
                 opacity: 0.65
                 font.pixelSize: 12
                 wrapMode: Text.WordWrap
@@ -97,13 +99,15 @@ Item {
         contentItem: ColumnLayout {
             spacing: 12
             Label {
-                text: "<b>" + (selectedProcess ? selectedProcess.name : "") + "</b> (PID: " + selectedPid + ") sürecini hemen zorla sonlandırmak istediğinizden emin misiniz?"
-                textFormat: Text.RichText
+                text: (selectedProcess ? selectedProcess.name : "") + " (PID: " + selectedPid + ") sürecini hemen zorla sonlandırmak istediğinizden emin misiniz?"
+                textFormat: Text.PlainText
+                font.bold: true
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
             }
             Label {
                 text: "Bu işlem SIGKILL sinyali gönderecektir ve geri alınamaz."
+                textFormat: Text.PlainText
                 opacity: 0.7
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
@@ -671,8 +675,9 @@ Item {
                 RowLayout {
                     Layout.fillWidth: true
                     Label {
-                        text: "<b>İşlem Detayları:</b> " + (selectedProcess ? selectedProcess.name : "") + " (PID: " + selectedPid + ")"
-                        textFormat: Text.RichText
+                        text: "İşlem Detayları: " + (selectedProcess ? selectedProcess.name : "") + " (PID: " + selectedPid + ")"
+                        textFormat: Text.PlainText
+                        font.bold: true
                         font.pixelSize: 14
                     }
 
@@ -711,8 +716,8 @@ Item {
                 }
 
                 Label {
-                    text: "<b>Komut:</b> " + (selectedProcess ? selectedProcess.cmdline : "")
-                    textFormat: Text.RichText
+                    text: "Komut: " + (selectedProcess ? selectedProcess.cmdline : "")
+                    textFormat: Text.PlainText
                     font.family: "monospace"
                     font.pixelSize: 11
                     Layout.fillWidth: true

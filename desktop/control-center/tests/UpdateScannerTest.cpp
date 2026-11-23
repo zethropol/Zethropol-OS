@@ -211,6 +211,23 @@ private slots:
         QCOMPARE(report(scanner, 2)["state"].toString(), "error");
         QVERIFY(report(scanner, 2)["detail"].toString().contains("Unable to load summary"));
     }
+
+    void readOnlyOrphanDetectionReportsPackagesWithoutMutating()
+    {
+        const auto log = directory.filePath("pacman-orphan.log").toUtf8();
+        QFile::remove(QString::fromUtf8(log));
+        script("pacman", "printf '%s\\n' \"$*\" >> '" + log + "'\nprintf 'orphan-a\\norphan-b\\n'\n");
+        UpdateScanner scanner;
+        configure(scanner);
+        QSignalSpy finished(&scanner, &UpdateScanner::scanFinished);
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+        QCOMPARE(scanner.orphanCount(), 2);
+        QCOMPARE(scanner.orphanPackages(), QStringList({"orphan-a", "orphan-b"}));
+        QFile f(QString::fromUtf8(log));
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        const QString args = QString::fromUtf8(f.readAll()).trimmed();
+        QCOMPARE(args, QStringLiteral("-Qtdq"));
+    }
 };
 
 QTEST_GUILESS_MAIN(UpdateScannerTest)

@@ -413,6 +413,7 @@ printf 'Yeniden başlatma gerçekleştirilmedi.\n'
         QCOMPARE(cancelledOutcome, "failed");
         QVERIFY(cancelledInstaller.recoveryGuidance().contains("#33"));
         QVERIFY(cancelledInstaller.recoveryGuidance().contains("Otomatik rollback"));
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 2, 5000);
 
         // 2. Concurrent start() while scanner is busy is ignored
         script("checkupdates", "sleep 1\nprintf 'pkg 1 -> 2\\n'\n");
@@ -498,13 +499,27 @@ printf 'Yeniden başlatma gerçekleştirilmedi.\n'
 
     void skipAutosnapIsStrippedAndExitZeroErrorsNeverReportOk()
     {
-        // 1. SKIP_AUTOSNAP=1 in parent env must be stripped; exit 0 + verified error pattern -> error/failed
+        // 1. SKIP_AUTOSNAP=1, SNAP_PAC_SKIP=1, and rogue ARCH_UPDATE_LIBDIR must be neutralized; exit 0 + verified error pattern -> error/failed
         qputenv("SKIP_AUTOSNAP", "1");
-        const auto envGuard = qScopeGuard([] { qunsetenv("SKIP_AUTOSNAP"); });
+        qputenv("SNAP_PAC_SKIP", "1");
+        qputenv("ARCH_UPDATE_LIBDIR", "/tmp/evil-libdir");
+        const auto envGuard = qScopeGuard([] {
+            qunsetenv("SKIP_AUTOSNAP");
+            qunsetenv("SNAP_PAC_SKIP");
+            qunsetenv("ARCH_UPDATE_LIBDIR");
+        });
 
         script("updater", R"SH(
 if [ -n "${SKIP_AUTOSNAP:-}" ]; then
     echo "LEAKED_SKIP_AUTOSNAP"
+    exit 0
+fi
+if [ -n "${SNAP_PAC_SKIP:-}" ]; then
+    echo "LEAKED_SNAP_PAC_SKIP"
+    exit 0
+fi
+if [ "${ARCH_UPDATE_LIBDIR:-}" != "/usr/share/arch-update/lib" ]; then
+    echo "LEAKED_ARCH_UPDATE_LIBDIR=${ARCH_UPDATE_LIBDIR:-}"
     exit 0
 fi
 printf 'Updating Packages...\n'
@@ -531,6 +546,8 @@ exit 0
         installer.start();
         QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
         QVERIFY(!installer.output().contains("LEAKED_SKIP_AUTOSNAP"));
+        QVERIFY(!installer.output().contains("LEAKED_SNAP_PAC_SKIP"));
+        QVERIFY(!installer.output().contains("LEAKED_ARCH_UPDATE_LIBDIR"));
         QCOMPARE(installer.status(), "error");
         QCOMPARE(outcome, "failed");
 
@@ -624,6 +641,7 @@ exit 0
         QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 3, 5000);
         QCOMPARE(installer.status(), "finished");
         QCOMPARE(cleanOutcome, "ok");
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 4, 5000);
 
         // 4. Official repo complete, AUR/Flatpak scan error or warning -> conservative critical classification preserved
         script("paru", "printf 'aur unreachable\\n' >&2\nexit 1\n");
@@ -788,6 +806,117 @@ exit 0
         QVERIFY(installer.rebootRequired());
         QCOMPARE(installer.rebootStatus(), "recommended");
         QVERIFY(installer.rebootSafetyNotice().contains("açık kullanıcı onayıyla"));
+    }
+
+    void scopedSeparationDbLockAndRealHealthEvidence()
+    {
+        // 1. db.lck preflight blocks before Recovery gate is even called
+        script("checkupdates", "printf 'amd-ucode 1.0 -> 1.1\\n'\n");
+        script("paru", "printf 'aurpkg 1.0 -> 2.0\\n'\n");
+        script("flatpak", "printf 'org.app.Demo\\tDemo\\t1.0\\n'\n");
+
+        UpdateScanner scanner;
+        QSignalSpy scanned(&scanner, &UpdateScanner::scanFinished);
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 1, 5000);
+        QVERIFY(UpdateInstaller::isCriticalBootUpdate(&scanner));
+
+        const QString fakeLock = directory.filePath("fake-db.lck");
+        {
+            QFile lockFile(fakeLock);
+            QVERIFY(lockFile.open(QIODevice::WriteOnly));
+            lockFile.write("");
+        }
+
+        UpdateInstaller installer(&scanner);
+        installer.m_pacmanLockPath = fakeLock;
+        installer.m_liveExecutionEnabled = true;
+        bool gateCalled = false;
+        installer.m_recoveryGate = [&](const QString &, bool) {
+            gateCalled = true;
+            return PreUpdateGateResult{true, QStringLiteral("ok"), QStringLiteral("Verified"), 81};
+        };
+
+        QSignalSpy finished(&installer, &UpdateInstaller::sessionFinished);
+        installer.startScoped(QStringLiteral("official"));
+        QCOMPARE(finished.count(), 1);
+        QCOMPARE(installer.status(), "blocked");
+        QVERIFY(!gateCalled);
+        QFile::remove(fakeLock);
+
+        // 2. AUR scope is blocked while official updates are pending (no partial upgrade)
+        installer.startScoped(QStringLiteral("aur"));
+        QCOMPARE(finished.count(), 2);
+        QCOMPARE(installer.status(), "error");
+        QVERIFY(installer.message().contains("resmî depo", Qt::CaseInsensitive));
+        QVERIFY(!gateCalled);
+
+        // 3. Flatpak scope runs unprivileged without invoking root Recovery pre-gate
+        const QString flatpakLog = directory.filePath("flatpak-args.log");
+        script("flatpak", QString("if [ \"$1\" = \"update\" ]; then printf '%s\\n' \"$*\" > '%1'; printf 'Güncelleme uygulandı\\n'; exit 0; fi\nprintf 'org.app.Demo\\tDemo\\t1.0\\n'\n").arg(flatpakLog).toUtf8());
+        installer.m_healthProbe = [](const QString &, quint32, const QString &) {
+            PostUpdateHealthEvidence ev;
+            ev.systemdChecked = true;
+            ev.failedSystemdUnits = 0;
+            ev.pacmanDbChecked = true;
+            ev.pacmanDbOk = true;
+            ev.activeKernelCheckDone = true;
+            ev.activeKernelImagePresent = true;
+            ev.bootVerified = true;
+            ev.recoverySnapshotVerified = true;
+            ev.recoveryRecommendedLevel = QStringLiteral("none");
+            ev.recoveryAssessmentStatus = QStringLiteral("unknown");
+            return ev;
+        };
+        installer.startScoped(QStringLiteral("flatpak"));
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 3, 5000);
+        QVERIFY(!gateCalled);
+        QCOMPARE(installer.status(), "finished");
+        QCOMPARE(installer.healthStatus(), "healthy");
+        QFile fpLog(flatpakLog);
+        QVERIFY(fpLog.open(QIODevice::ReadOnly));
+        QCOMPARE(QString::fromUtf8(fpLog.readAll()).trimmed(), QStringLiteral("update"));
+
+        // 4. Official scope invokes pkexec pacman -Syu (no --noconfirm/--nodeps/--overwrite)
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 2, 5000);
+        const QString pkexecLog = directory.filePath("pkexec-args.log");
+        script("pkexec", QString("printf '%s\\n' \"$*\" > '%1'\nprintf 'The update has been applied\\n'\nexit 0\n").arg(pkexecLog).toUtf8());
+        script("pacman", "exit 0\n");
+        installer.startScoped(QStringLiteral("official"));
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 4, 5000);
+        QVERIFY(gateCalled);
+        QCOMPARE(installer.status(), "finished");
+        QCOMPARE(installer.healthStatus(), "healthy");
+        QFile pkLog(pkexecLog);
+        QVERIFY(pkLog.open(QIODevice::ReadOnly));
+        const QString pkCmd = QString::fromUtf8(pkLog.readAll()).trimmed();
+        QVERIFY(pkCmd.contains("pacman"));
+        QVERIFY(pkCmd.contains("-Syu"));
+        QVERIFY(!pkCmd.contains("--noconfirm"));
+        QVERIFY(!pkCmd.contains("--nodeps"));
+        QVERIFY(!pkCmd.contains("--overwrite"));
+
+        // 5. pacman -Dk DB integrity failure degrades health status honestly
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 3, 5000);
+        installer.m_healthProbe = [](const QString &, quint32, const QString &) {
+            PostUpdateHealthEvidence ev;
+            ev.systemdChecked = true;
+            ev.failedSystemdUnits = 0;
+            ev.pacmanDbChecked = true;
+            ev.pacmanDbOk = false;
+            ev.pacmanDbDetail = QStringLiteral("missing dependency detected");
+            ev.activeKernelCheckDone = true;
+            ev.activeKernelImagePresent = true;
+            ev.bootVerified = true;
+            ev.recoverySnapshotVerified = true;
+            ev.recoveryRecommendedLevel = QStringLiteral("none");
+            ev.recoveryAssessmentStatus = QStringLiteral("unknown");
+            return ev;
+        };
+        installer.startScoped(QStringLiteral("official"));
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 5, 5000);
+        QCOMPARE(installer.healthStatus(), "degraded");
+        QVERIFY(installer.healthSummary().contains("missing dependency"));
+        QVERIFY(installer.recoveryGuidance().contains("#81"));
     }
 };
 

@@ -40,6 +40,9 @@ class RecoveryService : public QObject
     Q_PROPERTY(int lastCreatedSnapshotId READ lastCreatedSnapshotId NOTIFY stateChanged)
     Q_PROPERTY(bool confirmationPending READ confirmationPending NOTIFY stateChanged)
     Q_PROPERTY(QString pendingDescription READ pendingDescription NOTIFY stateChanged)
+    Q_PROPERTY(bool deleteConfirmationPending READ deleteConfirmationPending NOTIFY stateChanged)
+    Q_PROPERTY(int pendingDeleteSnapshotId READ pendingDeleteSnapshotId NOTIFY stateChanged)
+    Q_PROPERTY(QString pendingDeleteDescription READ pendingDeleteDescription NOTIFY stateChanged)
     Q_PROPERTY(bool preflightBusy READ preflightBusy NOTIFY stateChanged)
     Q_PROPERTY(int selectedRollbackPointId READ selectedRollbackPointId NOTIFY stateChanged)
     Q_PROPERTY(QVariantMap preflightResult READ preflightResult NOTIFY stateChanged)
@@ -74,9 +77,14 @@ public:
     int lastCreatedSnapshotId() const;
     bool confirmationPending() const;
     QString pendingDescription() const;
+    bool deleteConfirmationPending() const;
+    int pendingDeleteSnapshotId() const;
+    QString pendingDeleteDescription() const;
     bool preflightBusy() const;
     int selectedRollbackPointId() const;
     QVariantMap preflightResult() const;
+
+    static bool isSnapshotProtectedForDeletion(const QVariantMap &point, int currentSnapshotId, QString *reason = nullptr);
 
     void setLocalFallbackEnabled(bool enabled);
     void setOperationTimeoutMs(int timeoutMs);
@@ -97,6 +105,9 @@ public slots:
     void cancelActiveOperation();
     void preflightRollback(int pointId);
     void createRecoveryPoint(const QString &description);
+    void requestDeleteRecoveryPoint(int snapshotId);
+    void confirmDeleteRecoveryPoint();
+    void cancelDeleteRecoveryPoint();
     void deleteRecoveryPoint(int snapshotId);
 
 signals:
@@ -106,6 +117,7 @@ private slots:
     void handleDbusReply(QDBusPendingCallWatcher *watcher);
     void handleDbusStateChanged(const QVariantMap &state);
     void handleCreateReply(QDBusPendingCallWatcher *watcher);
+    void handleDeleteReply(QDBusPendingCallWatcher *watcher);
     void handlePreflightReply(QDBusPendingCallWatcher *watcher);
     void pollOperationState();
     void handleOperationStateReply(QDBusPendingCallWatcher *watcher);
@@ -160,6 +172,9 @@ private:
     int m_lastCreatedSnapshotId = 0;
     bool m_confirmationPending = false;
     QString m_pendingDescription;
+    bool m_deleteConfirmationPending = false;
+    int m_pendingDeleteSnapshotId = 0;
+    QString m_pendingDeleteDescription;
     bool m_preflightBusy = false;
     int m_selectedRollbackPointId = 0;
     QVariantMap m_preflightResult;

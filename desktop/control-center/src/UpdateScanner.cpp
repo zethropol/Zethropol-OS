@@ -64,6 +64,7 @@ void UpdateScanner::scan()
     m_busy = true;
     m_starting = true;
     m_completedAt.clear();
+    m_orphanPackages.clear();
     for (int i = 0; i < m_reports.size(); ++i)
         update(i, "pending", "Tarama bekleniyor.");
 
@@ -117,8 +118,66 @@ void UpdateScanner::scan()
         start(2, QStandardPaths::findExecutable("flatpak"),
               {"remote-ls", "--updates", "--columns=application,name,version"}, timeout);
 
+    // Read-only orphan package detection (never removes anything automatically).
+    startOrphanScan(timeout);
+
     m_starting = false;
     finishIfReady();
+}
+
+void UpdateScanner::startOrphanScan(int timeout)
+{
+    const QString pacmanBin = QStandardPaths::findExecutable(QStringLiteral("pacman"));
+    if (pacmanBin.isEmpty())
+        return;
+
+    auto *process = new QProcess(this);
+    m_processes.append(process);
+    auto environment = QProcessEnvironment::systemEnvironment();
+    environment.insert(QStringLiteral("LC_ALL"), QStringLiteral("C"));
+    process->setProcessEnvironment(environment);
+    process->setStandardInputFile(QProcess::nullDevice());
+
+    auto *timer = new QTimer(process);
+    timer->setSingleShot(true);
+    connect(timer, &QTimer::timeout, this, [process] {
+        process->setProperty("timedOut", true);
+        process->kill();
+    });
+    connect(process, &QProcess::errorOccurred, this, [this, process](QProcess::ProcessError error) {
+        if (error != QProcess::FailedToStart)
+            return;
+        process->setProperty("handled", true);
+        m_processes.removeOne(process);
+        process->deleteLater();
+        finishIfReady();
+    });
+    connect(process, &QProcess::finished, this, [this, process, timer](int code, QProcess::ExitStatus status) {
+        timer->stop();
+        if (process->property("handled").toBool())
+            return;
+        process->setProperty("handled", true);
+        m_processes.removeOne(process);
+        if (!process->property("timedOut").toBool()
+            && status == QProcess::NormalExit
+            && code == 0) {
+            const QString out = QString::fromUtf8(process->readAllStandardOutput());
+            QStringList orphans;
+            for (const QString &line : out.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
+                const QString trimmed = line.trimmed();
+                if (!trimmed.isEmpty())
+                    orphans.append(trimmed);
+            }
+            m_orphanPackages = orphans;
+            emit changed();
+        }
+        process->deleteLater();
+        finishIfReady();
+    });
+
+    process->start(pacmanBin, {QStringLiteral("-Qtdq")});
+    if (timeout > 0)
+        timer->start(qMin(timeout, 15) * 1000);
 }
 
 void UpdateScanner::start(int index, const QString &program,
@@ -177,8 +236,8 @@ void UpdateScanner::finish(int index, QProcess *process, int exitCode,
         update(index, "error", "Tarama zaman aşımına uğradı. Yeniden tarayabilirsiniz.");
     } else if (exitStatus != QProcess::NormalExit
                || (exitCode != 0 && !noUpdates)) {
-        const QString reason = !error.isEmpty() ? error.left(1500)
-            : (!output.trimmed().isEmpty() ? output.trimmed().left(1500)
+        const QString reason = !error.isEmpty() ? error.left(16384)
+            : (!output.trimmed().isEmpty() ? output.trimmed().left(16384)
                                            : QString("Araç çıkış kodu: %1").arg(exitCode));
         update(index, "error", "Tarama tamamlanamadı: " + reason);
     } else {
@@ -217,7 +276,7 @@ void UpdateScanner::finish(int index, QProcess *process, int exitCode,
         if (unparsed)
             detail += " Bazı sonuçlar okunamadı; liste eksik olabilir.";
         if (!error.isEmpty())
-            detail += " Uyarı: " + error.left(1500);
+            detail += " Uyarı: " + error.left(16384);
         update(index, unparsed || !error.isEmpty() ? "warning" : "complete", detail, packages);
     }
     process->deleteLater();

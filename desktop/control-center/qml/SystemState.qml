@@ -8,6 +8,46 @@ QtObject {
     function known(value) {
         return value !== null && value !== undefined && String(value) !== "" ? String(value) : "Unavailable"
     }
+    function formatOsVersion(value) {
+        if (value === null || value === undefined)
+            return "Not defined"
+        const text = String(value).trim()
+        if (text === "" || text.toLowerCase() === "unknown")
+            return "Not defined"
+        if (text.toLowerCase() === "rolling")
+            return "Rolling"
+        return text
+    }
+    function formatDesktopName(value) {
+        if (value === null || value === undefined)
+            return "Unknown"
+        const text = String(value).trim()
+        if (text === "")
+            return "Unknown"
+        const parts = text.split(":")
+        for (let i = 0; i < parts.length; ++i) {
+            if (parts[i].trim().toLowerCase() === "kde")
+                return "KDE Plasma"
+        }
+        return text
+    }
+    function formatSessionType(value) {
+        if (value === null || value === undefined)
+            return "Unknown"
+        const text = String(value).trim()
+        if (text === "")
+            return "Unknown"
+        const lower = text.toLowerCase()
+        if (lower === "wayland")
+            return "Wayland"
+        if (lower === "x11")
+            return "X11"
+        if (lower === "tty")
+            return "TTY"
+        if (lower === "mir")
+            return "Mir"
+        return text
+    }
     property var hardware: HardwareBridge.state
 
     property var system: hardware.system
@@ -24,13 +64,14 @@ QtObject {
     property string powerGovernor: power && power.governor ? power.governor : "Not available"
 
     property string osName: system ? known(system.os_name) : "Unknown"
-    property string osVersion: system && system.os_version !== "Unknown" ? known(system.os_version) : "Not defined"
+    property string osVersion: system ? formatOsVersion(system.os_version) : "Not defined"
     property string baseSystem: system ? known(system.base_system) : "Unknown"
     property string architecture: system ? known(system.architecture) : "Unknown"
     property string kernelVersion: system ? known(system.kernel_version) : "Unknown"
-    property string desktopName: system ? known(system.desktop_name) : "Unknown"
+    property string desktopName: system ? formatDesktopName(system.desktop_name) : "Unknown"
+    property bool isKdePlasma: desktopName === "KDE Plasma"
     property string desktopVersion: system ? known(system.desktop_version) : "Unknown"
-    property string sessionType: system ? known(system.session_type) : "Unknown"
+    property string sessionType: system ? formatSessionType(system.session_type) : "Unknown"
     property string hostname: system ? known(system.hostname) : "Unknown"
     property string uptimeDetails: system && system.uptime_seconds !== null && system.uptime_seconds !== undefined ? Math.floor(system.uptime_seconds / 86400) + "d " + Math.floor((system.uptime_seconds % 86400) / 3600) + "h " + Math.floor((system.uptime_seconds % 3600) / 60) + "m" : "Unknown"
 

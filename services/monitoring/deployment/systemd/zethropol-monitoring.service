@@ -1,5 +1,7 @@
 [Unit]
 Description=Zethropol Monitoring Service
+After=dbus.socket
+BindsTo=dbus.socket
 
 [Service]
 Type=dbus
@@ -7,3 +9,19 @@ BusName=org.zethropol.Monitoring
 ExecStart=/usr/lib/zethropol/zethropol-monitoring
 Restart=on-failure
 RestartSec=2s
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true

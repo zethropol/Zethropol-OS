@@ -1,0 +1,39 @@
+pkgbase = zethropol-control-center
+	pkgdesc = Zethropol OS desktop control center
+	pkgver = 0.1.0
+	pkgrel = 3
+	url = https://github.com/zethropol/Zethropol-OS
+	arch = x86_64
+	license = MIT
+	makedepends = cmake
+	depends = glibc
+	depends = gcc-libs
+	depends = qt6-base
+	depends = qt6-declarative
+	depends = libglvnd
+	depends = dbus
+	depends = systemd
+	depends = polkit
+	depends = pacman
+	depends = pacman-contrib
+	depends = util-linux
+	depends = zethropol-hardware>=0.1.0-3
+	depends = zethropol-monitoring>=0.1.0-2
+	depends = zethropol-power>=0.1.0-2
+	depends = zethropol-recovery>=0.1.0-2
+	depends = zethropol-services>=0.1.0-2
+	optdepends = plasma-integration: KDE Plasma platform theme integration
+	optdepends = polkit-kde-agent: KDE Plasma Polkit authentication agent
+	optdepends = libnotify: desktop notifications via notify-send
+	optdepends = cachy-update: CachyOS/Arch update tooling
+	optdepends = flatpak: Flatpak update scanning and updates
+	optdepends = paru: AUR update scanning and updates
+	optdepends = snapper: Btrfs snapshot backend for Recovery
+	optdepends = fwupd: firmware metadata via zethropol-hardware
+	optdepends = smartmontools: SMART diagnostics via zethropol-hardware
+	optdepends = zethropol-diagnostics: Zethropol Diagnostics D-Bus service
+	optdepends = zethropol-security: Zethropol Security D-Bus service
+	source = zethropol-control-center-0.1.0-3-src.tar.gz
+	sha256sums = 93f89fc923cb7d04f0c33c5fbae2ac03b8f46881dfef97d0e112fbfe94e5d6c7
+
+pkgname = zethropol-control-center

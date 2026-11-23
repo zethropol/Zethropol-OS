@@ -1,25 +1,27 @@
 pkgname=zethropol-security
 pkgver=0.1.0
-pkgrel=1
+pkgrel=2
 pkgdesc="Zethropol Security D-Bus service"
 url="https://github.com/zethropol/Zethropol-OS"
 arch=("x86_64")
 license=("MIT")
 depends=("glibc" "dbus" "systemd" "polkit")
 makedepends=("cargo")
-
-_commit=a809b71e100b8f54252c6b3232afa6a70f00a81a
-
-source=("git+https://github.com/zethropol/Zethropol-OS.git#commit=a809b71e100b8f54252c6b3232afa6a70f00a81a")
-sha256sums=("SKIP")
+source=("${pkgname}-${pkgver}-${pkgrel}-src.tar.gz")
+sha256sums=("423686aee13dc33a5f302c58135b8a850808d54468f52c780ce087a4ec206a49")
 
 build() {
-    cd "$srcdir/Zethropol-OS/services/security"
-    cargo build --release --locked
+    cd "$srcdir/${pkgname}-${pkgver}/services/security"
+    cargo build --release --locked --offline
+}
+
+check() {
+    cd "$srcdir/${pkgname}-${pkgver}/services/security"
+    cargo test --locked --offline
 }
 
 package() {
-    cd "$srcdir/Zethropol-OS/services/security"
+    cd "$srcdir/${pkgname}-${pkgver}/services/security"
 
     install -Dm755 target/release/security "$pkgdir/usr/lib/zethropol/zethropol-security"
     install -Dm644 deployment/dbus/org.zethropol.Security.conf "$pkgdir/etc/dbus-1/system.d/org.zethropol.Security.conf"

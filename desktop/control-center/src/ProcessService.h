@@ -70,6 +70,7 @@ public:
     Q_INVOKABLE bool canTerminate(int pid) const;
     Q_INVOKABLE quint64 processStartTime(int pid) const;
     Q_INVOKABLE QVariantMap getProcessDetails(int pid) const;
+    static bool isCriticalProcessIdentity(const QString &comm, const QString &exeOrArgv0 = QString());
 
 public slots:
     void refresh();

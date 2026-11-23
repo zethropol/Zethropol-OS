@@ -1,0 +1,15 @@
+pkgbase = zethropol-hardware
+	pkgdesc = Zethropol Hardware D-Bus service
+	pkgver = 0.1.0
+	pkgrel = 3
+	url = https://github.com/zethropol/Zethropol-OS
+	arch = x86_64
+	license = MIT
+	makedepends = cargo
+	depends = glibc
+	depends = dbus
+	depends = systemd
+	source = zethropol-hardware-0.1.0-3-src.tar.gz
+	sha256sums = 7245ce0c01cfc5676c93c772d3c2e7f08231ac6293486aefcc8a4b0242adba67
+
+pkgname = zethropol-hardware

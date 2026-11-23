@@ -1,5 +1,7 @@
 [Unit]
 Description=Zethropol Hardware D-Bus Service
+After=dbus.socket
+BindsTo=dbus.socket
 
 [Service]
 Type=dbus
@@ -7,3 +9,13 @@ BusName=org.zethropol.Hardware
 ExecStart=/usr/lib/zethropol/zethropol-hardware --dbus-service
 Restart=on-failure
 RestartSec=2s
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+NoNewPrivileges=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true

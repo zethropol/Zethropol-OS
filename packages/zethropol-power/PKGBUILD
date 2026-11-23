@@ -1,24 +1,27 @@
 pkgname=zethropol-power
 pkgver=0.1.0
-pkgrel=1
+pkgrel=2
 pkgdesc="Zethropol Power D-Bus service"
 url="https://github.com/zethropol/Zethropol-OS"
 arch=("x86_64")
 license=("MIT")
 depends=("glibc" "dbus" "systemd" "polkit" "power-profiles-daemon")
 makedepends=("cargo")
-
-_commit="7a402f35d84e579873e027a9e3ab03fb929c76e0"
-source=("Zethropol-OS::git+https://github.com/zethropol/Zethropol-OS.git#commit=${_commit}")
-sha256sums=("SKIP")
+source=("${pkgname}-${pkgver}-${pkgrel}-src.tar.gz")
+sha256sums=("58016e28feea74ac9ca88f12d5f598d99b5503299a41351e39538d17dac33185")
 
 build() {
-    cd "$srcdir/Zethropol-OS/services/power"
-    cargo build --release --locked
+    cd "$srcdir/${pkgname}-${pkgver}/services/power"
+    cargo build --release --locked --offline
+}
+
+check() {
+    cd "$srcdir/${pkgname}-${pkgver}/services/power"
+    cargo test --locked --offline
 }
 
 package() {
-    cd "$srcdir/Zethropol-OS/services/power"
+    cd "$srcdir/${pkgname}-${pkgver}/services/power"
 
     install -Dm755 target/release/power "$pkgdir/usr/lib/zethropol/zethropol-power"
     install -Dm644 deployment/dbus/org.zethropol.Power.conf "$pkgdir/etc/dbus-1/system.d/org.zethropol.Power.conf"

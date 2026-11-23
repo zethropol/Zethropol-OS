@@ -1,9 +1,11 @@
 #include "UpdateInstaller.h"
 #include "UpdateScanner.h"
 
+#include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusReply>
+#include <QDBusVariant>
 #include <QFile>
 #include <QProcessEnvironment>
 #include <QRegularExpression>
@@ -13,6 +15,80 @@
 #include <QUuid>
 
 namespace {
+
+QVariant decodeDbusVariantRecursive(const QVariant &value)
+{
+    if (value.userType() == qMetaTypeId<QDBusVariant>())
+        return decodeDbusVariantRecursive(value.value<QDBusVariant>().variant());
+
+    if (value.userType() != qMetaTypeId<QDBusArgument>())
+        return value;
+
+    const auto arg = value.value<QDBusArgument>();
+    if (arg.currentType() == QDBusArgument::MapType) {
+        const QString sig = arg.currentSignature();
+        QVariantMap map;
+        arg.beginMap();
+        while (!arg.atEnd()) {
+            arg.beginMapEntry();
+            QString key;
+            if (sig == QStringLiteral("a{ss}")) {
+                QString val;
+                arg >> key >> val;
+                map.insert(key, val);
+            } else {
+                QVariant val;
+                arg >> key >> val;
+                map.insert(key, decodeDbusVariantRecursive(val));
+            }
+            arg.endMapEntry();
+        }
+        arg.endMap();
+        return map;
+    }
+
+    if (arg.currentType() == QDBusArgument::ArrayType) {
+        QVariantList list;
+        arg.beginArray();
+        while (!arg.atEnd()) {
+            QVariant item;
+            arg >> item;
+            list.append(decodeDbusVariantRecursive(item));
+        }
+        arg.endArray();
+        return list;
+    }
+
+    if (arg.currentType() == QDBusArgument::StructureType) {
+        QVariantMap map;
+        bool ok = false;
+        QString code, message, opId;
+        arg.beginStructure();
+        arg >> ok >> code >> message >> opId;
+        arg.endStructure();
+        map.insert(QStringLiteral("success"), ok);
+        map.insert(QStringLiteral("code"), code);
+        map.insert(QStringLiteral("message"), message);
+        map.insert(QStringLiteral("operation_id"), opId);
+        return map;
+    }
+
+    return value;
+}
+
+void runDefaultRecoveryComplete(const QString &updateOpId, const QString &outcome)
+{
+    const QDBusConnection bus = QDBusConnection::systemBus();
+    if (!bus.isConnected() || updateOpId.isEmpty())
+        return;
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        QStringLiteral("org.zethropol.Recovery"),
+        QStringLiteral("/org/zethropol/Recovery"),
+        QStringLiteral("org.zethropol.Recovery.v1"),
+        QStringLiteral("CompletePreUpdateExecution"));
+    msg << updateOpId << outcome;
+    bus.call(msg, QDBus::Block, 5000);
+}
 
 PreUpdateGateResult runDefaultRecoveryPreGate(const QString &updateOpId, bool criticalBootUpdate)
 {
@@ -35,15 +111,13 @@ PreUpdateGateResult runDefaultRecoveryPreGate(const QString &updateOpId, bool cr
     const QDBusMessage createReply = callRecovery(
         QStringLiteral("CreatePreUpdateRecoveryPoint"),
         {updateOpId, QStringLiteral("Pre-update safety snapshot")},
-        30000);
-    if (createReply.type() == QDBusMessage::ErrorMessage || createReply.arguments().size() < 4) {
+        125000);
+    bool createOk = false;
+    QString createCode, createMsg, recoveryOpId;
+    if (!UpdateInstaller::decodeRecoveryOperationResult(createReply, createOk, createCode, createMsg, recoveryOpId)) {
         return {false, QStringLiteral("not-available"),
                 QStringLiteral("Recovery servisi erişilemez veya geçersiz yanıt döndürdü; güncelleme engellendi."), 0};
     }
-    const bool createOk = createReply.arguments().at(0).toBool();
-    const QString createCode = createReply.arguments().at(1).toString();
-    const QString createMsg = createReply.arguments().at(2).toString();
-    const QString recoveryOpId = createReply.arguments().at(3).toString();
     if (!createOk || recoveryOpId.isEmpty()) {
         return {false, createCode, createMsg.isEmpty() ? QStringLiteral("Güncelleme öncesi snapshot başlatılamadı.") : createMsg, 0};
     }
@@ -52,16 +126,12 @@ PreUpdateGateResult runDefaultRecoveryPreGate(const QString &updateOpId, bool cr
     for (int i = 0; i < 120; ++i) {
         const QDBusMessage stateReply = callRecovery(
             QStringLiteral("GetOperationState"), {recoveryOpId}, 5000);
-        if (stateReply.type() == QDBusMessage::ErrorMessage || stateReply.arguments().isEmpty()) {
-            return {false, QStringLiteral("not-available"),
-                    QStringLiteral("Recovery işlem durumu sorgulanamadı; güncelleme engellendi."), 0};
-        }
-        const QDBusReply<QVariantMap> parsedState(stateReply);
-        if (!parsedState.isValid()) {
+        const QVariantMap opMap = UpdateInstaller::decodeRecoveryStringMap(stateReply);
+        if (opMap.isEmpty()) {
+            runDefaultRecoveryComplete(updateOpId, QStringLiteral("failed"));
             return {false, QStringLiteral("not-available"),
                     QStringLiteral("Recovery işlem durumu çözümlenemedi; güncelleme engellendi."), 0};
         }
-        const QVariantMap opMap = parsedState.value();
         const QString status = opMap.value(QStringLiteral("status")).toString();
         const QString code = opMap.value(QStringLiteral("code")).toString();
         const QString message = opMap.value(QStringLiteral("message")).toString();
@@ -70,11 +140,13 @@ PreUpdateGateResult runDefaultRecoveryPreGate(const QString &updateOpId, bool cr
             break;
         }
         if (status != QStringLiteral("running")) {
+            runDefaultRecoveryComplete(updateOpId, QStringLiteral("failed"));
             return {false, code, message.isEmpty() ? QStringLiteral("Güncelleme öncesi snapshot doğrulanamadı.") : message, 0};
         }
         QThread::msleep(250);
     }
     if (snapshotId == 0) {
+        runDefaultRecoveryComplete(updateOpId, QStringLiteral("failed"));
         return {false, QStringLiteral("verification-failed"),
                 QStringLiteral("Güncelleme öncesi snapshot kimliği doğrulanamadı."), 0};
     }
@@ -83,42 +155,37 @@ PreUpdateGateResult runDefaultRecoveryPreGate(const QString &updateOpId, bool cr
         QStringLiteral("VerifyPreUpdateSnapshot"),
         {updateOpId, QVariant::fromValue(snapshotId), criticalBootUpdate},
         10000);
-    if (verifyReply.type() == QDBusMessage::ErrorMessage || verifyReply.arguments().size() < 3) {
-        return {false, QStringLiteral("verification-failed"),
-                QStringLiteral("Snapshot son doğrulama kapısı başarısız; güncelleme engellendi."), snapshotId};
-    }
-    if (!verifyReply.arguments().at(0).toBool()) {
-        return {false, verifyReply.arguments().at(1).toString(),
-                verifyReply.arguments().at(2).toString(), snapshotId};
+    bool verifyOk = false;
+    QString verifyCode, verifyMsg, verifyOpId;
+    if (!UpdateInstaller::decodeRecoveryOperationResult(verifyReply, verifyOk, verifyCode, verifyMsg, verifyOpId)
+        || !verifyOk) {
+        runDefaultRecoveryComplete(updateOpId, QStringLiteral("failed"));
+        return {false,
+                verifyCode.isEmpty() ? QStringLiteral("verification-failed") : verifyCode,
+                verifyMsg.isEmpty()
+                    ? QStringLiteral("Snapshot son doğrulama kapısı başarısız; güncelleme engellendi.")
+                    : verifyMsg,
+                snapshotId};
     }
 
     const QDBusMessage beginReply = callRecovery(
         QStringLiteral("BeginPreUpdateExecution"),
         {updateOpId, QVariant::fromValue(snapshotId)},
         5000);
-    if (beginReply.type() == QDBusMessage::ErrorMessage || beginReply.arguments().size() < 3
-        || !beginReply.arguments().at(0).toBool()) {
-        const QString errMsg = beginReply.arguments().size() >= 3
-            ? beginReply.arguments().at(2).toString()
-            : QStringLiteral("Rezervasyon aktif güncelleme durumuna geçirilemedi.");
-        return {false, QStringLiteral("invalid-state"), errMsg, snapshotId};
+    bool beginOk = false;
+    QString beginCode, beginMsg, beginOpId;
+    if (!UpdateInstaller::decodeRecoveryOperationResult(beginReply, beginOk, beginCode, beginMsg, beginOpId)
+        || !beginOk) {
+        runDefaultRecoveryComplete(updateOpId, QStringLiteral("failed"));
+        return {false,
+                beginCode.isEmpty() ? QStringLiteral("invalid-state") : beginCode,
+                beginMsg.isEmpty()
+                    ? QStringLiteral("Rezervasyon aktif güncelleme durumuna geçirilemedi.")
+                    : beginMsg,
+                snapshotId};
     }
 
     return {true, QStringLiteral("ok"), QStringLiteral("Doğrulandı"), snapshotId};
-}
-
-void runDefaultRecoveryComplete(const QString &updateOpId, const QString &outcome)
-{
-    const QDBusConnection bus = QDBusConnection::systemBus();
-    if (!bus.isConnected() || updateOpId.isEmpty())
-        return;
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        QStringLiteral("org.zethropol.Recovery"),
-        QStringLiteral("/org/zethropol/Recovery"),
-        QStringLiteral("org.zethropol.Recovery.v1"),
-        QStringLiteral("CompletePreUpdateExecution"));
-    msg << updateOpId << outcome;
-    bus.call(msg, QDBus::Block, 5000);
 }
 
 PostUpdateHealthEvidence runDefaultPostUpdateHealthProbe(
@@ -127,9 +194,16 @@ PostUpdateHealthEvidence runDefaultPostUpdateHealthProbe(
     PostUpdateHealthEvidence ev;
     ev.pacmanLockPresent = QFile::exists(QStringLiteral("/var/lib/pacman/db.lck"));
 
-    const QString systemctlBin = QStandardPaths::findExecutable(QStringLiteral("systemctl"));
+    auto cleanEnv = QProcessEnvironment::systemEnvironment();
+    cleanEnv.insert(QStringLiteral("LC_ALL"), QStringLiteral("C"));
+    cleanEnv.insert(QStringLiteral("SYSTEMD_COLORS"), QStringLiteral("0"));
+
+    const QString systemctlBin = QFile::exists(QStringLiteral("/usr/bin/systemctl"))
+        ? QStringLiteral("/usr/bin/systemctl")
+        : QStandardPaths::findExecutable(QStringLiteral("systemctl"));
     if (!systemctlBin.isEmpty()) {
         QProcess sysProc;
+        sysProc.setProcessEnvironment(cleanEnv);
         sysProc.start(systemctlBin, {QStringLiteral("--failed"), QStringLiteral("--no-legend"), QStringLiteral("--plain")});
         if (sysProc.waitForFinished(3000) && sysProc.exitStatus() == QProcess::NormalExit && sysProc.exitCode() == 0) {
             const QString out = QString::fromUtf8(sysProc.readAllStandardOutput());
@@ -143,11 +217,36 @@ PostUpdateHealthEvidence runDefaultPostUpdateHealthProbe(
         ev.systemdDetail = QStringLiteral("systemctl aracı bulunamadı.");
     }
 
+    const QString pacmanBin = QFile::exists(QStringLiteral("/usr/bin/pacman"))
+        ? QStringLiteral("/usr/bin/pacman")
+        : QStandardPaths::findExecutable(QStringLiteral("pacman"));
+    if (!pacmanBin.isEmpty()) {
+        QProcess dbProc;
+        dbProc.setProcessEnvironment(cleanEnv);
+        dbProc.setProcessChannelMode(QProcess::MergedChannels);
+        dbProc.start(pacmanBin, {QStringLiteral("-Dk")});
+        if (dbProc.waitForFinished(5000) && dbProc.exitStatus() == QProcess::NormalExit) {
+            ev.pacmanDbChecked = true;
+            ev.pacmanDbOk = (dbProc.exitCode() == 0);
+            if (!ev.pacmanDbOk)
+                ev.pacmanDbDetail = QString::fromUtf8(dbProc.readAllStandardOutput()).trimmed().left(512);
+        } else {
+            ev.pacmanDbDetail = QStringLiteral("pacman -Dk veritabanı bütünlük kontrolü tamamlanamadı.");
+        }
+    } else {
+        ev.pacmanDbDetail = QStringLiteral("pacman aracı bulunamadı.");
+    }
+
     const QString kernelRel = QSysInfo::kernelVersion().trimmed();
     if (!kernelRel.isEmpty()) {
         ev.activeKernelCheckDone = true;
         ev.activeKernelImagePresent = QFile::exists(QStringLiteral("/usr/lib/modules/%1/vmlinuz").arg(kernelRel));
     }
+
+    const bool realLocalHealthOk = !ev.pacmanLockPresent
+        && ev.systemdChecked && ev.failedSystemdUnits == 0
+        && ev.activeKernelCheckDone && ev.activeKernelImagePresent
+        && (!ev.pacmanDbChecked || ev.pacmanDbOk);
 
     const QDBusConnection bus = QDBusConnection::systemBus();
     if (bus.isConnected() && snapshotId > 0 && !updateOpId.isEmpty()) {
@@ -159,19 +258,17 @@ PostUpdateHealthEvidence runDefaultPostUpdateHealthProbe(
         const QString recoveryOutcome = (sessionStatus == QStringLiteral("finished"))
             ? QStringLiteral("ok")
             : (sessionStatus == QStringLiteral("unknown") ? QStringLiteral("unknown") : QStringLiteral("failed"));
-        // Never assert health_check_ok=true from the client side.
-        msg << updateOpId << QVariant::fromValue(snapshotId) << recoveryOutcome << false;
+        msg << updateOpId << QVariant::fromValue(snapshotId) << recoveryOutcome << realLocalHealthOk;
         const QDBusMessage reply = bus.call(msg, QDBus::Block, 5000);
-        if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-            const QDBusReply<QVariantMap> parsed(reply);
-            if (parsed.isValid()) {
-                const QVariantMap map = parsed.value();
-                ev.recoveryAssessmentStatus = map.value(QStringLiteral("assessmentStatus")).toString();
-                ev.recoveryAssessmentSummary = map.value(QStringLiteral("summary")).toString();
-                const QString preflightOverall = map.value(QStringLiteral("preflightOverallStatus")).toString();
-                ev.bootVerified = (preflightOverall == QStringLiteral("ready"));
-                ev.bootDegraded = (preflightOverall == QStringLiteral("blocked"));
-            }
+        const QVariantMap data = UpdateInstaller::decodeRecoveryEnvelopeData(reply);
+        if (!data.isEmpty()) {
+            ev.recoveryAssessmentStatus = data.value(QStringLiteral("assessmentStatus")).toString();
+            ev.recoveryAssessmentSummary = data.value(QStringLiteral("summary")).toString();
+            ev.recoverySnapshotVerified = data.value(QStringLiteral("snapshotVerified")).toBool();
+            ev.recoveryRecommendedLevel = data.value(QStringLiteral("recommendedLevel")).toString();
+            const QString preflightOverall = data.value(QStringLiteral("preflightOverallStatus")).toString();
+            ev.bootVerified = (preflightOverall == QStringLiteral("ready"));
+            ev.bootDegraded = (preflightOverall == QStringLiteral("blocked"));
         }
     }
     if (ev.recoveryAssessmentStatus.isEmpty())
@@ -182,9 +279,88 @@ PostUpdateHealthEvidence runDefaultPostUpdateHealthProbe(
 
 } // namespace
 
+bool UpdateInstaller::decodeRecoveryOperationResult(
+    const QDBusMessage &reply, bool &ok, QString &code, QString &message, QString &operationId)
+{
+    ok = false;
+    code.clear();
+    message.clear();
+    operationId.clear();
+
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty())
+        return false;
+
+    const QVariantList args = reply.arguments();
+    if (args.size() >= 3 && args.at(0).userType() == QMetaType::Bool) {
+        ok = args.at(0).toBool();
+        code = args.at(1).toString();
+        message = args.at(2).toString();
+        if (args.size() >= 4)
+            operationId = args.at(3).toString();
+        return true;
+    }
+
+    const QVariant decoded = decodeDbusVariantRecursive(args.constFirst());
+    if (decoded.userType() == QMetaType::QVariantMap) {
+        const QVariantMap map = decoded.toMap();
+        if (!map.contains(QStringLiteral("success")))
+            return false;
+        ok = map.value(QStringLiteral("success")).toBool();
+        code = map.value(QStringLiteral("code")).toString();
+        message = map.value(QStringLiteral("message")).toString();
+        operationId = map.value(QStringLiteral("operation_id")).toString();
+        if (operationId.isEmpty())
+            operationId = map.value(QStringLiteral("operationId")).toString();
+        return true;
+    }
+    return false;
+}
+
+QVariantMap UpdateInstaller::decodeRecoveryStringMap(const QDBusMessage &reply)
+{
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty())
+        return {};
+    const QVariant decoded = decodeDbusVariantRecursive(reply.arguments().constFirst());
+    return decoded.userType() == QMetaType::QVariantMap ? decoded.toMap() : QVariantMap{};
+}
+
+QVariantMap UpdateInstaller::decodeRecoveryEnvelopeData(const QDBusMessage &reply)
+{
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty())
+        return {};
+    const QVariantMap top = decodeDbusVariantRecursive(reply.arguments().constFirst()).toMap();
+    if (top.contains(QStringLiteral("data"))) {
+        const QVariantMap inner = decodeDbusVariantRecursive(top.value(QStringLiteral("data"))).toMap();
+        if (!inner.isEmpty())
+            return inner;
+    }
+    return top;
+}
+
 bool UpdateInstaller::officialRepoReady() const
 {
     return isOfficialRepoScanComplete(m_scanner);
+}
+
+bool UpdateInstaller::officialUpdatesAvailable() const
+{
+    if (!m_scanner || m_scanner->reports().isEmpty())
+        return false;
+    return !m_scanner->reports().at(0).toMap().value(QStringLiteral("packages")).toList().isEmpty();
+}
+
+bool UpdateInstaller::aurUpdatesAvailable() const
+{
+    if (!m_scanner || m_scanner->reports().size() < 2)
+        return false;
+    return !m_scanner->reports().at(1).toMap().value(QStringLiteral("packages")).toList().isEmpty();
+}
+
+bool UpdateInstaller::flatpakUpdatesAvailable() const
+{
+    if (!m_scanner || m_scanner->reports().size() < 3)
+        return false;
+    return !m_scanner->reports().at(2).toMap().value(QStringLiteral("packages")).toList().isEmpty();
 }
 
 bool UpdateInstaller::isOfficialRepoScanComplete(const UpdateScanner *scanner, QString *reason)
@@ -228,7 +404,7 @@ bool UpdateInstaller::isCriticalBootUpdate(const UpdateScanner *scanner)
         return true;
 
     static const QRegularExpression criticalPkgRe(
-        QStringLiteral("^(?:linux(?:-[a-z0-9._-]+)?|mkinitcpio.*|dracut.*|limine.*|grub.*|efibootmgr|systemd.*|btrfs-progs|snapper|snap-pac|limine-snapper-sync|pacman|glibc)$"),
+        QStringLiteral("^(?:linux(?:-[a-z0-9._-]+)?|linux-firmware.*|amd-ucode|intel-ucode|mkinitcpio.*|dracut.*|limine.*|grub.*|efibootmgr|shim.*|sbctl|cryptsetup|lvm2|systemd.*|btrfs-progs|snapper|snap-pac|limine-snapper-sync|pacman|glibc)$"),
         QRegularExpression::CaseInsensitiveOption);
 
     const QVariantList reports = scanner->reports();
@@ -288,8 +464,9 @@ UpdateInstaller::UpdateInstaller(UpdateScanner *scanner, QObject *parent)
                                "|could not satisfy dependencies"
                                "|unable to lock database"
                                "|invalid or corrupted package"
+                               "|signature from .* is unknown trust"
                                "|failed to synchronize all databases"
-                               "|==>\\s*ERROR:"
+                               "|==>\\s*(?:ERROR|HATA):"
                                "|error:\\s*Failed to (?:install|update)"
                                "|işlem gerçekleştirilemedi"
                                "|bağımlılıklar karşılanamadı"
@@ -306,8 +483,8 @@ UpdateInstaller::UpdateInstaller(UpdateScanner *scanner, QObject *parent)
             }
         } else if (code == 4 || code == 17) {
             finish("cancelled", "Güncelleme işlemi kullanıcı tarafından iptal edildi veya başka bir oturum nedeniyle durduruldu. Rapor yeniden taramayla güncellenir.");
-        } else if (code == 2) {
-            finish("error", "Yönetici yetkisi alınamadı (sudo yetkilendirmesi başarısız oldu veya yetki yükseltme aracı bulunamadı).");
+        } else if (code == 2 || code == 126) {
+            finish("error", "Yönetici yetkisi alınamadı (yetkilendirme başarısız oldu veya reddedildi).");
         } else if (code == 5) {
             finish("error", "Resmî paket yükseltmesi sırasında hata oluştu. Bazı paketler değişmiş olabilir; işlem çıktısını ve yenilenen raporu inceleyin.");
         } else if (code == 6) {
@@ -318,33 +495,157 @@ UpdateInstaller::UpdateInstaller(UpdateScanner *scanner, QObject *parent)
     });
 }
 
+UpdateInstaller::~UpdateInstaller()
+{
+    if (m_busy) {
+        if (m_process.state() != QProcess::NotRunning) {
+            m_process.terminate();
+            if (!m_process.waitForFinished(1000)) {
+                m_process.kill();
+                m_process.waitForFinished(1000);
+            }
+        }
+        if (m_recoveryGateEnabled && m_recoveryComplete && !m_updateOperationId.isEmpty()) {
+            m_recoveryComplete(m_updateOperationId, QStringLiteral("unknown"));
+        }
+    }
+}
+
+void UpdateInstaller::cancel()
+{
+    if (!m_busy || m_process.state() == QProcess::NotRunning)
+        return;
+    m_process.terminate();
+    if (!m_process.waitForFinished(2000))
+        m_process.kill();
+}
+
 void UpdateInstaller::start()
 {
-    if (m_busy || m_scanner->busy() || !m_scanner->hasUpdates())
-        return;
-    if (m_sessionTool.isEmpty())
-        m_sessionTool = QStandardPaths::findExecutable("script");
-    if (m_updater.isEmpty()) {
-        m_updater = QStandardPaths::findExecutable("arch-update");
-        if (m_updater.isEmpty())
-            m_updater = QStandardPaths::findExecutable("cachy-update");
-    }
-    if (m_sessionTool.isEmpty() || m_updater.isEmpty()) {
-        m_status = "error";
-        m_message = "Kurulum için gerekli sistem araçları bulunamadı.";
-        emit changed();
-        return;
-    }
+    startScoped(QStringLiteral("all"));
+}
 
-    QString officialRepoReason;
-    if (!isOfficialRepoScanComplete(m_scanner, &officialRepoReason)) {
+void UpdateInstaller::startScoped(const QString &scope)
+{
+    if (m_busy || !m_scanner || m_scanner->busy())
+        return;
+
+    const QString normScope = scope.trimmed().toLower();
+    if (normScope != QStringLiteral("all")
+        && normScope != QStringLiteral("official")
+        && normScope != QStringLiteral("aur")
+        && normScope != QStringLiteral("flatpak")) {
         m_status = QStringLiteral("error");
-        m_message = officialRepoReason;
+        m_message = QStringLiteral("Geçersiz güncelleme kapsamı.");
         emit changed();
         emit sessionFinished();
         return;
     }
 
+    if (normScope == QStringLiteral("all") && !m_scanner->hasUpdates())
+        return;
+    if (normScope == QStringLiteral("official") && !officialUpdatesAvailable())
+        return;
+    if (normScope == QStringLiteral("aur") && !aurUpdatesAvailable())
+        return;
+    if (normScope == QStringLiteral("flatpak") && !flatpakUpdatesAvailable())
+        return;
+
+    if (m_sessionTool.isEmpty())
+        m_sessionTool = QStandardPaths::findExecutable("script");
+    if (m_sessionTool.isEmpty()) {
+        m_status = "error";
+        m_message = "Kurulum için gerekli oturum aracı (script) bulunamadı.";
+        emit changed();
+        return;
+    }
+
+    const bool needsRootRepo = (normScope != QStringLiteral("flatpak"));
+    QString targetProgram;
+    QStringList targetArgs;
+
+    if (normScope == QStringLiteral("official")) {
+        const QString pkexecBin = QStandardPaths::findExecutable(QStringLiteral("pkexec"));
+        const QString pacmanBin = QStandardPaths::findExecutable(QStringLiteral("pacman"));
+        if (pkexecBin.isEmpty() || pacmanBin.isEmpty()) {
+            m_status = QStringLiteral("error");
+            m_message = QStringLiteral("Resmî depo yükseltmesi için pkexec veya pacman bulunamadı.");
+            emit changed();
+            emit sessionFinished();
+            return;
+        }
+        targetProgram = pkexecBin;
+        targetArgs = {pacmanBin, QStringLiteral("-Syu")};
+    } else if (normScope == QStringLiteral("aur")) {
+        if (officialUpdatesAvailable()) {
+            m_status = QStringLiteral("error");
+            m_message = QStringLiteral("Önce bekleyen resmî depo yükseltmesi tamamlanmadan AUR güncellemeleri başlatılamaz.");
+            emit changed();
+            emit sessionFinished();
+            return;
+        }
+        QString aurHelper;
+        for (const auto &candidate : {"paru", "yay", "pikaur"}) {
+            aurHelper = QStandardPaths::findExecutable(candidate);
+            if (!aurHelper.isEmpty())
+                break;
+        }
+        if (aurHelper.isEmpty()) {
+            m_status = QStringLiteral("error");
+            m_message = QStringLiteral("AUR güncellemeleri için AUR yardımcısı bulunamadı.");
+            emit changed();
+            emit sessionFinished();
+            return;
+        }
+        targetProgram = aurHelper;
+        targetArgs = {QStringLiteral("--aur"), QStringLiteral("-Sua")};
+    } else if (normScope == QStringLiteral("flatpak")) {
+        const QString flatpakBin = QStandardPaths::findExecutable(QStringLiteral("flatpak"));
+        if (flatpakBin.isEmpty()) {
+            m_status = QStringLiteral("error");
+            m_message = QStringLiteral("Flatpak aracı bulunamadı.");
+            emit changed();
+            emit sessionFinished();
+            return;
+        }
+        targetProgram = flatpakBin;
+        targetArgs = {QStringLiteral("update")};
+    } else {
+        if (m_updater.isEmpty()) {
+            m_updater = QStandardPaths::findExecutable("arch-update");
+            if (m_updater.isEmpty())
+                m_updater = QStandardPaths::findExecutable("cachy-update");
+        }
+        if (m_updater.isEmpty()) {
+            m_status = "error";
+            m_message = "Kurulum için gerekli sistem araçları bulunamadı.";
+            emit changed();
+            return;
+        }
+        targetProgram = m_updater;
+    }
+
+    if (needsRootRepo) {
+        QString officialRepoReason;
+        if (!isOfficialRepoScanComplete(m_scanner, &officialRepoReason)) {
+            m_status = QStringLiteral("error");
+            m_message = officialRepoReason;
+            emit changed();
+            emit sessionFinished();
+            return;
+        }
+
+        if (!m_pacmanLockPath.isEmpty() && QFile::exists(m_pacmanLockPath)) {
+            m_status = QStringLiteral("blocked");
+            m_message = QStringLiteral("Aktif pacman kilidi (%1) tespit edildi; başka bir paket işlemi sürerken yükseltme başlatılamaz.")
+                .arg(m_pacmanLockPath);
+            emit changed();
+            emit sessionFinished();
+            return;
+        }
+    }
+
+    m_activeScope = normScope;
     m_updateOperationId = QUuid::createUuid().toString(QUuid::WithoutBraces);
     m_verifiedSnapshotId = 0;
     m_recoveryGuidance.clear();
@@ -356,7 +657,7 @@ void UpdateInstaller::start()
     m_rebootRequired = false;
     m_rebootSafetyNotice.clear();
 
-    if (m_recoveryGateEnabled) {
+    if (needsRootRepo && m_recoveryGateEnabled) {
         const bool criticalBoot = isCriticalBootUpdate(m_scanner);
         const PreUpdateGateResult gate = m_recoveryGate
             ? m_recoveryGate(m_updateOperationId, criticalBoot)
@@ -377,29 +678,40 @@ void UpdateInstaller::start()
             if (m_recoveryComplete)
                 m_recoveryComplete(m_updateOperationId, QStringLiteral("aborted"));
             m_status = "blocked";
-            m_message = QStringLiteral("Güncelleme öncesi snapshot #%1 doğrulandı, ancak 03.2.08 aşamasında canlı güncelleme yürütmesi kapalıdır.")
+            m_message = QStringLiteral("Güncelleme öncesi snapshot #%1 doğrulandı, ancak canlı güncelleme yürütmesi şu anda kapalıdır.")
                             .arg(m_verifiedSnapshotId);
             emit changed();
             emit sessionFinished();
             return;
         }
+    } else if (!needsRootRepo && !m_liveExecutionEnabled) {
+        m_status = QStringLiteral("blocked");
+        m_message = QStringLiteral("Canlı güncelleme yürütmesi şu anda kapalıdır.");
+        emit changed();
+        emit sessionFinished();
+        return;
     }
 
     m_rawOutput.clear();
     m_output.clear();
     m_decoder = QStringDecoder(QStringDecoder::Utf8);
     emit outputChanged();
+
     auto environment = QProcessEnvironment::systemEnvironment();
+    // Strip both snap-pac and legacy autosnap skip variables; pin arch-update libdir to root-owned system path.
     environment.remove(QStringLiteral("SKIP_AUTOSNAP"));
+    environment.remove(QStringLiteral("SNAP_PAC_SKIP"));
+    environment.insert(QStringLiteral("ARCH_UPDATE_LIBDIR"), QStringLiteral("/usr/share/arch-update/lib"));
     environment.insert("TERM", "dumb");
     environment.insert("NO_COLOR", "1");
     m_process.setProcessEnvironment(environment);
     m_process.setProgram(m_sessionTool);
-    // Preserve the real controlling TTY required by sudo and package prompts.
-    // Use argv directly, no shell interpolation. Never record input or output
-    // to disk, and disable line echo so entered passwords are not displayed.
-    m_process.setArguments({"--quiet", "--return", "--flush", "--echo", "never",
-                            "/dev/null", "--", m_updater});
+
+    QStringList scriptArgs{"--quiet", "--return", "--flush", "--echo", "never",
+                           "/dev/null", "--", targetProgram};
+    scriptArgs.append(targetArgs);
+    m_process.setArguments(scriptArgs);
+
     m_busy = true;
     m_scanner->m_installationRunning = true;
     m_status = "running";
@@ -413,7 +725,6 @@ void UpdateInstaller::sendInput(const QString &text)
     if (!m_busy || m_process.state() != QProcess::Running
         || text.contains('\n') || text.contains('\r'))
         return;
-    // Input is sent only to the live process; it is not appended to the report.
     if (m_process.write(text.toUtf8() + '\n') < 0) {
         m_message = "Yanıt gönderilemedi. İşlem çıktısını kontrol edin.";
         emit changed();
@@ -425,8 +736,6 @@ void UpdateInstaller::sendKey(const QString &text)
     if (!m_busy || m_process.state() != QProcess::Running || text.size() != 1
         || text.contains('\n') || text.contains('\r'))
         return;
-    // Pagers consume a single key. Do not leave an extra Enter that could
-    // accidentally answer the following package confirmation.
     m_process.write(text.toUtf8());
 }
 
@@ -465,7 +774,7 @@ void UpdateInstaller::readOutput()
             stage = QStringLiteral("AUR paketleri güncelleniyor…");
         } else if (tail.contains(QRegularExpression(QStringLiteral("(?:updating packages|paketler güncelleniyor)"), QRegularExpression::CaseInsensitiveOption))) {
             stage = QStringLiteral("Resmî depo paketleri güncelleniyor…");
-        } else if (tail.contains(QRegularExpression(QStringLiteral("(?:proceed with update|güncellemeye devam edilsin mi)"), QRegularExpression::CaseInsensitiveOption))) {
+        } else if (tail.contains(QRegularExpression(QStringLiteral("(?:proceed with update|güncellemeye devam edilsin mi|proceed with installation)"), QRegularExpression::CaseInsensitiveOption))) {
             stage = QStringLiteral("Güncelleme onayı bekleniyor…");
         } else if (tail.contains(QRegularExpression(QStringLiteral("(?:password for|parola:)"), QRegularExpression::CaseInsensitiveOption))) {
             stage = QStringLiteral("Yönetici parolası bekleniyor…");
@@ -486,7 +795,8 @@ void UpdateInstaller::finish(const QString &status, const QString &message)
     m_status = status;
     m_message = message;
     m_scanner->m_installationRunning = false;
-    if (m_recoveryGateEnabled && m_recoveryComplete && !m_updateOperationId.isEmpty()) {
+    if (m_activeScope != QStringLiteral("flatpak")
+        && m_recoveryGateEnabled && m_recoveryComplete && !m_updateOperationId.isEmpty()) {
         const QString outcome = (status == QStringLiteral("finished"))
             ? QStringLiteral("ok")
             : (status == QStringLiteral("unknown") ? QStringLiteral("unknown") : QStringLiteral("failed"));
@@ -518,6 +828,13 @@ void UpdateInstaller::evaluatePostUpdateState()
         QRegularExpression::CaseInsensitiveOption));
     const bool missingKernelImage = ev.activeKernelCheckDone && !ev.activeKernelImagePresent;
 
+    const bool recoveryServerConfirmedClean =
+        ev.recoveryAssessmentStatus == QStringLiteral("healthy")
+        || (ev.recoveryAssessmentStatus == QStringLiteral("unknown")
+            && ev.recoverySnapshotVerified
+            && ev.bootVerified
+            && ev.recoveryRecommendedLevel == QStringLiteral("none"));
+
     if (ev.pacmanLockPresent
         || ev.recoveryAssessmentStatus.startsWith(QStringLiteral("blocked"))
         || m_status == QStringLiteral("blocked")) {
@@ -533,6 +850,7 @@ void UpdateInstaller::evaluatePostUpdateState()
     } else if (m_status == QStringLiteral("error")
                || m_status == QStringLiteral("cancelled")
                || (ev.systemdChecked && ev.failedSystemdUnits > 0)
+               || (ev.pacmanDbChecked && !ev.pacmanDbOk)
                || ev.bootDegraded
                || (missingKernelImage && !rebootHintInOutput)
                || ev.recoveryAssessmentStatus == QStringLiteral("recovery-recommended")
@@ -544,25 +862,30 @@ void UpdateInstaller::evaluatePostUpdateState()
             reasons << QStringLiteral("Güncelleme oturumu hatayla/kesintiyle sonuçlandı.");
         if (ev.systemdChecked && ev.failedSystemdUnits > 0)
             reasons << QStringLiteral("%1 başarısız systemd birimi tespit edildi.").arg(ev.failedSystemdUnits);
+        if (ev.pacmanDbChecked && !ev.pacmanDbOk)
+            reasons << (ev.pacmanDbDetail.isEmpty()
+                            ? QStringLiteral("pacman -Dk yerel bağımlılık veritabanı hatası tespit edildi.")
+                            : ev.pacmanDbDetail);
         if (ev.bootDegraded)
             reasons << (ev.bootDetail.isEmpty()
                             ? QStringLiteral("Boot, kernel/initramfs veya Limine doğrulaması başarısız.")
                             : ev.bootDetail);
         if (missingKernelImage && !rebootHintInOutput)
             reasons << QStringLiteral("Aktif çekirdek imajı bulunamadı; yalnızca yeniden başlatma gereksinimi olarak yorumlanamaz.");
+        if (!ev.recoveryAssessmentSummary.isEmpty())
+            reasons << ev.recoveryAssessmentSummary;
         m_healthSummary = reasons.isEmpty()
             ? QStringLiteral("Sistem sağlığında doğrulanmış sorun tespit edildi.")
             : reasons.join(QStringLiteral(" "));
     } else if (m_status == QStringLiteral("finished")
                && ev.systemdChecked && ev.failedSystemdUnits == 0
+               && (!ev.pacmanDbChecked || ev.pacmanDbOk)
                && ev.activeKernelCheckDone && ev.activeKernelImagePresent
                && ev.bootVerified
-               && !ev.recoveryAssessmentStatus.isEmpty()
-               && ev.recoveryAssessmentStatus != QStringLiteral("unknown")
-               && ev.recoveryAssessmentStatus != QStringLiteral("not-available")) {
+               && recoveryServerConfirmedClean) {
         m_healthStatus = QStringLiteral("healthy");
         m_healthSummary = QStringLiteral(
-            "Bağımsız sağlık kontrolleri (pacman kilidi yok, 0 başarısız systemd birimi, doğrulanmış boot/Recovery durumu) geçti.");
+            "Bağımsız sağlık kontrolleri (pacman kilidi yok, veritabanı tutarlı, 0 başarısız systemd birimi, doğrulanmış boot/Recovery durumu) geçti.");
     } else {
         m_healthStatus = QStringLiteral("unknown");
         QStringList gaps;
@@ -574,9 +897,7 @@ void UpdateInstaller::evaluatePostUpdateState()
             gaps << QStringLiteral("Aktif çekirdek sürümü/dosyası doğrulanamadı.");
         if (!ev.bootVerified)
             gaps << (ev.bootDetail.isEmpty() ? QStringLiteral("Boot/Limine bütünlüğü bağımsız doğrulanamadı.") : ev.bootDetail);
-        if (ev.recoveryAssessmentStatus == QStringLiteral("unknown")
-            || ev.recoveryAssessmentStatus == QStringLiteral("not-available")
-            || ev.recoveryAssessmentStatus.isEmpty())
+        if (!recoveryServerConfirmedClean)
             gaps << QStringLiteral("Recovery sağlık değerlendirmesi kesin kanıt üretmedi.");
         m_healthSummary = gaps.isEmpty()
             ? QStringLiteral("Yeterli bağımsız sağlık kanıtı bulunamadı.")
@@ -591,8 +912,8 @@ void UpdateInstaller::evaluatePostUpdateState()
     } else {
         m_cleanupStatus = QStringLiteral("unknown");
         m_cleanupSummary = QStringLiteral(
-            "Control Center otomatik temizlik çalıştırmaz (snapshot, yetim paket, önbellek, boot ve günlükler silinmez). "
-            "Etkileşimli arch-update oturumunda paccache/yetim/Flatpak adımları kullanıcı tarafından yürütülmüş olabileceğinden temizlik sonucu ayrıca doğrulanmamıştır.");
+            "Control Center otomatik temizlik çalıştırmaz (snapshot, yetim paket, önbellek, boot ve günlükler silinmez); haricî temizlik sonucu ayrıca doğrulanmamıştır. "
+            "Yetim paketler yalnızca tespit edilir; kaldırma ayrı açık kullanıcı onayı gerektirir.");
     }
 
     if (missingKernelImage || rebootHintInOutput) {
