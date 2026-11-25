@@ -1,22 +1,25 @@
 pkgname=zethropol-hardware
 pkgver=0.1.0
-pkgrel=3
+pkgrel=4
 pkgdesc="Zethropol Hardware D-Bus service"
 url="https://github.com/zethropol/Zethropol-OS"
 arch=("x86_64")
 license=("MIT")
-depends=("glibc" "dbus" "systemd")
+depends=("glibc" "gcc-libs" "dbus" "systemd")
 makedepends=("cargo")
+checkdepends=("dbus")
 source=("${pkgname}-${pkgver}-${pkgrel}-src.tar.gz")
-sha256sums=("7245ce0c01cfc5676c93c772d3c2e7f08231ac6293486aefcc8a4b0242adba67")
+sha256sums=("68924bfb372093eed82e38ed4d314e658095c266c1571ee0cd7a17a9fb3c8805")
 
 build() {
     cd "$srcdir/${pkgname}-${pkgver}/services/hardware"
+    export RUSTFLAGS="--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo --remap-path-prefix=${HOME}=/home/build --remap-path-prefix=${srcdir}=/build ${RUSTFLAGS:-}"
     cargo build --release --locked --offline
 }
 
 check() {
     cd "$srcdir/${pkgname}-${pkgver}/services/hardware"
+    export RUSTFLAGS="--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo --remap-path-prefix=${HOME}=/home/build --remap-path-prefix=${srcdir}=/build ${RUSTFLAGS:-}"
     cargo test --locked --offline
 }
 
@@ -27,4 +30,5 @@ package() {
     install -Dm644 deployment/dbus/org.zethropol.Hardware.conf "$pkgdir/etc/dbus-1/system.d/org.zethropol.Hardware.conf"
     install -Dm644 deployment/dbus/org.zethropol.Hardware.service "$pkgdir/usr/share/dbus-1/system-services/org.zethropol.Hardware.service"
     install -Dm644 deployment/systemd/zethropol-hardware.service "$pkgdir/usr/lib/systemd/system/zethropol-hardware.service"
+    install -Dm644 "$srcdir/${pkgname}-${pkgver}/LICENSE" "$pkgdir/usr/share/licenses/${pkgname}/LICENSE"
 }

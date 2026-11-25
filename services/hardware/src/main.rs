@@ -420,9 +420,9 @@ fn run_dbus_service() {
     let runtime = tokio::runtime::Runtime::new().expect("failed to create Tokio runtime");
 
     runtime.block_on(async {
-        let service = dbus::HardwareService;
+        let service = dbus::HardwareService::new();
 
-        let _connection = zbus::connection::Builder::system()
+        let connection = zbus::connection::Builder::system()
             .expect("failed to connect to system D-Bus")
             .name("org.zethropol.Hardware")
             .expect("failed to acquire D-Bus service name")
@@ -432,6 +432,8 @@ fn run_dbus_service() {
             .await
             .expect("failed to build Hardware D-Bus service connection");
 
-        std::future::pending::<()>().await;
+        connection.closed().await;
+        eprintln!("Hardware D-Bus connection closed; exiting for service manager recovery.");
+        std::process::exit(1);
     });
 }

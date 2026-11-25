@@ -8,6 +8,7 @@ pub mod power;
 pub mod state;
 pub mod storage;
 pub mod system;
+pub mod telemetry;
 
 #[cfg(test)]
 mod test_support;

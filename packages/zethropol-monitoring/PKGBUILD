@@ -1,22 +1,25 @@
 pkgname=zethropol-monitoring
 pkgver=0.1.0
-pkgrel=2
+pkgrel=3
 pkgdesc="Zethropol Monitoring D-Bus service"
 url="https://github.com/zethropol/Zethropol-OS"
 arch=("x86_64")
 license=("MIT")
-depends=("glibc" "dbus" "systemd")
+depends=("glibc" "gcc-libs" "dbus" "systemd" "zethropol-hardware>=0.1.0-4")
 makedepends=("cargo")
+checkdepends=("dbus")
 source=("${pkgname}-${pkgver}-${pkgrel}-src.tar.gz")
-sha256sums=("25e3a1a5d6158fbbbd84c9c7191087a9e700d58924d9d6f6d04ae56745c338ef")
+sha256sums=("319feed5bbe4b455182b9412359b995d02382d260c8d60d8750822a871dae426")
 
 build() {
     cd "$srcdir/${pkgname}-${pkgver}/services/monitoring"
+    export RUSTFLAGS="--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo --remap-path-prefix=${HOME}=/home/build --remap-path-prefix=${srcdir}=/build ${RUSTFLAGS:-}"
     cargo build --release --locked --offline
 }
 
 check() {
     cd "$srcdir/${pkgname}-${pkgver}/services/monitoring"
+    export RUSTFLAGS="--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo --remap-path-prefix=${HOME}=/home/build --remap-path-prefix=${srcdir}=/build ${RUSTFLAGS:-}"
     cargo test --locked --offline
 }
 
@@ -27,4 +30,5 @@ package() {
     install -Dm644 deployment/dbus/org.zethropol.Monitoring.conf "$pkgdir/etc/dbus-1/system.d/org.zethropol.Monitoring.conf"
     install -Dm644 deployment/dbus/org.zethropol.Monitoring.service "$pkgdir/usr/share/dbus-1/system-services/org.zethropol.Monitoring.service"
     install -Dm644 deployment/systemd/zethropol-monitoring.service "$pkgdir/usr/lib/systemd/system/zethropol-monitoring.service"
+    install -Dm644 "$srcdir/${pkgname}-${pkgver}/LICENSE" "$pkgdir/usr/share/licenses/${pkgname}/LICENSE"
 }

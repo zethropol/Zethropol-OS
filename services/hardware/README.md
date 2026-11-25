@@ -201,17 +201,26 @@ The service is implemented in Rust and exposes normalized hardware state through
 
 The production interface currently exposes:
 
-- GetState
+- `GetState` — comprehensive hardware inventory, capabilities, firmware, diagnostics, and health state
+- `GetTelemetry` — low-overhead, zero-fork, non-blocking live telemetry endpoint for high-frequency consumers (such as `org.zethropol.Monitoring`)
 
-GetState returns the normalized hardware state using the standard Zethropol structured result model:
+Both methods return the standard Zethropol structured result envelope:
 
-- success
-- code
-- message
-- operationId
-- data
+- `success`
+- `code`
+- `message`
+- `operationId`
+- `data`
 
-The data payload contains normalized hardware information collected dynamically from the running system.
+#### `GetTelemetry` Contract and Resource Boundaries
+
+- **Excluded heavy inventory work:** `GetTelemetry` never runs `fwupdmgr`, `smartctl`/`nvme`, DMI/motherboard inspection, `/usr/share/hwdata/pci.ids` parsing, or SHA-256 hardware fingerprinting.
+- **Zero-fork / zero-sleep hot path:**
+  - CPU usage is computed from stateful `/proc/stat` counter deltas (first sample omits `usage_percent` rather than faking `0.0`); CPU frequency averages all measurable online cores in GHz.
+  - Network throughput is computed from `/proc/net/route` (`/proc/net/ipv6_route` fallback) and stateful monotonic `rx_bytes`/`tx_bytes` deltas in decimal Mbps. Default `GetTelemetry` and `GetState` queries perform **zero outbound ICMP ping or external network traffic** (`ping_ms` is omitted rather than `0.0`).
+  - Storage combines cached sysfs root-disk physical capacity (`capacity_gb` / `physical_capacity_gb`, decimal GB) and hwmon temperature with zero-fork `statvfs("/")` filesystem metrics (`filesystem_total_gb`, `filesystem_used_gb`, `filesystem_free_gb`, `filesystem_available_gb`, `filesystem_usage_percent = used / (used + available) * 100`, `filesystem_type`, `filesystem_subvolume`), preserving Btrfs metadata/subvolume semantics without dividing filesystem usage by physical disk capacity.
+  - Memory (`used_gb`, `total_gb`, `available_gb`) and GPU VRAM (`vram_used_gb`, `vram_total_gb`) preserve their existing GiB values and key names for backwards compatibility.
+- **Caching and concurrency:** Concurrent `GetTelemetry` requests coalesce within a `250 ms` window; temperature sensors refresh on a `2 s` TTL (cleared immediately on sensor read failure so stale temperatures are never served); GPU/storage topology refreshes on a `30 s` TTL (or automatically on sysfs read failure). `GetTelemetry` does not share locks with `GetState`.
 
 ### Implementation
 

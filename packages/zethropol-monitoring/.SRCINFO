@@ -1,15 +1,18 @@
 pkgbase = zethropol-monitoring
 	pkgdesc = Zethropol Monitoring D-Bus service
 	pkgver = 0.1.0
-	pkgrel = 2
+	pkgrel = 3
 	url = https://github.com/zethropol/Zethropol-OS
 	arch = x86_64
 	license = MIT
+	checkdepends = dbus
 	makedepends = cargo
 	depends = glibc
+	depends = gcc-libs
 	depends = dbus
 	depends = systemd
-	source = zethropol-monitoring-0.1.0-2-src.tar.gz
-	sha256sums = 25e3a1a5d6158fbbbd84c9c7191087a9e700d58924d9d6f6d04ae56745c338ef
+	depends = zethropol-hardware>=0.1.0-4
+	source = zethropol-monitoring-0.1.0-3-src.tar.gz
+	sha256sums = 319feed5bbe4b455182b9412359b995d02382d260c8d60d8750822a871dae426
 
 pkgname = zethropol-monitoring

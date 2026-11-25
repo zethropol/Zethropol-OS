@@ -2,29 +2,20 @@
 
 Arch Linux package definition for the Zethropol Monitoring system service.
 
-## Source
+## Runtime Components
 
-Service implementation:
-services/monitoring/
+- `/usr/lib/zethropol/zethropol-monitoring`
+- `/etc/dbus-1/system.d/org.zethropol.Monitoring.conf`
+- `/usr/share/dbus-1/system-services/org.zethropol.Monitoring.service`
+- `/usr/lib/systemd/system/zethropol-monitoring.service`
+- `/usr/share/licenses/zethropol-monitoring/LICENSE`
 
-Deployment definitions:
-services/monitoring/deployment/
+The service uses system-level D-Bus activation through systemd and is not enabled through `multi-user.target`.
 
-## Runtime components
+## Stage 04.6 Release (`0.1.0-3`)
 
-- /usr/lib/zethropol/zethropol-monitoring
-- /etc/dbus-1/system.d/org.zethropol.Monitoring.conf
-- /usr/share/dbus-1/system-services/org.zethropol.Monitoring.service
-- /usr/lib/systemd/system/zethropol-monitoring.service
-
-## Package requirements
-
-1. Build the Monitoring Rust service in release mode.
-2. Install the service binary under /usr/lib/zethropol/.
-3. Install the D-Bus policy under /etc/dbus-1/system.d/.
-4. Install the D-Bus activation descriptor under /usr/share/dbus-1/system-services/.
-5. Install the systemd unit under /usr/lib/systemd/system/.
-6. Keep the service D-Bus activated and avoid enabling it through multi-user.target.
-7. Provide a reproducible build without depending on the developer home directory.
-
-The final PKGBUILD source strategy is intentionally deferred until the Zethropol package and release source model is established.
+- Consumes `org.zethropol.Hardware.v1.GetTelemetry` and serves the normalized 25-metric `org.zethropol.Monitoring.v1` contract (`GetState` + `StateChanged`) with staleness invalidation and deduplication.
+- Declares versioned runtime dependency `zethropol-hardware>=0.1.0-4`.
+- Moves test-only `serde_json` to `[dev-dependencies]` so the production release binary omits it.
+- Built offline with `--locked --offline` and path remapping; preserves the previous rollback archive `zethropol-monitoring-0.1.0-2-x86_64.pkg.tar.zst` untouched.
+- Production package artifact is stored under `packages/stage-04.6/` (unsigned development build; not installed live during Stage 04.6).

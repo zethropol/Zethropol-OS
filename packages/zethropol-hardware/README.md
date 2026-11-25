@@ -6,34 +6,18 @@ This package builds and installs the production Zethropol Hardware D-Bus service
 
 The package installs:
 
-- /usr/lib/zethropol/zethropol-hardware
-- /etc/dbus-1/system.d/org.zethropol.Hardware.conf
-- /usr/share/dbus-1/system-services/org.zethropol.Hardware.service
-- /usr/lib/systemd/system/zethropol-hardware.service
+- `/usr/lib/zethropol/zethropol-hardware`
+- `/etc/dbus-1/system.d/org.zethropol.Hardware.conf`
+- `/usr/share/dbus-1/system-services/org.zethropol.Hardware.service`
+- `/usr/lib/systemd/system/zethropol-hardware.service`
+- `/usr/share/licenses/zethropol-hardware/LICENSE`
 
-The service uses system-level D-Bus activation through systemd.
+The service uses system-level D-Bus activation through systemd and is not enabled through `multi-user.target`.
 
-The package does not enable the service through multi-user.target.
+## Stage 04.6 Release (`0.1.0-4`)
 
-## Build
-
-The package builds the Hardware service from the pinned Zethropol OS repository commit using Cargo.
-
-
-## Hardware inventory revision
-
-Release `0.1.0-2` pins the verified Hardware inventory implementation at
-`cd976ad79a930f3a28e0b6b6184f047e979ba5f0`; `check()` runs its locked Rust tests.
-The former `0.1.0-1` recipe pinned `3a8e40c` and would reinstall the older service.
-
-The runtime contract remains `org.zethropol.Hardware`, `/org/zethropol/Hardware`,
-`org.zethropol.Hardware.v1.GetState` with the standard `a{sv}` result envelope.
-The Control Center build uses that same system bus contract directly. No separate
-Hardware launcher, private production bus, or Control Center system installation
-is required. The unit, activation file and policy paths are unchanged.
-
-Before upgrading the installed Hardware package, preserve its actual binary,
-unit, activation file, policy and package version for rollback. The package
-upgrade and restart of only `zethropol-hardware.service` require explicit user
-approval. Validate the system-bus result and its existing clients after restart;
-restore the preserved package/files and Hardware service on failure.
+- Adds the zero-fork `org.zethropol.Hardware.v1.GetTelemetry` contract alongside backward-compatible `GetState`.
+- Uses the locked `libc::statvfs` binding (`libc 0.2.189`) for Linux filesystem usage reporting while preserving `f_frsize`/`f_bsize` and Btrfs occupancy semantics.
+- Built offline with `--locked --offline` and path remapping so no developer home or temporary build paths appear in the binary.
+- Preserves the previous rollback archive `zethropol-hardware-0.1.0-3-x86_64.pkg.tar.zst` untouched.
+- Production package artifact is stored under `packages/stage-04.6/` (unsigned development build; not installed live during Stage 04.6).

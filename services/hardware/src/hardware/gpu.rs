@@ -90,6 +90,7 @@ fn read_device(card: String, path: &Path) -> Option<GpuInfo> {
         .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
         .unwrap_or_default();
     let (model, family) = resolve_identity(&vendor, &device, &subsystem_vendor, &subsystem_device);
+    let (vram_used_gb, vram_total_gb) = read_vram_gb_pair(path);
     Some(GpuInfo {
         card,
         vendor,
@@ -103,10 +104,8 @@ fn read_device(card: String, path: &Path) -> Option<GpuInfo> {
             .filter(|v| (0.0..=100.0).contains(v)),
         memory_usage_percent: read_number(&path.join("mem_busy_percent"))
             .filter(|v| (0.0..=100.0).contains(v)),
-        vram_used_gb: read_number(&path.join("mem_info_vram_used")).map(|v| v / 1_073_741_824.0),
-        vram_total_gb: read_number(&path.join("mem_info_vram_total"))
-            .filter(|v| *v > 0.0)
-            .map(|v| v / 1_073_741_824.0),
+        vram_used_gb,
+        vram_total_gb,
         temperature_c: read_temperature(path),
         core_clock_mhz: read_active_clock(&path.join("pp_dpm_sclk")),
         memory_clock_mhz: read_active_clock(&path.join("pp_dpm_mclk")),
@@ -170,6 +169,25 @@ fn read_number(path: &std::path::Path) -> Option<f64> {
         .filter(|v| v.is_finite() && *v >= 0.0)
 }
 
+fn read_vram_gb_pair(device_path: &Path) -> (Option<f64>, Option<f64>) {
+    let raw_total = read_number(&device_path.join("mem_info_vram_total"));
+    let total_bytes = raw_total.filter(|v| *v > 0.0);
+    let raw_used = read_number(&device_path.join("mem_info_vram_used"));
+
+    // Reject inconsistent VRAM measurements where total is explicitly 0 or used > total.
+    let used_bytes = match (raw_used, raw_total) {
+        (Some(used), Some(total)) if total > 0.0 && used <= total => Some(used),
+        (Some(_), Some(_)) => None,
+        (Some(used), None) => Some(used),
+        (None, _) => None,
+    };
+
+    (
+        used_bytes.map(|v| v / 1_073_741_824.0),
+        total_bytes.map(|v| v / 1_073_741_824.0),
+    )
+}
+
 fn read_active_clock(path: &std::path::Path) -> Option<f64> {
     let contents = fs::read_to_string(path).ok()?;
 
@@ -180,27 +198,100 @@ fn read_active_clock(path: &std::path::Path) -> Option<f64> {
 
         line.split_whitespace()
             .nth(1)
-            .and_then(|value| value.strip_suffix("Mhz"))
+            .and_then(|value| value.strip_suffix("Mhz").or_else(|| value.strip_suffix("MHz")))
             .and_then(|value| value.parse::<f64>().ok())
+            .filter(|v| v.is_finite() && *v >= 0.0)
+            .map(|v| if v == 0.0 { 0.0 } else { v })
+    })
+}
+
+pub struct GpuTelemetrySample {
+    pub usage_percent: Option<f64>,
+    pub memory_usage_percent: Option<f64>,
+    pub vram_used_gb: Option<f64>,
+    pub vram_total_gb: Option<f64>,
+    pub core_clock_mhz: Option<f64>,
+    pub memory_clock_mhz: Option<f64>,
+}
+
+/// Discovers the primary DRM GPU device sysfs path without reading `pci.ids`
+/// or scanning unbound PCI devices. Respects numeric card ordering and skips
+/// connector entries or inaccessible cards.
+pub(crate) fn discover_primary_gpu_sysfs() -> Option<std::path::PathBuf> {
+    discover_primary_gpu_sysfs_at(Path::new("/sys/class/drm"))
+}
+
+pub(crate) fn discover_primary_gpu_sysfs_at(drm: &Path) -> Option<std::path::PathBuf> {
+    let mut cards: Vec<_> = fs::read_dir(drm).into_iter().flatten().flatten().collect();
+    cards.sort_by_key(|entry| {
+        entry
+            .file_name()
+            .to_string_lossy()
+            .strip_prefix("card")
+            .and_then(|n| n.parse::<u32>().ok())
+            .unwrap_or(u32::MAX)
+    });
+    for entry in cards {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !name
+            .strip_prefix("card")
+            .is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
+        {
+            continue;
+        }
+        let device_path = entry.path().join("device");
+        if read_id(&device_path.join("vendor")).is_some()
+            && read_id(&device_path.join("device")).is_some()
+        {
+            return Some(device_path);
+        }
+    }
+    None
+}
+
+pub(crate) fn find_temperature_sensor_path(device_path: &Path) -> Option<std::path::PathBuf> {
+    let hwmon = device_path.join("hwmon");
+    let mut entries: Vec<_> = fs::read_dir(hwmon).ok()?.flatten().collect();
+    entries.sort_by_key(|e| e.file_name());
+    for entry in entries {
+        let input = entry.path().join("temp1_input");
+        if input.exists() {
+            return Some(input);
+        }
+    }
+    None
+}
+
+pub(crate) fn read_temperature_file(path: &Path) -> Option<f64> {
+    let value = fs::read_to_string(path).ok()?;
+    let millidegrees = value.trim().parse::<f64>().ok()?;
+    if millidegrees.is_finite() && (-100_000.0..=250_000.0).contains(&millidegrees) {
+        Some(millidegrees / 1000.0)
+    } else {
+        None
+    }
+}
+
+pub(crate) fn read_telemetry_at(device_path: &Path) -> Option<GpuTelemetrySample> {
+    if !device_path.exists() {
+        return None;
+    }
+    let (vram_used_gb, vram_total_gb) = read_vram_gb_pair(device_path);
+    Some(GpuTelemetrySample {
+        usage_percent: read_number(&device_path.join("gpu_busy_percent"))
+            .filter(|v| (0.0..=100.0).contains(v)),
+        memory_usage_percent: read_number(&device_path.join("mem_busy_percent"))
+            .filter(|v| (0.0..=100.0).contains(v)),
+        vram_used_gb,
+        vram_total_gb,
+        core_clock_mhz: read_active_clock(&device_path.join("pp_dpm_sclk")),
+        memory_clock_mhz: read_active_clock(&device_path.join("pp_dpm_mclk")),
     })
 }
 
 fn read_temperature(device_path: &std::path::Path) -> Option<f64> {
-    let hwmon = device_path.join("hwmon");
-
-    for entry in fs::read_dir(hwmon).ok()?.flatten() {
-        let input = entry.path().join("temp1_input");
-
-        if let Ok(value) = fs::read_to_string(input) {
-            if let Ok(millidegrees) = value.trim().parse::<f64>() {
-                if millidegrees.is_finite() && (-100_000.0..=250_000.0).contains(&millidegrees) {
-                    return Some(millidegrees / 1000.0);
-                }
-            }
-        }
-    }
-
-    None
+    let path = find_temperature_sensor_path(device_path)?;
+    read_temperature_file(&path)
 }
 
 #[cfg(test)]
@@ -247,5 +338,82 @@ mod tests {
         let ids = "1002  AMD\n\t67ef  Polaris chipset\n\t\t1043 054f  Subsystem\n8086  Intel\n\t67ef  Different device\n";
         assert_eq!(pci_identity(ids, "1002", "67ef").0, "AMD Polaris chipset");
         assert_eq!(pci_identity(ids, "1234", "abcd").0, "PCI 1234:abcd");
+    }
+    #[test]
+    fn lightweight_gpu_telemetry_does_not_hardcode_card0_or_hwmon0() {
+        let f = Fixture::new();
+        // card0 is incomplete/unreadable; card1 is valid with hwmon2
+        f.write("drm/card0/device/vendor", "0x8086\n");
+        f.write("drm/card1/device/vendor", "0x1002\n");
+        f.write("drm/card1/device/device", "0x67ef\n");
+        f.write("drm/card1/device/gpu_busy_percent", "0\n");
+        f.write("drm/card1/device/mem_busy_percent", "4\n");
+        f.write("drm/card1/device/mem_info_vram_used", "0\n");
+        f.write("drm/card1/device/mem_info_vram_total", "4294967296\n");
+        f.write("drm/card1/device/pp_dpm_sclk", "0: 300Mhz \n1: 1149Mhz *\n");
+        f.write("drm/card1/device/pp_dpm_mclk", "0: 300Mhz *\n");
+        f.write("drm/card1/device/hwmon/hwmon2/temp1_input", "31500\n");
+
+        let dev = discover_primary_gpu_sysfs_at(&f.path("drm")).unwrap();
+        assert!(dev.ends_with("card1/device"));
+        let sample = read_telemetry_at(&dev).unwrap();
+        assert_eq!(sample.usage_percent, Some(0.0));
+        assert_eq!(sample.memory_usage_percent, Some(4.0));
+        assert_eq!(sample.vram_used_gb, Some(0.0));
+        assert_eq!(sample.vram_total_gb, Some(4.0));
+        assert_eq!(sample.core_clock_mhz, Some(1149.0));
+        assert_eq!(sample.memory_clock_mhz, Some(300.0));
+        let temp_path = find_temperature_sensor_path(&dev).unwrap();
+        assert_eq!(read_temperature_file(&temp_path), Some(31.5));
+    }
+    #[test]
+    fn gpu_telemetry_handles_gpu_less_multi_gpu_high_load_and_inconsistent_vram_or_clocks() {
+        // GPU-less DRM directory returns None cleanly
+        let empty = Fixture::new();
+        empty.write("drm/version", "drm\n");
+        assert!(discover_primary_gpu_sysfs_at(&empty.path("drm")).is_none());
+
+        // Multi-GPU deterministic order selects lower numeric card (card1 over card2)
+        // and synthetic high load (99.0%, 3.75/4.0 GiB) is converted accurately.
+        let multi = Fixture::new();
+        multi.write("drm/card2/device/vendor", "0x10de\n");
+        multi.write("drm/card2/device/device", "0x2204\n");
+        multi.write("drm/card2/device/gpu_busy_percent", "10\n");
+        multi.write("drm/card1/device/vendor", "0x1002\n");
+        multi.write("drm/card1/device/device", "0x67ef\n");
+        multi.write("drm/card1/device/gpu_busy_percent", "99\n");
+        multi.write("drm/card1/device/mem_info_vram_used", "4026531840\n"); // 3.75 GiB
+        multi.write("drm/card1/device/mem_info_vram_total", "4294967296\n"); // 4.0 GiB
+        multi.write("drm/card1/device/pp_dpm_sclk", "7: 1187Mhz *\n");
+        multi.write("drm/card1/device/pp_dpm_mclk", "2: 1500Mhz *\n");
+        let dev = discover_primary_gpu_sysfs_at(&multi.path("drm")).unwrap();
+        assert!(dev.ends_with("card1/device"));
+        let high = read_telemetry_at(&dev).unwrap();
+        assert_eq!(high.usage_percent, Some(99.0));
+        assert!((high.vram_used_gb.unwrap() - 3.75).abs() < 1e-9);
+        assert_eq!(high.vram_total_gb, Some(4.0));
+        assert_eq!(high.core_clock_mhz, Some(1187.0));
+        assert_eq!(high.memory_clock_mhz, Some(1500.0));
+
+        // Inconsistent VRAM (used > total), zero total, and malformed/negative clocks are omitted
+        let bad = Fixture::new();
+        bad.write("drm/card0/device/vendor", "0x1002\n");
+        bad.write("drm/card0/device/device", "0x67ef\n");
+        bad.write("drm/card0/device/mem_info_vram_used", "5368709120\n"); // 5 GiB > 4 GiB
+        bad.write("drm/card0/device/mem_info_vram_total", "4294967296\n");
+        bad.write("drm/card0/device/pp_dpm_sclk", "0: -300Mhz *\n");
+        bad.write("drm/card0/device/pp_dpm_mclk", "0: NaNMhz *\n");
+        let s_bad = read_telemetry_at(&bad.path("drm/card0/device")).unwrap();
+        assert_eq!(s_bad.vram_used_gb, None);
+        assert_eq!(s_bad.vram_total_gb, Some(4.0));
+        assert_eq!(s_bad.core_clock_mhz, None);
+        assert_eq!(s_bad.memory_clock_mhz, None);
+
+        // Zero VRAM total also suppresses vram_used_gb
+        bad.write("drm/card0/device/mem_info_vram_total", "0\n");
+        bad.write("drm/card0/device/mem_info_vram_used", "0\n");
+        let s_zero_total = read_telemetry_at(&bad.path("drm/card0/device")).unwrap();
+        assert_eq!(s_zero_total.vram_total_gb, None);
+        assert_eq!(s_zero_total.vram_used_gb, None);
     }
 }

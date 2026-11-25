@@ -1,0 +1,67 @@
+pkgname=zethropol-system-monitor
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Zethropol OS five-pod Plasma 6 system telemetry monitor (CPU, RAM, GPU, Network, Storage)"
+url="https://github.com/zethropol/Zethropol-OS"
+arch=("x86_64")
+license=("GPL-3.0-or-later" "MIT")
+depends=(
+    "glibc"
+    "gcc-libs"
+    "qt6-base"
+    "qt6-declarative"
+    "libplasma"
+    "kirigami"
+    "kpackage"
+    "zethropol-monitoring>=0.1.0-3"
+)
+makedepends=("cmake")
+checkdepends=("dbus")
+source=("${pkgname}-${pkgver}-${pkgrel}-src.tar.gz")
+sha256sums=("3d593321a4e4694b956ce288c996dc8b31b86785452de0e175310b8721e45f51")
+
+build() {
+    export CXXFLAGS="${CXXFLAGS:-} -ffile-prefix-map=${srcdir}=/build -ffile-prefix-map=${HOME}=/home/build"
+    cmake -S "$srcdir/${pkgname}-${pkgver}/services/system-monitor" \
+          -B "$srcdir/build" \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/usr \
+          -DCMAKE_SKIP_RPATH=ON \
+          -DBUILD_TESTING=ON
+    cmake --build "$srcdir/build" --parallel --target zethropol_monitoring_qml
+}
+
+check() {
+    cmake --build "$srcdir/build" --parallel \
+          --target monitoring_bridge_test system_monitor_qml_test
+    QT_QPA_PLATFORM=offscreen \
+    QT_QUICK_BACKEND=software \
+    QT_QUICK_CONTROLS_STYLE=Basic \
+    QT_QPA_PLATFORMTHEME= \
+        ctest --test-dir "$srcdir/build" --output-on-failure
+}
+
+package() {
+    local _srcroot="$srcdir/${pkgname}-${pkgver}"
+    local _smroot="$_srcroot/services/system-monitor"
+    local _plasmoid="$pkgdir/usr/share/plasma/plasmoids/org.zethropol.systemmonitor"
+    local _qmlmod="$pkgdir/usr/lib/qt6/qml/org/zethropol/monitoring"
+
+    # Standard Plasma 6 KPackage Plasmoid files (production only)
+    install -Dm644 "$_smroot/metadata.json" "$_plasmoid/metadata.json"
+    install -Dm644 "$_smroot/contents/ui/main.qml" "$_plasmoid/contents/ui/main.qml"
+    install -Dm644 "$_smroot/contents/ui/config/Appearance.qml" "$_plasmoid/contents/ui/config/Appearance.qml"
+    install -Dm644 "$_smroot/contents/config/main.xml" "$_plasmoid/contents/config/main.xml"
+    install -Dm644 "$_smroot/contents/config/config.qml" "$_plasmoid/contents/config/config.qml"
+
+    # Standalone Qt6/QML module plugin (`import org.zethropol.monitoring 1.0`)
+    install -Dm755 "$srcdir/build/bridge/org/zethropol/monitoring/libzethropol_monitoring_qml.so" \
+        "$_qmlmod/libzethropol_monitoring_qml.so"
+    install -Dm644 "$srcdir/build/bridge/org/zethropol/monitoring/qmldir" \
+        "$_qmlmod/qmldir"
+    install -Dm644 "$srcdir/build/bridge/org/zethropol/monitoring/zethropol_monitoring_qml.qmltypes" \
+        "$_qmlmod/zethropol_monitoring_qml.qmltypes"
+
+    # Repository MIT license notice (Plasmoid preserves GPL-3.0-or-later per metadata.json)
+    install -Dm644 "$_srcroot/LICENSE" "$pkgdir/usr/share/licenses/${pkgname}/LICENSE"
+}

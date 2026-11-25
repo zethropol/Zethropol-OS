@@ -1,0 +1,22 @@
+pkgbase = zethropol-system-monitor
+	pkgdesc = Zethropol OS five-pod Plasma 6 system telemetry monitor (CPU, RAM, GPU, Network, Storage)
+	pkgver = 0.1.0
+	pkgrel = 1
+	url = https://github.com/zethropol/Zethropol-OS
+	arch = x86_64
+	license = GPL-3.0-or-later
+	license = MIT
+	checkdepends = dbus
+	makedepends = cmake
+	depends = glibc
+	depends = gcc-libs
+	depends = qt6-base
+	depends = qt6-declarative
+	depends = libplasma
+	depends = kirigami
+	depends = kpackage
+	depends = zethropol-monitoring>=0.1.0-3
+	source = zethropol-system-monitor-0.1.0-1-src.tar.gz
+	sha256sums = 3d593321a4e4694b956ce288c996dc8b31b86785452de0e175310b8721e45f51
+
+pkgname = zethropol-system-monitor

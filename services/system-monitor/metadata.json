@@ -1,0 +1,19 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Zethropol"
+            }
+        ],
+        "Category": "System Information",
+        "Description": "Five-pod Zethropol OS system telemetry monitor for CPU, RAM, GPU, Network, and Storage",
+        "Icon": "utilities-system-monitor",
+        "Id": "org.zethropol.systemmonitor",
+        "License": "GPL-3.0-or-later",
+        "Name": "Zethropol System Monitor",
+        "Version": "0.1.0",
+        "Website": "https://github.com/zethropol/Zethropol-OS"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

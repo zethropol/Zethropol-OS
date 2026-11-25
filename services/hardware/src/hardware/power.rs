@@ -40,9 +40,9 @@ impl PowerInfo {
                         battery_present = true;
                         battery_percent = read_f64(&path.join("capacity"));
                         battery_status = read_string(&path.join("status"));
-                        charging = battery_status.as_deref().map(|status| {
-                            status.eq_ignore_ascii_case("Charging")
-                        });
+                        charging = battery_status
+                            .as_deref()
+                            .map(|status| status.eq_ignore_ascii_case("Charging"));
                         energy_now_wh = read_energy_wh(&path);
                         energy_full_wh = read_energy_full_wh(&path);
                         power_w = read_power_w(&path);
@@ -56,14 +56,19 @@ impl PowerInfo {
         }
 
         let profile = read_first_available(&[
-            "/sys/firmware/acpi/platform_profile", 
+            "/sys/firmware/acpi/platform_profile",
             "/sys/firmware/acpi/platform_profile_choices",
         ]);
 
-        let governor = read_string(Path::new("/sys/devices/system/cpu/cpufreq/policy0/scaling_governor"));
+        let governor = read_string(Path::new(
+            "/sys/devices/system/cpu/cpufreq/policy0/scaling_governor",
+        ));
 
         Self {
-            available: battery_present || ac_online.is_some() || profile.is_some() || governor.is_some(),
+            available: battery_present
+                || ac_online.is_some()
+                || profile.is_some()
+                || governor.is_some(),
             battery_present,
             battery_percent,
             battery_status,
@@ -79,7 +84,10 @@ impl PowerInfo {
 }
 
 fn read_string(path: &Path) -> Option<String> {
-    fs::read_to_string(path).ok().map(|value| value.trim().to_string()).filter(|value| !value.is_empty())
+    fs::read_to_string(path)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }
 
 fn read_f64(path: &Path) -> Option<f64> {
@@ -94,19 +102,21 @@ fn read_bool_numeric(path: &Path) -> Option<bool> {
     }
 }
 
-
 fn read_energy_full_wh(path: &Path) -> Option<f64> {
-    read_f64(&path.join("energy_full")).map(|v| v / 1_000_000.0)
+    read_f64(&path.join("energy_full"))
+        .map(|v| v / 1_000_000.0)
         .or_else(|| read_f64(&path.join("charge_full")).map(|v| v / 1_000_000.0))
 }
 
 fn read_energy_wh(path: &Path) -> Option<f64> {
-    read_f64(&path.join("energy_now")).map(|v| v / 1_000_000.0)
+    read_f64(&path.join("energy_now"))
+        .map(|v| v / 1_000_000.0)
         .or_else(|| read_f64(&path.join("charge_now")).map(|v| v / 1_000_000.0))
 }
 
 fn read_power_w(path: &Path) -> Option<f64> {
-    read_f64(&path.join("power_now")).map(|v| v / 1_000_000.0)
+    read_f64(&path.join("power_now"))
+        .map(|v| v / 1_000_000.0)
         .or_else(|| read_f64(&path.join("current_now")).map(|v| v / 1_000_000.0))
 }
 
