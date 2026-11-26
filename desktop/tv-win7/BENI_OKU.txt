@@ -1,0 +1,45 @@
+ZETHROPOL TV — WINDOWS 7 STARTER (32-BIT) TAŞINABİLİR SÜRÜM
+===========================================================
+
+Kurulum veya Yönetici (Admin) izni gerektirmez. Reklamsızdır ve
+tamamen resmi Türkçe canlı yayın kaynaklarını kullanır (31 kanal).
+
+NASIL ÇALIŞTIRILIR?
+-------------------
+1. Bu klasörün tamamını (tüm DLL dosyaları ve cacert.pem ile birlikte)
+   masaüstüne veya bir USB belleğe çıkarın.
+2. "ZethropolTV.exe" dosyasına çift tıklayın.
+   - Hem 32-bit Windows 7 Starter / Home / Pro sistemlerde,
+   - Hem de 64-bit Windows 10 / Windows 11 sistemlerde doğrudan çalışır.
+3. İlk açılışta "Haber" kategorisi seçili gelir ve son izlenen kanal
+   (ilk açılışta TRT Haber) otomatik başlar.
+
+KLAVYE VE FARE KISAYOLLARI
+--------------------------
+- Kanal Seçimi        : Sağ listeden tek tık veya Yukarı/Aşağı ok tuşları
+- Tam Ekran           : Video alanına çift tık, F11 veya "Tam Ekran" düğmesi
+- Tam Ekrandan Çıkış  : ESC, F11 veya çift tık
+- Ses Aç / Kapat      : M tuşu veya "Ses Açık / Sessiz" düğmesi
+- Yayını Yenile       : R tuşu veya "Yenile" düğmesi
+- Kalite (720p / Tam) : Q tuşu veya "720p HD / Tam Kalite" düğmesi
+                        (Eski Atom/Pentium işlemcilerde varsayılan 720p HD
+                        [2.5 Mbps] takılmayı önler; güçlü sistemlerde Tam
+                        Kalite seçilebilir.)
+- Kanal Listesi       : C tuşu veya "Kanallar" düğmesi
+
+TAŞINABİLİR AYARLAR VE GÜVENLİK
+-------------------------------
+- Ayarlarınız (son kanal, ses, kalite tercihi) Windows Kayıt Defteri'ne
+  yazılmaz; bu klasördeki "state.json" dosyasında saklanır.
+- Eski Windows 7 sertifika hatalarını önlemek için güncel 32-bit OpenSSL 3
+  ve Mozilla kök sertifika paketi (cacert.pem) bu klasörde gömülüdür.
+- Yalnızca güvenli HTTPS yayınları açılır; harici betik (load-scripts=no)
+  ve yt-dlp (ytdl=no) tamamen kapalıdır.
+
+SORUN GİDERME (ESKİ WINDOWS 7)
+------------------------------
+- Siyah ekran veya donma yaşarsanız kalite düğmesinin "720p HD" konumunda
+  olduğunu doğrulayın (varsayılan olarak Direct3D 9 ve güvenli CPU kod
+  çözme etkindir).
+- "libmpv-2.dll", "libssl-3.dll", "libcrypto-3.dll" ve "cacert.pem"
+  dosyalarını ZethropolTV.exe ile aynı klasörde tutun.

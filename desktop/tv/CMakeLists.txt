@@ -64,6 +64,13 @@ qt_add_qml_module(zethropol-tv
         qml/SourceImportDialog.qml
 )
 
+qt_add_resources(zethropol-tv "tv_app_icons"
+    PREFIX "/icons"
+    BASE "data"
+    FILES
+        data/zethropol-tv-256.png
+)
+
 # Standard /usr installation targets (used by Arch PKGBUILD / isolated DESTDIR checks)
 install(TARGETS zethropol-tv
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
@@ -71,8 +78,12 @@ install(TARGETS zethropol-tv
 install(FILES data/org.zethropol.tv.desktop
     DESTINATION ${CMAKE_INSTALL_DATADIR}/applications
 )
-install(FILES data/zethropol-tv.svg
-    DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps
+install(FILES data/zethropol-tv-256.png
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/256x256/apps
+    RENAME zethropol-tv.png
+)
+install(FILES data/zethropol-tv.png
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/512x512/apps
 )
 
 include(CTest)

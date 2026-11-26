@@ -1,0 +1,35 @@
+#include <windows.h>
+
+#define IDI_APP_ICON 101
+
+IDI_APP_ICON ICON "zethropol-tv.ico"
+1 RT_MANIFEST "../src/app.manifest"
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION     0,1,0,0
+PRODUCTVERSION  0,1,0,0
+FILEFLAGSMASK   0x3fL
+FILEFLAGS       0x0L
+FILEOS          VOS__WINDOWS32
+FILETYPE        VFT_APP
+FILESUBTYPE     0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "041F04B0"
+        BEGIN
+            VALUE "CompanyName",      "Zethropol OS"
+            VALUE "FileDescription",  "Zethropol TV - Windows 7 Starter 32-bit Portable"
+            VALUE "FileVersion",      "0.1.0.0"
+            VALUE "InternalName",     "ZethropolTV"
+            VALUE "LegalCopyright",   "MIT License"
+            VALUE "OriginalFilename", "ZethropolTV.exe"
+            VALUE "ProductName",      "Zethropol TV"
+            VALUE "ProductVersion",   "0.1.0.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x041F, 1200
+    END
+END

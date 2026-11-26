@@ -4,6 +4,7 @@
 #include "StreamResolver.h"
 
 #include <QGuiApplication>
+#include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
@@ -25,6 +26,8 @@ int main(int argc, char *argv[])
     QCoreApplication::setOrganizationName(QStringLiteral("Zethropol"));
     QCoreApplication::setApplicationName(QStringLiteral("Zethropol TV"));
     QCoreApplication::setApplicationVersion(QStringLiteral("0.1.0"));
+    QGuiApplication::setDesktopFileName(QStringLiteral("org.zethropol.tv"));
+    app.setWindowIcon(QIcon(QStringLiteral(":/icons/zethropol-tv-256.png")));
 
     // Mandatory for libmpv initialization.
     std::setlocale(LC_NUMERIC, "C");

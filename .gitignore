@@ -6,9 +6,22 @@ services/hardware/diagnostics-helper/target/
 
 desktop/control-center/build/
 desktop/tv/build/
+desktop/tv-win7/build*/
+desktop/tv-win7/third_party/
+dist/
 prototypes/dbus/build/
 
 services/performance/target/
 
 # Rust build artifacts
 **/target/
+
+# Windows / Arch binary & archive artifacts
+*.zip
+*.exe
+*.dll
+*.pkg.tar.zst
+desktop/tv-win7/state.json
+desktop/tv-win7/smoke_test_result.txt
+packages/zethropol-tv/src/
+packages/zethropol-tv/pkg/

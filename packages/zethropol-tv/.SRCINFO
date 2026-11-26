@@ -13,6 +13,6 @@ pkgbase = zethropol-tv
 	depends = mpv
 	optdepends = plasma-integration: KDE Plasma platform theme integration
 	source = zethropol-tv-0.1.0-1-src.tar.gz
-	sha256sums = 509353176216f8025fc86ef1a44ef8e9152f7da8ab03d6d20ed432e599bcaf38
+	sha256sums = 961c7a45f707adc27356bae0590fabaa47f8f69d5617fdb0df54b34e415fffe4
 
 pkgname = zethropol-tv
