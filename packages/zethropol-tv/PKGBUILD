@@ -1,0 +1,48 @@
+pkgname=zethropol-tv
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Zethropol OS standalone live TV player powered by Qt6 and libmpv"
+arch=('x86_64')
+url="https://github.com/zethropol/Zethropol-OS"
+license=('MIT')
+depends=(
+    'qt6-base'
+    'qt6-declarative'
+    'mpv'
+)
+makedepends=(
+    'cmake'
+    'ninja'
+    'pkgconf'
+)
+optdepends=(
+    'plasma-integration: KDE Plasma platform theme integration'
+)
+source=("${pkgname}-${pkgver}-${pkgrel}-src.tar.gz")
+sha256sums=('509353176216f8025fc86ef1a44ef8e9152f7da8ab03d6d20ed432e599bcaf38')
+
+build() {
+    export CXXFLAGS="${CXXFLAGS:-} -ffile-prefix-map=${srcdir}=/build -ffile-prefix-map=${HOME}=/home/build"
+    cmake -S "$srcdir/${pkgname}-${pkgver}/desktop/tv" \
+          -B "$srcdir/build" \
+          -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/usr \
+          -DCMAKE_SKIP_RPATH=ON \
+          -DBUILD_TESTING=ON
+    cmake --build "$srcdir/build" --parallel
+}
+
+check() {
+    QT_QPA_PLATFORM=offscreen \
+    QT_QUICK_BACKEND=software \
+    QT_QUICK_CONTROLS_STYLE=Basic \
+    QT_QPA_PLATFORMTHEME= \
+        ctest --test-dir "$srcdir/build" --output-on-failure
+}
+
+package() {
+    DESTDIR="$pkgdir" cmake --install "$srcdir/build"
+    install -Dm644 "$srcdir/${pkgname}-${pkgver}/LICENSE" \
+        "$pkgdir/usr/share/licenses/${pkgname}/LICENSE"
+}

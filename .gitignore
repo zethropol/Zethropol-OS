@@ -5,6 +5,7 @@ services/hardware/target/
 services/hardware/diagnostics-helper/target/
 
 desktop/control-center/build/
+desktop/tv/build/
 prototypes/dbus/build/
 
 services/performance/target/

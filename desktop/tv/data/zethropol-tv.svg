@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0d1526"/>
+      <stop offset="100%" stop-color="#070b12"/>
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#168cff"/>
+      <stop offset="100%" stop-color="#665cff"/>
+    </linearGradient>
+    <linearGradient id="screenGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#13223b"/>
+      <stop offset="100%" stop-color="#0b1322"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="112" height="112" rx="26" fill="url(#bgGrad)" stroke="#1e2d47" stroke-width="2.5"/>
+  <rect x="22" y="28" width="84" height="58" rx="12" fill="url(#screenGrad)" stroke="url(#accentGrad)" stroke-width="3.5"/>
+  <polygon points="55,44 55,70 78,57" fill="url(#accentGrad)"/>
+  <circle cx="94" cy="39" r="4" fill="#ef4444"/>
+  <rect x="46" y="94" width="36" height="6" rx="3" fill="url(#accentGrad)"/>
+  <rect x="36" y="102" width="56" height="4" rx="2" fill="#2b3d5c"/>
+</svg>

@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=Zethropol TV
+GenericName=Live TV Player
+GenericName[tr]=Canlı TV Oynatıcı
+Comment=Watch open live TV streams with Qt6 and libmpv
+Comment[tr]=Qt6 ve libmpv tabanlı bağımsız canlı TV oynatıcısı
+Exec=zethropol-tv
+Icon=zethropol-tv
+Terminal=false
+Type=Application
+Categories=AudioVideo;Video;TV;Player;Qt;
+Keywords=tv;iptv;live;stream;hls;m3u;epg;zethropol;
+StartupWMClass=zethropol-tv
