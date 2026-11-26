@@ -1,15 +1,17 @@
 pkgbase = zethropol-performance
 	pkgdesc = Zethropol Performance D-Bus service
 	pkgver = 0.1.0
-	pkgrel = 1
+	pkgrel = 2
 	url = https://github.com/zethropol/Zethropol-OS
 	arch = x86_64
 	license = MIT
 	makedepends = cargo
 	depends = glibc
+	depends = gcc-libs
 	depends = dbus
 	depends = systemd
-	source = git+https://github.com/zethropol/Zethropol-OS.git#commit=814a1d5c6934c880c0c9789683e60df0c869198c
-	sha256sums = SKIP
+	depends = zethropol-hardware>=0.1.0-4
+	source = zethropol-performance-0.1.0-2-src.tar.gz
+	sha256sums = 9b65ecc476dcf7d62bcbae65b8293d391c5345c9853317ebfd46a8fb7238780e
 
 pkgname = zethropol-performance

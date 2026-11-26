@@ -1,27 +1,33 @@
 pkgname=zethropol-performance
 pkgver=0.1.0
-pkgrel=1
+pkgrel=2
 pkgdesc="Zethropol Performance D-Bus service"
 url="https://github.com/zethropol/Zethropol-OS"
 arch=("x86_64")
 license=("MIT")
-depends=("glibc" "dbus" "systemd")
+depends=("glibc" "gcc-libs" "dbus" "systemd" "zethropol-hardware>=0.1.0-4")
 makedepends=("cargo")
-
-source=("git+https://github.com/zethropol/Zethropol-OS.git#commit=814a1d5c6934c880c0c9789683e60df0c869198c")
-sha256sums=("SKIP")
+source=("${pkgname}-${pkgver}-${pkgrel}-src.tar.gz")
+sha256sums=("9b65ecc476dcf7d62bcbae65b8293d391c5345c9853317ebfd46a8fb7238780e")
 
 build() {
-    cd "$srcdir/Zethropol-OS/services/performance"
-    cargo build --release --locked
+    cd "$srcdir/${pkgname}-${pkgver}/services/performance"
+    export RUSTFLAGS="--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo --remap-path-prefix=${HOME}=/home/build --remap-path-prefix=${srcdir}=/build ${RUSTFLAGS:-}"
+    cargo build --release --locked --offline
+}
+
+check() {
+    cd "$srcdir/${pkgname}-${pkgver}/services/performance"
+    export RUSTFLAGS="--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo --remap-path-prefix=${HOME}=/home/build --remap-path-prefix=${srcdir}=/build ${RUSTFLAGS:-}"
+    cargo test --locked --offline
 }
 
 package() {
-    install -Dm755 "$srcdir/Zethropol-OS/services/performance/target/release/performance"         "$pkgdir/usr/lib/zethropol/zethropol-performance"
+    cd "$srcdir/${pkgname}-${pkgver}/services/performance"
 
-    install -Dm644 "$srcdir/Zethropol-OS/services/performance/deployment/dbus/org.zethropol.Performance.conf"         "$pkgdir/etc/dbus-1/system.d/org.zethropol.Performance.conf"
-
-    install -Dm644 "$srcdir/Zethropol-OS/services/performance/deployment/dbus/org.zethropol.Performance.service"         "$pkgdir/usr/share/dbus-1/system-services/org.zethropol.Performance.service"
-
-    install -Dm644 "$srcdir/Zethropol-OS/services/performance/deployment/systemd/zethropol-performance.service"         "$pkgdir/usr/lib/systemd/system/zethropol-performance.service"
+    install -Dm755 target/release/performance "$pkgdir/usr/lib/zethropol/zethropol-performance"
+    install -Dm644 deployment/dbus/org.zethropol.Performance.conf "$pkgdir/etc/dbus-1/system.d/org.zethropol.Performance.conf"
+    install -Dm644 deployment/dbus/org.zethropol.Performance.service "$pkgdir/usr/share/dbus-1/system-services/org.zethropol.Performance.service"
+    install -Dm644 deployment/systemd/zethropol-performance.service "$pkgdir/usr/lib/systemd/system/zethropol-performance.service"
+    install -Dm644 "$srcdir/${pkgname}-${pkgver}/LICENSE" "$pkgdir/usr/share/licenses/${pkgname}/LICENSE"
 }
