@@ -25,3 +25,19 @@ desktop/tv-win7/state.json
 desktop/tv-win7/smoke_test_result.txt
 packages/zethropol-tv/src/
 packages/zethropol-tv/pkg/
+
+# Disposable worktrees & root CMake artifacts
+/.aur-disposable-worktree/
+/CMakeFiles/
+/CMakeCache.txt
+
+# Editor/manual backups & Python bytecode
+*.bak
+__pycache__/
+*.py[cod]
+
+# Local Arch packaging staging, checksums & rollback archives
+packages/*/*-src.tar.gz
+packages/*/SHA256SUMS
+packages/*/rollback-*/
+packages/stage-04.6/
