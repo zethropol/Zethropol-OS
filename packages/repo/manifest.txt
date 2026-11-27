@@ -1,5 +1,6 @@
 # Zethropol OS Local Pacman Repository Manifest (x86_64)
 # Format: <package-filename> <source-path-relative-to-repo-root>
+zethropol-compatibility-0.1.0-1-x86_64.pkg.tar.zst packages/zethropol-compatibility/zethropol-compatibility-0.1.0-1-x86_64.pkg.tar.zst
 zethropol-control-center-0.1.0-4-x86_64.pkg.tar.zst packages/zethropol-control-center/zethropol-control-center-0.1.0-4-x86_64.pkg.tar.zst
 zethropol-diagnostics-0.1.0-3-x86_64.pkg.tar.zst packages/zethropol-diagnostics/zethropol-diagnostics-0.1.0-3-x86_64.pkg.tar.zst
 zethropol-hardware-0.1.0-5-x86_64.pkg.tar.zst packages/zethropol-hardware/zethropol-hardware-0.1.0-5-x86_64.pkg.tar.zst

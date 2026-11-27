@@ -1,0 +1,46 @@
+pkgname=zethropol-compatibility
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Zethropol OS Windows compatibility layer (isolated Wine prefixes, Turkish locale/font defaults, Vulkan/DXVK runner, .lnk converter)"
+url="https://github.com/zethropol/Zethropol-OS"
+arch=("x86_64")
+license=("MIT")
+depends=(
+    "python"
+    "wine"
+    "ttf-liberation"
+    "desktop-file-utils"
+    "shared-mime-info"
+    "xdg-utils"
+)
+optdepends=(
+    "bubblewrap: default OS-level read-only root/home write sandbox"
+    "dxvk-mingw-git: Vulkan-based Direct3D 9/10/11 translation layer"
+    "vkd3d-proton-mingw-git: Vulkan-based Direct3D 12 translation layer"
+    "vulkan-tools: hardware Vulkan 1.3+ GPU auto-detection (vulkaninfo)"
+    "winetricks: optional Windows runtime helper"
+    "wine-gecko: HTML rendering support inside Wine"
+    "wine-mono: .NET runtime support inside Wine"
+    "icoutils: icon extraction from Windows .exe files for .desktop shortcuts"
+)
+source=("${pkgname}-${pkgver}-${pkgrel}-src.tar.gz")
+sha256sums=("57bfb77ee9cfd916cb1cc4a896e690e616ef09b35ce32e023cc22774fb75d044")
+
+check() {
+    cd "$srcdir/${pkgname}-${pkgver}/services/compatibility"
+    PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -v
+}
+
+package() {
+    local _srcroot="$srcdir/${pkgname}-${pkgver}"
+    local _compat="$_srcroot/services/compatibility"
+    local _libdir="$pkgdir/usr/lib/zethropol/compatibility"
+
+    install -dm755 "$_libdir/zethropol_compat"
+    install -Dm644 "$_compat/zethropol_compat/"*.py -t "$_libdir/zethropol_compat/"
+    install -Dm755 "$_compat/bin/zethropol-prefix-ctl" "$pkgdir/usr/bin/zethropol-prefix-ctl"
+    install -Dm755 "$_compat/bin/zethropol-wine-run" "$pkgdir/usr/bin/zethropol-wine-run"
+    install -Dm644 "$_compat/desktop/org.zethropol.wine-run.desktop" \
+        "$pkgdir/usr/share/applications/org.zethropol.wine-run.desktop"
+    install -Dm644 "$_compat/LICENSE" "$pkgdir/usr/share/licenses/${pkgname}/LICENSE"
+}

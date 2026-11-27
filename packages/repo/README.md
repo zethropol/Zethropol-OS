@@ -4,7 +4,7 @@ Bu dizin, Zethropol OS çekirdek servisleri, masaüstü bileşenleri ve bağıms
 
 ## Yapı
 
-- `manifest.txt`: Depoya dahil edilecek güncel `x86_64` paketlerinin kanonik listesi (`11` paket).
+- `manifest.txt`: Depoya dahil edilecek güncel `x86_64` paketlerinin kanonik listesi (`12` paket).
 - `x86_64/` *(Git tarafından izlenmez)*: `scripts/build-local-repo.sh` tarafından üretilen `.pkg.tar.zst` dosyaları, `zethropol-local.db.tar.gz` / `zethropol-local.files.tar.gz` veritabanları ve `SHA256SUMS`.
 
 ## Yeniden Üretim ve Doğrulama (Fish Uyumlu, Root Gerektirmez)

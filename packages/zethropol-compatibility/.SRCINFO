@@ -1,0 +1,25 @@
+pkgbase = zethropol-compatibility
+	pkgdesc = Zethropol OS Windows compatibility layer (isolated Wine prefixes, Turkish locale/font defaults, Vulkan/DXVK runner, .lnk converter)
+	pkgver = 0.1.0
+	pkgrel = 1
+	url = https://github.com/zethropol/Zethropol-OS
+	arch = x86_64
+	license = MIT
+	depends = python
+	depends = wine
+	depends = ttf-liberation
+	depends = desktop-file-utils
+	depends = shared-mime-info
+	depends = xdg-utils
+	optdepends = bubblewrap: default OS-level read-only root/home write sandbox
+	optdepends = dxvk-mingw-git: Vulkan-based Direct3D 9/10/11 translation layer
+	optdepends = vkd3d-proton-mingw-git: Vulkan-based Direct3D 12 translation layer
+	optdepends = vulkan-tools: hardware Vulkan 1.3+ GPU auto-detection (vulkaninfo)
+	optdepends = winetricks: optional Windows runtime helper
+	optdepends = wine-gecko: HTML rendering support inside Wine
+	optdepends = wine-mono: .NET runtime support inside Wine
+	optdepends = icoutils: icon extraction from Windows .exe files for .desktop shortcuts
+	source = zethropol-compatibility-0.1.0-1-src.tar.gz
+	sha256sums = 57bfb77ee9cfd916cb1cc4a896e690e616ef09b35ce32e023cc22774fb75d044
+
+pkgname = zethropol-compatibility
