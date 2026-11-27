@@ -1,0 +1,10 @@
+{
+  "engine": "~/.local/share/zci/engine/llama.cpp/build-cpu/bin/llama-server",
+  "model": "~/.local/share/zci/models/evaluation/gemma4-e4b-q4-k-m/gemma-4-E4B-it-Q4_K_M.gguf",
+  "system_file": "gemma-system.md",
+  "engine_port": 19087,
+  "gateway_port": 19086,
+  "model_sha256": "0ffb122c8b6921f13cbc34186e052524d0b5803b17f4867b7197a561400b3770",
+  "timeout": 180,
+  "profile": "gemma4-e4b"
+}

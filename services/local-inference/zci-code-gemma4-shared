@@ -1,0 +1,7 @@
+#!/bin/sh
+# ZEKANS Ortak Gemma 4 E4B Kodlama İstemcisi (Port 29016 üzerinden)
+# TaskGuard, ProjectIO, Bubblewrap, agent_bridge ve reflection=1 sınırlarını korur.
+
+set -eu
+HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec /usr/bin/python3 -I -B "$HERE/shared_gemma.py" code "$@"

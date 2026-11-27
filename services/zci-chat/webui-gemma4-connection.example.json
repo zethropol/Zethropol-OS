@@ -1,0 +1,8 @@
+{
+  "description": "Open WebUI 0.13.0 üzerinde mevcut varsayılanı değiştirmeden eklenebilecek bağımsız ZCI Gemma sağlayıcısı; otomatik uygulanmaz.",
+  "api_base_url": "http://127.0.0.1:19086/v1",
+  "api_key": "local",
+  "model_ids": ["zci-chat-gemma4-e4b"],
+  "set_as_default": false,
+  "notes": "Önce config.gemma4.example.json ile bağımsız sohbet sürecini başlatın. Eski 1.7B filtresini bu modele bağlamayın. Model araç, web, dosya veya komut yetkisi kazanmaz."
+}

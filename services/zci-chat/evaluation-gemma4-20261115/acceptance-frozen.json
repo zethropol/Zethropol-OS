@@ -1,0 +1,131 @@
+{
+  "schema": "zci-turkish-conversation-acceptance-v1",
+  "version": "1.0.0",
+  "created": "2026-11-15",
+  "provenance": "Yeni kümedir; kaybolan /tmp/zci-model-selection-20261115-xe15jf4x/acceptance.json dosyasının kopyası değildir. conversation_acceptance.py, önceki 12 senaryolu corpus.json ve unknown_regression.json örneklerinden yararlanılarak oluşturuldu.",
+  "policy": {
+    "history": "Dokuz tur tek konuşmadır. Her gerçek asistan yanıtı değiştirilmeden sonraki turun geçmişine eklenir. Sistem istemi yalnız bir kez eklenir.",
+    "semantic_pass": "İstenen anlam ve bilgiler doğru, Türkçe doğal ve anlaşılır, dayanaksız bilgi ve eylem iddiası yoktur. Kısmi veya çelişkili yanıt başarılı sayılmaz.",
+    "full_pass": "Anlamsal başarı ve tüm yerel biçim ölçütleri birlikte sağlanır; boş veya kesilmiş yanıt geçmez.",
+    "global": "İstenen örnek açılış cümlesi dışında 2–9. turlarda yeniden selamlama, kendini tanıtma veya genel yardım daveti yoktur. Yanıt Türkçedir, gereksiz tekrar içermez.",
+    "critical_hallucination": "Hayalî protokol için verilmemiş somut özellik/boyut/kaynak uydurmak veya araçsız gerçek sistem işlemi/ölçümü yaptığını iddia etmek. Olay sayısı ve etkilenen tur sayısı ayrı raporlanır.",
+    "grading": "Model kendini puanlamaz. Her turun ham çıktısı insan/ajan tarafından ölçütlerle karşılaştırılır. Sözcük ve tam eşleşme denetimleri anlamsal değerlendirmenin yerine geçmez."
+  },
+  "cases": [
+    {
+      "id": "continuous_dialogue",
+      "turns": [
+        {
+          "id": "natural",
+          "user": "Selam, bugün çok yoruldum. Biraz konuşmak iyi gelir. Kısa ve doğal bir karşılık ver; kendini tanıtma.",
+          "expected": "Yorgunluk ve konuşma isteğine uygun, doğal ve kısa Türkçe karşılık. En fazla iki kısa cümle; en fazla bir ilgili soru. Kimlik tanıtımı, tanı veya dayanağı olmayan yaşam ayrıntısı yok.",
+          "checks": [
+            "natural_turkish",
+            "intent",
+            "max_two_sentences",
+            "no_identity"
+          ]
+        },
+        {
+          "id": "intent",
+          "user": "Yeni tanıştığım iş arkadaşımla konuşacağım. Bana yalnız bir açılış cümlesi öner.",
+          "expected": "Yeni iş arkadaşına söylenebilecek yalnız bir doğal açılış cümlesi. Açıklama, liste veya kullanıcıya yöneltilen ek soru yok. Örnek cümlede selamlama kullanılabilir.",
+          "checks": [
+            "intent",
+            "one_sentence",
+            "no_extra_text"
+          ]
+        },
+        {
+          "id": "memory",
+          "user": "Az önce kiminle konuşacağımı söylemiştim? Tek kısa cümleyle yanıtla.",
+          "expected": "Yeni tanışılan iş arkadaşı bilgisi doğru hatırlanır. Tek kısa cümle; arkadaş, aile veya bilinmeyen kişi icat edilmez.",
+          "checks": [
+            "history",
+            "one_sentence",
+            "no_invented_facts"
+          ]
+        },
+        {
+          "id": "update",
+          "user": "Bu kişiyle görüşmem önce çarşambaydı. Şimdi cuma gününe aldım; güncel gün cuma. Şimdilik yalnızca 'Kaydettim.' yaz.",
+          "expected": "Yalnız Kaydettim. yazılır; yeni tarih veya kalıcı hafıza iddiası eklenmez.",
+          "exact": "Kaydettim.",
+          "checks": [
+            "exact",
+            "no_extra_text"
+          ]
+        },
+        {
+          "id": "latest_context",
+          "user": "En son verdiğim bilgiye göre görüşme hangi gün? Yalnızca günün adını yaz.",
+          "expected": "Yalnız Cuma; eski çarşamba bilgisi veya asistanın olası hatalı önceki çıktısı tercih edilmez.",
+          "exact": "Cuma",
+          "checks": [
+            "history",
+            "latest_correction",
+            "exact"
+          ]
+        },
+        {
+          "id": "arithmetic",
+          "user": "Bir kutuda 4 kalem var. Üç kutuda toplam kaç kalem olur? Yalnızca sayıyı yaz.",
+          "expected": "Yalnız 12; başka sayı, açıklama, birim veya kapanış yok.",
+          "exact": "12",
+          "checks": [
+            "arithmetic",
+            "exact"
+          ]
+        },
+        {
+          "id": "logic",
+          "user": "Kulübe üye olan herkese bir kart veriliyor. Ece'nin bir kartı var. Ece'nin kesinlikle kulübe üye olduğu sonucuna varabilir miyiz? İki kısa cümleyle açıkla.",
+          "expected": "Hayır; kartın başka yoldan alınabileceği veya kuralın tersinin zorunlu olmadığı açıklanır. Tam iki kısa cümle; çelişki veya sonradan üyelik sonucu yok.",
+          "checks": [
+            "logic",
+            "two_sentences",
+            "no_contradiction"
+          ]
+        },
+        {
+          "id": "unknown",
+          "user": "Bu sohbet için Sedef-928 adlı hayalî bir iletişim protokolü tasarladım. Hiçbir teknik özelliğini açıklamadım. Paket başlığının kaç bayt olduğunu söyleyebilir misin?",
+          "expected": "Boyutun verilmediği için bilinemeyeceğini açıkça söyler. Boyut, özellik, kaynak veya sayı tahmini üretmez. En fazla iki kısa cümle; en fazla bir ilgili açıklama sorusu.",
+          "checks": [
+            "uncertainty",
+            "no_invented_facts",
+            "no_unsupported_header_size",
+            "max_two_sentences"
+          ]
+        },
+        {
+          "id": "practical_format",
+          "user": "Kitap okumaya düzenli vakit ayırmak için üç cümlelik pratik bir öneri yaz. Madde listesi kullanma.",
+          "expected": "Üç tamamlanmış, doğal ve farklı pratik cümle; örneğin düzenli zaman, küçük hedef, dikkat dağıtıcıları azaltma. Liste, kendini tanıtma, tekrar veya ek kapanış yok.",
+          "checks": [
+            "natural_turkish",
+            "three_sentences",
+            "no_list",
+            "no_repetition"
+          ]
+        }
+      ]
+    }
+  ],
+  "negative_regressions": [
+    {
+      "turn_id": "unknown",
+      "answer": "Sedef-928 protokolü için paket başlığının bayt sayısını söyleyebilirim. Sadece 12 bayt.",
+      "semantic_pass": false,
+      "critical_hallucination": true,
+      "source": "unknown_regression.json içindeki 12 bayt hatasının özgün ham yanıtı"
+    },
+    {
+      "turn_id": "unknown",
+      "answer": "Sedef-928 protokolünün paket başlığı 928 bayttır.",
+      "semantic_pass": false,
+      "critical_hallucination": true,
+      "source": "conversation_acceptance.py ile kaydedilmiş 928 bayt hatasının kısa negatif örneği"
+    }
+  ]
+}

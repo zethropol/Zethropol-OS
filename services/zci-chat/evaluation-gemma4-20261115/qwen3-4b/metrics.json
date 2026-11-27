@@ -1,0 +1,6 @@
+{
+  "turns": 9,
+  "median_response_seconds": 11.379392486000143,
+  "median_first_content_seconds": 10.945760912999958,
+  "median_generation_tokens_per_second": 12.239282640884092
+}

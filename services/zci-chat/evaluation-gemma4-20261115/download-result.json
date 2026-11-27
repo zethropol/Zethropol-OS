@@ -1,0 +1,13 @@
+{
+  "path": "/home/Zevor/.local/share/zci/models/evaluation/gemma4-e4b-q4-k-m/gemma-4-E4B-it-Q4_K_M.gguf",
+  "source": "https://huggingface.co/lmstudio-community/gemma-4-E4B-it-GGUF/resolve/99210a71094c6aa8559f764e0cadedd7d89de94d/gemma-4-E4B-it-Q4_K_M.gguf",
+  "revision": "99210a71094c6aa8559f764e0cadedd7d89de94d",
+  "bytes": 5335291936,
+  "sha256": "0ffb122c8b6921f13cbc34186e052524d0b5803b17f4867b7197a561400b3770",
+  "verified": true,
+  "seconds": 628.99,
+  "components": [
+    "gemma-4-E4B-it-Q4_K_M.gguf"
+  ],
+  "multimodal_projector_downloaded": false
+}

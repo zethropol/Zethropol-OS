@@ -1,0 +1,29 @@
+{
+  "files": {
+    "/home/Zevor/.local/share/zci/models/Qwen3-1.7B-Q4_K_M.gguf": {
+      "inode": 1733597,
+      "size": 1282439264,
+      "mtime_ns": 1794133619896067551
+    },
+    "/home/Zevor/.local/share/zci/models/evaluation/qwen3-4b-q4-k-m/Qwen3-4B-Q4_K_M.gguf": {
+      "inode": 1900640,
+      "size": 2497280256,
+      "mtime_ns": 1794613344596166056
+    },
+    "/home/Zevor/.local/share/zci/engine/llama.cpp/build-cpu/bin/llama-server": {
+      "inode": 1734439,
+      "size": 18758408,
+      "mtime_ns": 1794133634995018839
+    },
+    "/home/Zevor/Zethropol-OS/services/zci-chat/system.md": {
+      "sha256": "3389220f3210a99270039991ba9dab3bca70e44c76afad6c3f45d9739525d0e0"
+    },
+    "/home/Zevor/Zethropol-OS/services/zci-chat/config.example.json": {
+      "sha256": "98f845e6cc5201ae7764dcab958245c3057c40b4c1a1c9376cd4878a46bf6db7"
+    },
+    "/home/Zevor/Zethropol-OS/AGENTS.md": {
+      "sha256": "42eba1d221fe68ed7c5425867577bb31db0ccf02bede44a49e71e5093f80cd88"
+    }
+  },
+  "unchanged": true
+}

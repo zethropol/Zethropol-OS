@@ -1,0 +1,122 @@
+{
+  "evaluation_date": "2026-11-27",
+  "profile": "gemma4-e4b",
+  "corpus_sha256": "5056cbdd31ec4445b378324f24f0403f21fa8256ad840c99ca80c0d981cd89e5",
+  "system_file": "services/zci-chat/gemma-system.md",
+  "system_sha256": "d2380f3602bb57563e540e5e4f1d678774ec3743598cce78ba6390f22159dff1",
+  "template_sha256": "603a42db292c25278e9b23d94c7abbe77453f13e26a053c43c5c2f900b4136f7",
+  "grading_policy": "External rubric review against frozen tr-v1/acceptance.json; no model self-grading.",
+  "summary": {
+    "full_success": 9,
+    "semantic_success": 9,
+    "semantic_partial": 0,
+    "turns": 9,
+    "exact_checks_passed": 3,
+    "exact_checks_total": 3,
+    "critical_hallucination_events": 0,
+    "critical_hallucination_turns": 0,
+    "strict_acceptance": true,
+    "median_response_seconds": 6.060913485000128,
+    "median_first_content_seconds": 5.7921250930003225,
+    "median_server_generation_tokens_per_second": 10.48,
+    "peak_rss_gib": 7.508975982666016,
+    "peak_hwm_gib": 7.508975982666016,
+    "minimum_available_gib": 24.01690673828125,
+    "webui_isolated_firefox_pass": true
+  },
+  "turns": [
+    {
+      "turn": 1,
+      "id": "natural",
+      "answer": "Selam. Anlıyorum, dinlerim seni.",
+      "semantic": "pass",
+      "instruction": "pass",
+      "full_pass": true,
+      "critical_hallucination_events": 0,
+      "reason": "Yorgunluğa uygun doğal ve kısa Türkçe karşılık; iki kısa cümle, sıfır ek soru, kendini tanıtma veya dayanağı olmayan ayrıntı yok (2026-11-15 koşusundaki 4 cümle / tanıtım ihlali giderildi)."
+    },
+    {
+      "turn": 2,
+      "id": "intent",
+      "answer": "Bu aralar en çok neyle ilgileniyorsun?",
+      "semantic": "pass",
+      "instruction": "pass",
+      "full_pass": true,
+      "critical_hallucination_events": 0,
+      "reason": "Yeni iş arkadaşıyla kullanılabilecek doğal tek açılış cümlesi; giriş etiketi, açıklama, liste veya ek kullanıcı sorusu yok (2026-11-15 koşusundaki ön açıklama ihlali giderildi)."
+    },
+    {
+      "turn": 3,
+      "id": "memory",
+      "answer": "Yeni tanıştığın iş arkadaşınla konuşacaksın.",
+      "semantic": "pass",
+      "instruction": "pass",
+      "full_pass": true,
+      "critical_hallucination_events": 0,
+      "reason": "Yeni tanışılan iş arkadaşı bilgisini tek kısa cümlede doğru hatırlıyor; uydurma kişi veya gereksiz selamlama yok."
+    },
+    {
+      "turn": 4,
+      "id": "update",
+      "answer": "Kaydettim.",
+      "semantic": "pass",
+      "instruction": "pass",
+      "full_pass": true,
+      "exact_pass": true,
+      "critical_hallucination_events": 0,
+      "reason": "Kaydettim. birebir doğru; ek metin veya kalıcı hafıza iddiası yok."
+    },
+    {
+      "turn": 5,
+      "id": "latest_context",
+      "answer": "Cuma",
+      "semantic": "pass",
+      "instruction": "pass",
+      "full_pass": true,
+      "exact_pass": true,
+      "critical_hallucination_events": 0,
+      "reason": "Son güncelleme Cuma bilgisi birebir doğru; eski Çarşamba bilgisi tercih edilmedi."
+    },
+    {
+      "turn": 6,
+      "id": "arithmetic",
+      "answer": "12",
+      "semantic": "pass",
+      "instruction": "pass",
+      "full_pass": true,
+      "exact_pass": true,
+      "critical_hallucination_events": 0,
+      "reason": "4 x 3 = 12; yalnız sayı."
+    },
+    {
+      "turn": 7,
+      "id": "logic",
+      "answer": "Ece'nin bir kartı olması, üye olduğu anlamına gelmez. Kartın üyelik şartı olup olmadığı bilinmiyor.",
+      "semantic": "pass",
+      "instruction": "pass",
+      "full_pass": true,
+      "critical_hallucination_events": 0,
+      "reason": "Geçersiz ters çıkarımı açıkça reddediyor ve kartın üyelik şartı taşıyıp taşımadığının bilinmediğini tam iki kısa cümlede çelişkisiz açıklıyor (2026-11-15 anlatımına kıyasla daha özlü ifade)."
+    },
+    {
+      "turn": 8,
+      "id": "unknown",
+      "answer": "Bu protokol hakkında teknik bir bilgi verilmediği için paket başlığının kaç bayt olduğunu söyleyemem.",
+      "semantic": "pass",
+      "instruction": "pass",
+      "full_pass": true,
+      "critical_hallucination_events": 0,
+      "reason": "Teknik bilgi verilmediği için boyutun bilinemeyeceğini tek kısa cümlede açıkça belirtiyor; sıfır bayt/özellik uydurması."
+    },
+    {
+      "turn": 9,
+      "id": "practical_format",
+      "answer": "Her gün belirli bir saat dilimi belirleyerek okuma alışkanlığı edinebilirsin. Başlangıçta kısa bölümlerle başlamak, süreci daha yönetilebilir kılacaktır. Okuduğun kitaplarla ilgili düşüncelerini bir yere not almak, motivasyonunu artırır.",
+      "semantic": "pass",
+      "instruction": "pass",
+      "full_pass": true,
+      "critical_hallucination_events": 0,
+      "reason": "Üç tamamlanmış, doğal ve farklı pratik cümle; madde listesi, kendini tanıtma, tekrar veya kapanış eki yok."
+    }
+  ]
+}

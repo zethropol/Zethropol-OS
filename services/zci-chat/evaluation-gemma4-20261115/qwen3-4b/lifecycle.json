@@ -1,0 +1,9 @@
+{
+  "pid": 13689,
+  "stopped": true,
+  "returncode": 0,
+  "resource_abort": null,
+  "peak_rss_kib": 8961496,
+  "peak_hwm_kib": 8961496,
+  "minimum_available_bytes": 22105423872
+}

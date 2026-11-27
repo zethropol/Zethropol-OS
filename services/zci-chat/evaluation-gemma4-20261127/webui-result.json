@@ -1,0 +1,42 @@
+{
+  "real_user_database_opened": false,
+  "default_fixture": "zci-test-preserved-default",
+  "checks": {
+    "webui_version": "0.0.0",
+    "available_models": [
+      "zci-test-preserved-default",
+      "zci-chat-gemma4-e4b"
+    ],
+    "json_routed_to_gemma": true,
+    "default_before": "zci-test-preserved-default",
+    "default_after": "zci-test-preserved-default",
+    "default_unchanged": true,
+    "default_fixture_inference_attempts": 0,
+    "routing": [
+      {
+        "model": "zci-chat-gemma4-e4b",
+        "stream": false,
+        "thinking": false
+      },
+      {
+        "model": "zci-chat-gemma4-e4b",
+        "stream": true,
+        "thinking": false
+      }
+    ]
+  },
+  "cleanup": {
+    "ui_stopped": true,
+    "engine_stopped": true,
+    "gateway_stopped": true,
+    "fixture_stopped": true,
+    "active_upstreams": 0
+  },
+  "browser": {
+    "actual_firefox_ui": true,
+    "selected_model": "zci-chat-gemma4-e4b",
+    "sse_bubble": true,
+    "reasoning_control_tokens_absent": true,
+    "owned_engine_unavailable_error_visible": true
+  }
+}

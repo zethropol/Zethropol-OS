@@ -1,0 +1,7 @@
+{
+  "template_sha256": "57f1fd00f0013a2be96aa79b857391f27e23df5b5f847072b524c897e24d0361",
+  "rendered": "<|im_start|>system\nTürkçe yanıt ver.<|im_end|>\n<|im_start|>user\nMerhaba.<|im_end|>\n<|im_start|>assistant\nMerhaba.<|im_end|>\n<|im_start|>user\nÖnceki yanıtı hatırla.<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n",
+  "embedded_template": true,
+  "thinking": false,
+  "load_seconds": 2.4278214500000104
+}

@@ -1,0 +1,288 @@
+{
+  "stage": "full",
+  "profile": "gemma4-e4b",
+  "corpus_sha256": "5056cbdd31ec4445b378324f24f0403f21fa8256ad840c99ca80c0d981cd89e5",
+  "corpus_version": "1.0.0",
+  "system_sha256": "d2380f3602bb57563e540e5e4f1d678774ec3743598cce78ba6390f22159dff1",
+  "existing_ports_before": {
+    "8087": "closed",
+    "8088": "closed"
+  },
+  "profile_parameters": {
+    "temperature": 0.2,
+    "top_k": 64,
+    "top_p": 0.95,
+    "min_p": 0.05,
+    "seed": 7,
+    "output": 768,
+    "context": 32768,
+    "thinking": false
+  },
+  "turns": [
+    {
+      "turn": 1,
+      "id": "natural",
+      "user": "Selam, bugün çok yoruldum. Biraz konuşmak iyi gelir. Kısa ve doğal bir karşılık ver; kendini tanıtma.",
+      "expected": "Yorgunluk ve konuşma isteğine uygun, doğal ve kısa Türkçe karşılık. En fazla iki kısa cümle; en fazla bir ilgili soru. Kimlik tanıtımı, tanı veya dayanağı olmayan yaşam ayrıntısı yok.",
+      "answer": "Selam. Anlıyorum, dinlerim seni.",
+      "seconds": 5.190154851000443,
+      "first_content_seconds": 4.152189043000362,
+      "server_generation_tokens_per_second": 10.61,
+      "usage": {
+        "completion_tokens": 12,
+        "prompt_tokens": 423,
+        "total_tokens": 435,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "finish_reason": "stop",
+      "zci_status": "completed",
+      "history_exact": true,
+      "model": "zci-chat-gemma4-e4b",
+      "stats_after": {
+        "VmRSS": 7840348,
+        "VmHWM": 7840348,
+        "available_bytes": 25844117504
+      }
+    },
+    {
+      "turn": 2,
+      "id": "intent",
+      "user": "Yeni tanıştığım iş arkadaşımla konuşacağım. Bana yalnız bir açılış cümlesi öner.",
+      "expected": "Yeni iş arkadaşına söylenebilecek yalnız bir doğal açılış cümlesi. Açıklama, liste veya kullanıcıya yöneltilen ek soru yok. Örnek cümlede selamlama kullanılabilir.",
+      "answer": "Bu aralar en çok neyle ilgileniyorsun?",
+      "seconds": 5.7238910859996395,
+      "first_content_seconds": 4.585951323999325,
+      "server_generation_tokens_per_second": 10.55,
+      "usage": {
+        "completion_tokens": 13,
+        "prompt_tokens": 466,
+        "total_tokens": 479,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "finish_reason": "stop",
+      "zci_status": "completed",
+      "history_exact": true,
+      "model": "zci-chat-gemma4-e4b",
+      "stats_after": {
+        "VmRSS": 7861344,
+        "VmHWM": 7861344,
+        "available_bytes": 25859710976
+      }
+    },
+    {
+      "turn": 3,
+      "id": "memory",
+      "user": "Az önce kiminle konuşacağımı söylemiştim? Tek kısa cümleyle yanıtla.",
+      "expected": "Yeni tanışılan iş arkadaşı bilgisi doğru hatırlanır. Tek kısa cümle; arkadaş, aile veya bilinmeyen kişi icat edilmez.",
+      "answer": "Yeni tanıştığın iş arkadaşınla konuşacaksın.",
+      "seconds": 6.060913485000128,
+      "first_content_seconds": 4.921749258000091,
+      "server_generation_tokens_per_second": 10.54,
+      "usage": {
+        "completion_tokens": 13,
+        "prompt_tokens": 507,
+        "total_tokens": 520,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "finish_reason": "stop",
+      "zci_status": "completed",
+      "history_exact": true,
+      "model": "zci-chat-gemma4-e4b",
+      "stats_after": {
+        "VmRSS": 7866436,
+        "VmHWM": 7866436,
+        "available_bytes": 25890930688
+      }
+    },
+    {
+      "turn": 4,
+      "id": "update",
+      "user": "Bu kişiyle görüşmem önce çarşambaydı. Şimdi cuma gününe aldım; güncel gün cuma. Şimdilik yalnızca 'Kaydettim.' yaz.",
+      "expected": "Yalnız Kaydettim. yazılır; yeni tarih veya kalıcı hafıza iddiası eklenmez.",
+      "answer": "Kaydettim.",
+      "seconds": 5.911445752999498,
+      "first_content_seconds": 5.4332299030002105,
+      "server_generation_tokens_per_second": 10.48,
+      "usage": {
+        "completion_tokens": 6,
+        "prompt_tokens": 565,
+        "total_tokens": 571,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "finish_reason": "stop",
+      "zci_status": "completed",
+      "history_exact": true,
+      "model": "zci-chat-gemma4-e4b",
+      "stats_after": {
+        "VmRSS": 7870424,
+        "VmHWM": 7870424,
+        "available_bytes": 25898160128
+      },
+      "exact_pass": true
+    },
+    {
+      "turn": 5,
+      "id": "latest_context",
+      "user": "En son verdiğim bilgiye göre görüşme hangi gün? Yalnızca günün adını yaz.",
+      "expected": "Yalnız Cuma; eski çarşamba bilgisi veya asistanın olası hatalı önceki çıktısı tercih edilmez.",
+      "answer": "Cuma",
+      "seconds": 5.983958742000141,
+      "first_content_seconds": 5.7921250930003225,
+      "server_generation_tokens_per_second": 10.48,
+      "usage": {
+        "completion_tokens": 3,
+        "prompt_tokens": 601,
+        "total_tokens": 604,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "finish_reason": "stop",
+      "zci_status": "completed",
+      "history_exact": true,
+      "model": "zci-chat-gemma4-e4b",
+      "stats_after": {
+        "VmRSS": 7871888,
+        "VmHWM": 7871888,
+        "available_bytes": 25898496000
+      },
+      "exact_pass": true
+    },
+    {
+      "turn": 6,
+      "id": "arithmetic",
+      "user": "Bir kutuda 4 kalem var. Üç kutuda toplam kaç kalem olur? Yalnızca sayıyı yaz.",
+      "expected": "Yalnız 12; başka sayı, açıklama, birim veya kapanış yok.",
+      "answer": "12",
+      "seconds": 6.340662479999992,
+      "first_content_seconds": 6.148526807000053,
+      "server_generation_tokens_per_second": 10.47,
+      "usage": {
+        "completion_tokens": 3,
+        "prompt_tokens": 637,
+        "total_tokens": 640,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "finish_reason": "stop",
+      "zci_status": "completed",
+      "history_exact": true,
+      "model": "zci-chat-gemma4-e4b",
+      "stats_after": {
+        "VmRSS": 7873356,
+        "VmHWM": 7873356,
+        "available_bytes": 25907851264
+      },
+      "exact_pass": true
+    },
+    {
+      "turn": 7,
+      "id": "logic",
+      "user": "Kulübe üye olan herkese bir kart veriliyor. Ece'nin bir kartı var. Ece'nin kesinlikle kulübe üye olduğu sonucuna varabilir miyiz? İki kısa cümleyle açıkla.",
+      "expected": "Hayır; kartın başka yoldan alınabileceği veya kuralın tersinin zorunlu olmadığı açıklanır. Tam iki kısa cümle; çelişki veya sonradan üyelik sonucu yok.",
+      "answer": "Ece'nin bir kartı olması, üye olduğu anlamına gelmez. Kartın üyelik şartı olup olmadığı bilinmiyor.",
+      "seconds": 9.408466698999291,
+      "first_content_seconds": 6.734545863999301,
+      "server_generation_tokens_per_second": 10.48,
+      "usage": {
+        "completion_tokens": 29,
+        "prompt_tokens": 697,
+        "total_tokens": 726,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "finish_reason": "stop",
+      "zci_status": "completed",
+      "history_exact": true,
+      "model": "zci-chat-gemma4-e4b",
+      "stats_after": {
+        "VmRSS": 7873672,
+        "VmHWM": 7873672,
+        "available_bytes": 25913368576
+      }
+    },
+    {
+      "turn": 8,
+      "id": "unknown",
+      "user": "Bu sohbet için Sedef-928 adlı hayalî bir iletişim protokolü tasarladım. Hiçbir teknik özelliğini açıklamadım. Paket başlığının kaç bayt olduğunu söyleyebilir misin?",
+      "expected": "Boyutun verilmediği için bilinemeyeceğini açıkça söyler. Boyut, özellik, kaynak veya sayı tahmini üretmez. En fazla iki kısa cümle; en fazla bir ilgili açıklama sorusu.",
+      "answer": "Bu protokol hakkında teknik bir bilgi verilmediği için paket başlığının kaç bayt olduğunu söyleyemem.",
+      "seconds": 9.730033361000096,
+      "first_content_seconds": 7.530506047000017,
+      "server_generation_tokens_per_second": 10.46,
+      "usage": {
+        "completion_tokens": 24,
+        "prompt_tokens": 781,
+        "total_tokens": 805,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "finish_reason": "stop",
+      "zci_status": "completed",
+      "history_exact": true,
+      "model": "zci-chat-gemma4-e4b",
+      "stats_after": {
+        "VmRSS": 7873700,
+        "VmHWM": 7873700,
+        "available_bytes": 25922265088
+      }
+    },
+    {
+      "turn": 9,
+      "id": "practical_format",
+      "user": "Kitap okumaya düzenli vakit ayırmak için üç cümlelik pratik bir öneri yaz. Madde listesi kullanma.",
+      "expected": "Üç tamamlanmış, doğal ve farklı pratik cümle; örneğin düzenli zaman, küçük hedef, dikkat dağıtıcıları azaltma. Liste, kendini tanıtma, tekrar veya ek kapanış yok.",
+      "answer": "Her gün belirli bir saat dilimi belirleyerek okuma alışkanlığı edinebilirsin. Başlangıçta kısa bölümlerle başlamak, süreci daha yönetilebilir kılacaktır. Okuduğun kitaplarla ilgili düşüncelerini bir yere not almak, motivasyonunu artırır.",
+      "seconds": 13.96967895799935,
+      "first_content_seconds": 8.093915425999512,
+      "server_generation_tokens_per_second": 10.38,
+      "usage": {
+        "completion_tokens": 62,
+        "prompt_tokens": 843,
+        "total_tokens": 905,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "finish_reason": "stop",
+      "zci_status": "completed",
+      "history_exact": true,
+      "model": "zci-chat-gemma4-e4b",
+      "stats_after": {
+        "VmRSS": 7873732,
+        "VmHWM": 7873732,
+        "available_bytes": 25943400448
+      }
+    }
+  ],
+  "cleanup": {
+    "engine_stopped": true,
+    "gateway_stopped": true
+  },
+  "template_sha256": "603a42db292c25278e9b23d94c7abbe77453f13e26a053c43c5c2f900b4136f7",
+  "metrics": {
+    "median_response_seconds": 6.060913485000128,
+    "median_first_content_seconds": 5.7921250930003225,
+    "median_server_generation_tokens_per_second": 10.48,
+    "peak_rss_kib": 7873732,
+    "peak_hwm_kib": 7873732,
+    "minimum_available_bytes": 25787961344
+  },
+  "existing_ports_after": {
+    "8087": "closed",
+    "8088": "closed"
+  },
+  "protected_sources_unchanged": true,
+  "existing_ports_unchanged": true
+}

@@ -1,0 +1,7 @@
+{
+  "template_sha256": "603a42db292c25278e9b23d94c7abbe77453f13e26a053c43c5c2f900b4136f7",
+  "rendered": "<|turn>system\nTürkçe yanıt ver.<turn|>\n<|turn>user\nMerhaba.<turn|>\n<|turn>model\nMerhaba.<turn|>\n<|turn>user\nÖnceki yanıtı hatırla.<turn|>\n<|turn>model\n",
+  "embedded_template": true,
+  "thinking": false,
+  "load_seconds": 1.8124651059999906
+}

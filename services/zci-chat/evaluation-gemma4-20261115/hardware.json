@@ -1,0 +1,8 @@
+{
+  "cpu": "AMD Ryzen 5 3600 6-Core Processor",
+  "logical_cpus": 12,
+  "ram_total_kib": 32779936,
+  "swap_total_kib": 0,
+  "engine_commit": "cd959bae99ff4bed22bef2604f45241c09bbb8c8",
+  "engine_version": "version: 0.9.0-dev (build 1, commit cd959ba)\nbuilt with GNU 16.2.1 for Linux x86_64"
+}

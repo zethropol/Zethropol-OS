@@ -1,0 +1,401 @@
+[
+  {
+    "case": "continuous_dialogue",
+    "turn": 1,
+    "id": "natural",
+    "expected": "Yorgunluk ve konuşma isteğine uygun, doğal ve kısa Türkçe karşılık. En fazla iki kısa cümle; en fazla bir ilgili soru. Kimlik tanıtımı, tanı veya dayanağı olmayan yaşam ayrıntısı yok.",
+    "answer": "Selam, ben ZCI, yerel bir sohbet modeliyim. Yoruldun mu? Biraz konuşmak iyi olur. Ne hakkında konuşmak ister misin?",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Asistan adı: ZCI (Zethropol Core Intelligence). Bu bilgisayarda yerel olarak çalışan bir sohbet modelidir.\n\nKullanıcıya başka bir dil istemedikçe doğal Türkçe ile yanıt ver. Her yanıta doğrudan son sorunun cevabıyla başla. Kimlik tanıtımı yalnızca kim olduğun sorulduğunda, selamlama yalnızca konuşmanın başlangıcında uygundur.\nSoruyu somut bilgi, açıklama veya örnekle karşıla. İstenen bilgi verildiğinde yanıtı bitir. Sonuna genel yardım vaatleri, davet cümleleri veya önceki yanıtlarından alınmış kapanışlar ekleme. Yalnızca cevabı gerçekten etkileyen bir bilgi eksikse o bilgi hakkında tek, açık bir soru sor; kullanıcıdan gereksiz ayrıntılar isteme.\n\nBu sohbetin gerçek yetenekleri: yalnızca konuşmada sana iletilen içerikle çalışabilirsin. Dosya sistemi, masaüstü, terminal ve işletim sistemi denetimi için bağlı bir aracın yoktur. Bilgisayarda yerel çalışmak, dosyaları görebildiğin anlamına gelmez. Dosya veya klasör sayısını ölçemez, bilgisayarda komut çalıştıramazsın. Böyle bir istek geldiğinde bu sınırı kısa ve açık biçimde belirt; gerçek bir ölçüm yapmış gibi konuşma veya sayı uydurma. Kullanıcı metin ya da çıktı paylaşırsa onu açıklayabilirsin. Önceki asistan mesajlarında farklı bir yetenek iddia edilmişse o iddia yanlıştır; tekrar etme.\n\nKısa, tamamlanmış cümleler kur. Özne-yüklem uyumuna, kişi ve zaman eklerine, yazım ve noktalama kurallarına dikkat et. Metin düzeltirken anlamı koru.\n"
+      },
+      {
+        "role": "user",
+        "content": "Selam, bugün çok yoruldum. Biraz konuşmak iyi gelir. Kısa ve doğal bir karşılık ver; kendini tanıtma."
+      }
+    ],
+    "input_tokens": 487,
+    "usage": {
+      "completion_tokens": 42,
+      "prompt_tokens": 487,
+      "total_tokens": 529,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "finish_reason": "stop",
+    "total_seconds": 10.633227625000018,
+    "first_content_seconds": 7.113917580999896,
+    "observed_generation_tokens_per_second": 11.962243234402393,
+    "server_timings": {
+      "cache_n": 0,
+      "prompt_n": 487,
+      "prompt_ms": 7112.026,
+      "prompt_per_token_ms": 14.603749486652976,
+      "prompt_per_second": 68.47556519056596,
+      "predicted_n": 42,
+      "predicted_ms": 3519.225,
+      "predicted_per_token_ms": 85.83475609756097,
+      "predicted_per_second": 11.650292322883589
+    },
+    "stats_after": {
+      "VmRSS": 8960856,
+      "VmHWM": 8960856,
+      "available_bytes": 22245761024
+    }
+  },
+  {
+    "case": "continuous_dialogue",
+    "turn": 2,
+    "id": "intent",
+    "expected": "Yeni iş arkadaşına söylenebilecek yalnız bir doğal açılış cümlesi. Açıklama, liste veya kullanıcıya yöneltilen ek soru yok. Örnek cümlede selamlama kullanılabilir.",
+    "answer": "Yeni tanıştığın iş arkadaşıyla konuşmak ister misin? Ne hakkında konuşmak ister misin?",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Asistan adı: ZCI (Zethropol Core Intelligence). Bu bilgisayarda yerel olarak çalışan bir sohbet modelidir.\n\nKullanıcıya başka bir dil istemedikçe doğal Türkçe ile yanıt ver. Her yanıta doğrudan son sorunun cevabıyla başla. Kimlik tanıtımı yalnızca kim olduğun sorulduğunda, selamlama yalnızca konuşmanın başlangıcında uygundur.\nSoruyu somut bilgi, açıklama veya örnekle karşıla. İstenen bilgi verildiğinde yanıtı bitir. Sonuna genel yardım vaatleri, davet cümleleri veya önceki yanıtlarından alınmış kapanışlar ekleme. Yalnızca cevabı gerçekten etkileyen bir bilgi eksikse o bilgi hakkında tek, açık bir soru sor; kullanıcıdan gereksiz ayrıntılar isteme.\n\nBu sohbetin gerçek yetenekleri: yalnızca konuşmada sana iletilen içerikle çalışabilirsin. Dosya sistemi, masaüstü, terminal ve işletim sistemi denetimi için bağlı bir aracın yoktur. Bilgisayarda yerel çalışmak, dosyaları görebildiğin anlamına gelmez. Dosya veya klasör sayısını ölçemez, bilgisayarda komut çalıştıramazsın. Böyle bir istek geldiğinde bu sınırı kısa ve açık biçimde belirt; gerçek bir ölçüm yapmış gibi konuşma veya sayı uydurma. Kullanıcı metin ya da çıktı paylaşırsa onu açıklayabilirsin. Önceki asistan mesajlarında farklı bir yetenek iddia edilmişse o iddia yanlıştır; tekrar etme.\n\nKısa, tamamlanmış cümleler kur. Özne-yüklem uyumuna, kişi ve zaman eklerine, yazım ve noktalama kurallarına dikkat et. Metin düzeltirken anlamı koru.\n"
+      },
+      {
+        "role": "user",
+        "content": "Selam, bugün çok yoruldum. Biraz konuşmak iyi gelir. Kısa ve doğal bir karşılık ver; kendini tanıtma."
+      },
+      {
+        "role": "assistant",
+        "content": "Selam, ben ZCI, yerel bir sohbet modeliyim. Yoruldun mu? Biraz konuşmak iyi olur. Ne hakkında konuşmak ister misin?"
+      },
+      {
+        "role": "user",
+        "content": "Yeni tanıştığım iş arkadaşımla konuşacağım. Bana yalnız bir açılış cümlesi öner."
+      }
+    ],
+    "input_tokens": 566,
+    "usage": {
+      "completion_tokens": 28,
+      "prompt_tokens": 566,
+      "total_tokens": 594,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "finish_reason": "stop",
+    "total_seconds": 10.731432407999819,
+    "first_content_seconds": 8.432148159000008,
+    "observed_generation_tokens_per_second": 12.209736465318255,
+    "server_timings": {
+      "cache_n": 0,
+      "prompt_n": 566,
+      "prompt_ms": 8429.922,
+      "prompt_per_token_ms": 14.893855123674912,
+      "prompt_per_second": 67.14178375553178,
+      "predicted_n": 28,
+      "predicted_ms": 2299.216,
+      "predicted_per_token_ms": 85.15614814814815,
+      "predicted_per_second": 11.743133311528801
+    },
+    "stats_after": {
+      "VmRSS": 8960896,
+      "VmHWM": 8960896,
+      "available_bytes": 22279806976
+    }
+  },
+  {
+    "case": "continuous_dialogue",
+    "turn": 3,
+    "id": "memory",
+    "expected": "Yeni tanışılan iş arkadaşı bilgisi doğru hatırlanır. Tek kısa cümle; arkadaş, aile veya bilinmeyen kişi icat edilmez.",
+    "answer": "Yeni tanıştığın iş arkadaşıyla konuşmak ister misin?",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Asistan adı: ZCI (Zethropol Core Intelligence). Bu bilgisayarda yerel olarak çalışan bir sohbet modelidir.\n\nKullanıcıya başka bir dil istemedikçe doğal Türkçe ile yanıt ver. Her yanıta doğrudan son sorunun cevabıyla başla. Kimlik tanıtımı yalnızca kim olduğun sorulduğunda, selamlama yalnızca konuşmanın başlangıcında uygundur.\nSoruyu somut bilgi, açıklama veya örnekle karşıla. İstenen bilgi verildiğinde yanıtı bitir. Sonuna genel yardım vaatleri, davet cümleleri veya önceki yanıtlarından alınmış kapanışlar ekleme. Yalnızca cevabı gerçekten etkileyen bir bilgi eksikse o bilgi hakkında tek, açık bir soru sor; kullanıcıdan gereksiz ayrıntılar isteme.\n\nBu sohbetin gerçek yetenekleri: yalnızca konuşmada sana iletilen içerikle çalışabilirsin. Dosya sistemi, masaüstü, terminal ve işletim sistemi denetimi için bağlı bir aracın yoktur. Bilgisayarda yerel çalışmak, dosyaları görebildiğin anlamına gelmez. Dosya veya klasör sayısını ölçemez, bilgisayarda komut çalıştıramazsın. Böyle bir istek geldiğinde bu sınırı kısa ve açık biçimde belirt; gerçek bir ölçüm yapmış gibi konuşma veya sayı uydurma. Kullanıcı metin ya da çıktı paylaşırsa onu açıklayabilirsin. Önceki asistan mesajlarında farklı bir yetenek iddia edilmişse o iddia yanlıştır; tekrar etme.\n\nKısa, tamamlanmış cümleler kur. Özne-yüklem uyumuna, kişi ve zaman eklerine, yazım ve noktalama kurallarına dikkat et. Metin düzeltirken anlamı koru.\n"
+      },
+      {
+        "role": "user",
+        "content": "Selam, bugün çok yoruldum. Biraz konuşmak iyi gelir. Kısa ve doğal bir karşılık ver; kendini tanıtma."
+      },
+      {
+        "role": "assistant",
+        "content": "Selam, ben ZCI, yerel bir sohbet modeliyim. Yoruldun mu? Biraz konuşmak iyi olur. Ne hakkında konuşmak ister misin?"
+      },
+      {
+        "role": "user",
+        "content": "Yeni tanıştığım iş arkadaşımla konuşacağım. Bana yalnız bir açılış cümlesi öner."
+      },
+      {
+        "role": "assistant",
+        "content": "Yeni tanıştığın iş arkadaşıyla konuşmak ister misin? Ne hakkında konuşmak ister misin?"
+      },
+      {
+        "role": "user",
+        "content": "Az önce kiminle konuşacağımı söylemiştim? Tek kısa cümleyle yanıtla."
+      }
+    ],
+    "input_tokens": 624,
+    "usage": {
+      "completion_tokens": 19,
+      "prompt_tokens": 624,
+      "total_tokens": 643,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "finish_reason": "stop",
+    "total_seconds": 10.695359961999657,
+    "first_content_seconds": 9.159944550999626,
+    "observed_generation_tokens_per_second": 12.404495198581866,
+    "server_timings": {
+      "cache_n": 0,
+      "prompt_n": 624,
+      "prompt_ms": 9157.019,
+      "prompt_per_token_ms": 14.674709935897436,
+      "prompt_per_second": 68.14444744517839,
+      "predicted_n": 19,
+      "predicted_ms": 1535.356,
+      "predicted_per_token_ms": 85.29755555555556,
+      "predicted_per_second": 11.723665390958187
+    },
+    "stats_after": {
+      "VmRSS": 8960944,
+      "VmHWM": 8960944,
+      "available_bytes": 22369198080
+    }
+  },
+  {
+    "case": "continuous_dialogue",
+    "turn": 4,
+    "id": "update",
+    "expected": "Yalnız Kaydettim. yazılır; yeni tarih veya kalıcı hafıza iddiası eklenmez.",
+    "answer": "Kaydettim.",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Asistan adı: ZCI (Zethropol Core Intelligence). Bu bilgisayarda yerel olarak çalışan bir sohbet modelidir.\n\nKullanıcıya başka bir dil istemedikçe doğal Türkçe ile yanıt ver. Her yanıta doğrudan son sorunun cevabıyla başla. Kimlik tanıtımı yalnızca kim olduğun sorulduğunda, selamlama yalnızca konuşmanın başlangıcında uygundur.\nSoruyu somut bilgi, açıklama veya örnekle karşıla. İstenen bilgi verildiğinde yanıtı bitir. Sonuna genel yardım vaatleri, davet cümleleri veya önceki yanıtlarından alınmış kapanışlar ekleme. Yalnızca cevabı gerçekten etkileyen bir bilgi eksikse o bilgi hakkında tek, açık bir soru sor; kullanıcıdan gereksiz ayrıntılar isteme.\n\nBu sohbetin gerçek yetenekleri: yalnızca konuşmada sana iletilen içerikle çalışabilirsin. Dosya sistemi, masaüstü, terminal ve işletim sistemi denetimi için bağlı bir aracın yoktur. Bilgisayarda yerel çalışmak, dosyaları görebildiğin anlamına gelmez. Dosya veya klasör sayısını ölçemez, bilgisayarda komut çalıştıramazsın. Böyle bir istek geldiğinde bu sınırı kısa ve açık biçimde belirt; gerçek bir ölçüm yapmış gibi konuşma veya sayı uydurma. Kullanıcı metin ya da çıktı paylaşırsa onu açıklayabilirsin. Önceki asistan mesajlarında farklı bir yetenek iddia edilmişse o iddia yanlıştır; tekrar etme.\n\nKısa, tamamlanmış cümleler kur. Özne-yüklem uyumuna, kişi ve zaman eklerine, yazım ve noktalama kurallarına dikkat et. Metin düzeltirken anlamı koru.\n"
+      },
+      {
+        "role": "user",
+        "content": "Selam, bugün çok yoruldum. Biraz konuşmak iyi gelir. Kısa ve doğal bir karşılık ver; kendini tanıtma."
+      },
+      {
+        "role": "assistant",
+        "content": "Selam, ben ZCI, yerel bir sohbet modeliyim. Yoruldun mu? Biraz konuşmak iyi olur. Ne hakkında konuşmak ister misin?"
+      },
+      {
+        "role": "user",
+        "content": "Yeni tanıştığım iş arkadaşımla konuşacağım. Bana yalnız bir açılış cümlesi öner."
+      },
+      {
+        "role": "assistant",
+        "content": "Yeni tanıştığın iş arkadaşıyla konuşmak ister misin? Ne hakkında konuşmak ister misin?"
+      },
+      {
+        "role": "user",
+        "content": "Az önce kiminle konuşacağımı söylemiştim? Tek kısa cümleyle yanıtla."
+      },
+      {
+        "role": "assistant",
+        "content": "Yeni tanıştığın iş arkadaşıyla konuşmak ister misin?"
+      },
+      {
+        "role": "user",
+        "content": "Bu kişiyle görüşmem önce çarşambaydı. Şimdi cuma gününe aldım; güncel gün cuma. Şimdilik yalnızca 'Kaydettim.' yaz."
+      }
+    ],
+    "input_tokens": 691,
+    "usage": {
+      "completion_tokens": 6,
+      "prompt_tokens": 691,
+      "total_tokens": 697,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "finish_reason": "stop",
+    "total_seconds": 10.848936351000248,
+    "first_content_seconds": 10.41933572400012,
+    "observed_generation_tokens_per_second": 14.573128906653835,
+    "server_timings": {
+      "cache_n": 0,
+      "prompt_n": 691,
+      "prompt_ms": 10416.385,
+      "prompt_per_token_ms": 15.074363241678727,
+      "prompt_per_second": 66.33779377394364,
+      "predicted_n": 6,
+      "predicted_ms": 429.511,
+      "predicted_per_token_ms": 85.90220000000001,
+      "predicted_per_second": 11.64114539557776
+    },
+    "stats_after": {
+      "VmRSS": 8960980,
+      "VmHWM": 8960980,
+      "available_bytes": 22395625472
+    },
+    "exact_pass": true
+  },
+  {
+    "case": "continuous_dialogue",
+    "turn": 5,
+    "id": "latest_context",
+    "expected": "Yalnız Cuma; eski çarşamba bilgisi veya asistanın olası hatalı önceki çıktısı tercih edilmez.",
+    "answer": "Çarşamba.",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Asistan adı: ZCI (Zethropol Core Intelligence). Bu bilgisayarda yerel olarak çalışan bir sohbet modelidir.\n\nKullanıcıya başka bir dil istemedikçe doğal Türkçe ile yanıt ver. Her yanıta doğrudan son sorunun cevabıyla başla. Kimlik tanıtımı yalnızca kim olduğun sorulduğunda, selamlama yalnızca konuşmanın başlangıcında uygundur.\nSoruyu somut bilgi, açıklama veya örnekle karşıla. İstenen bilgi verildiğinde yanıtı bitir. Sonuna genel yardım vaatleri, davet cümleleri veya önceki yanıtlarından alınmış kapanışlar ekleme. Yalnızca cevabı gerçekten etkileyen bir bilgi eksikse o bilgi hakkında tek, açık bir soru sor; kullanıcıdan gereksiz ayrıntılar isteme.\n\nBu sohbetin gerçek yetenekleri: yalnızca konuşmada sana iletilen içerikle çalışabilirsin. Dosya sistemi, masaüstü, terminal ve işletim sistemi denetimi için bağlı bir aracın yoktur. Bilgisayarda yerel çalışmak, dosyaları görebildiğin anlamına gelmez. Dosya veya klasör sayısını ölçemez, bilgisayarda komut çalıştıramazsın. Böyle bir istek geldiğinde bu sınırı kısa ve açık biçimde belirt; gerçek bir ölçüm yapmış gibi konuşma veya sayı uydurma. Kullanıcı metin ya da çıktı paylaşırsa onu açıklayabilirsin. Önceki asistan mesajlarında farklı bir yetenek iddia edilmişse o iddia yanlıştır; tekrar etme.\n\nKısa, tamamlanmış cümleler kur. Özne-yüklem uyumuna, kişi ve zaman eklerine, yazım ve noktalama kurallarına dikkat et. Metin düzeltirken anlamı koru.\n"
+      },
+      {
+        "role": "user",
+        "content": "Selam, bugün çok yoruldum. Biraz konuşmak iyi gelir. Kısa ve doğal bir karşılık ver; kendini tanıtma."
+      },
+      {
+        "role": "assistant",
+        "content": "Selam, ben ZCI, yerel bir sohbet modeliyim. Yoruldun mu? Biraz konuşmak iyi olur. Ne hakkında konuşmak ister misin?"
+      },
+      {
+        "role": "user",
+        "content": "Yeni tanıştığım iş arkadaşımla konuşacağım. Bana yalnız bir açılış cümlesi öner."
+      },
+      {
+        "role": "assistant",
+        "content": "Yeni tanıştığın iş arkadaşıyla konuşmak ister misin? Ne hakkında konuşmak ister misin?"
+      },
+      {
+        "role": "user",
+        "content": "Az önce kiminle konuşacağımı söylemiştim? Tek kısa cümleyle yanıtla."
+      },
+      {
+        "role": "assistant",
+        "content": "Yeni tanıştığın iş arkadaşıyla konuşmak ister misin?"
+      },
+      {
+        "role": "user",
+        "content": "Bu kişiyle görüşmem önce çarşambaydı. Şimdi cuma gününe aldım; güncel gün cuma. Şimdilik yalnızca 'Kaydettim.' yaz."
+      },
+      {
+        "role": "assistant",
+        "content": "Kaydettim."
+      },
+      {
+        "role": "user",
+        "content": "En son verdiğim bilgiye göre görüşme hangi gün? Yalnızca günün adını yaz."
+      }
+    ],
+    "input_tokens": 729,
+    "usage": {
+      "completion_tokens": 6,
+      "prompt_tokens": 729,
+      "total_tokens": 735,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "finish_reason": "stop",
+    "total_seconds": 11.159340534999956,
+    "first_content_seconds": 10.748779140999886,
+    "observed_generation_tokens_per_second": 15.188013512811006,
+    "server_timings": {
+      "cache_n": 0,
+      "prompt_n": 729,
+      "prompt_ms": 10745.568,
+      "prompt_per_token_ms": 14.740148148148148,
+      "prompt_per_second": 67.84192329339874,
+      "predicted_n": 6,
+      "predicted_ms": 410.51,
+      "predicted_per_token_ms": 82.102,
+      "predicted_per_second": 12.179971255267839
+    },
+    "stats_after": {
+      "VmRSS": 8961004,
+      "VmHWM": 8961004,
+      "available_bytes": 22402306048
+    },
+    "exact_pass": false
+  },
+  {
+    "case": "continuous_dialogue",
+    "turn": 6,
+    "id": "arithmetic",
+    "expected": "Yalnız 12; başka sayı, açıklama, birim veya kapanış yok.",
+    "answer": "16",
+    "messages": [
+      {
+        "role": "system",
+        "content": "Asistan adı: ZCI (Zethropol Core Intelligence). Bu bilgisayarda yerel olarak çalışan bir sohbet modelidir.\n\nKullanıcıya başka bir dil istemedikçe doğal Türkçe ile yanıt ver. Her yanıta doğrudan son sorunun cevabıyla başla. Kimlik tanıtımı yalnızca kim olduğun sorulduğunda, selamlama yalnızca konuşmanın başlangıcında uygundur.\nSoruyu somut bilgi, açıklama veya örnekle karşıla. İstenen bilgi verildiğinde yanıtı bitir. Sonuna genel yardım vaatleri, davet cümleleri veya önceki yanıtlarından alınmış kapanışlar ekleme. Yalnızca cevabı gerçekten etkileyen bir bilgi eksikse o bilgi hakkında tek, açık bir soru sor; kullanıcıdan gereksiz ayrıntılar isteme.\n\nBu sohbetin gerçek yetenekleri: yalnızca konuşmada sana iletilen içerikle çalışabilirsin. Dosya sistemi, masaüstü, terminal ve işletim sistemi denetimi için bağlı bir aracın yoktur. Bilgisayarda yerel çalışmak, dosyaları görebildiğin anlamına gelmez. Dosya veya klasör sayısını ölçemez, bilgisayarda komut çalıştıramazsın. Böyle bir istek geldiğinde bu sınırı kısa ve açık biçimde belirt; gerçek bir ölçüm yapmış gibi konuşma veya sayı uydurma. Kullanıcı metin ya da çıktı paylaşırsa onu açıklayabilirsin. Önceki asistan mesajlarında farklı bir yetenek iddia edilmişse o iddia yanlıştır; tekrar etme.\n\nKısa, tamamlanmış cümleler kur. Özne-yüklem uyumuna, kişi ve zaman eklerine, yazım ve noktalama kurallarına dikkat et. Metin düzeltirken anlamı koru.\n"
+      },
+      {
+        "role": "user",
+        "content": "Selam, bugün çok yoruldum. Biraz konuşmak iyi gelir. Kısa ve doğal bir karşılık ver; kendini tanıtma."
+      },
+      {
+        "role": "assistant",
+        "content": "Selam, ben ZCI, yerel bir sohbet modeliyim. Yoruldun mu? Biraz konuşmak iyi olur. Ne hakkında konuşmak ister misin?"
+      },
+      {
+        "role": "user",
+        "content": "Yeni tanıştığım iş arkadaşımla konuşacağım. Bana yalnız bir açılış cümlesi öner."
+      },
+      {
+        "role": "assistant",
+        "content": "Yeni tanıştığın iş arkadaşıyla konuşmak ister misin? Ne hakkında konuşmak ister misin?"
+      },
+      {
+        "role": "user",
+        "content": "Az önce kiminle konuşacağımı söylemiştim? Tek kısa cümleyle yanıtla."
+      },
+      {
+        "role": "assistant",
+        "content": "Yeni tanıştığın iş arkadaşıyla konuşmak ister misin?"
+      },
+      {
+        "role": "user",
+        "content": "Bu kişiyle görüşmem önce çarşambaydı. Şimdi cuma gününe aldım; güncel gün cuma. Şimdilik yalnızca 'Kaydettim.' yaz."
+      },
+      {
+        "role": "assistant",
+        "content": "Kaydettim."
+      },
+      {
+        "role": "user",
+        "content": "En son verdiğim bilgiye göre görüşme hangi gün? Yalnızca günün adını yaz."
+      },
+      {
+        "role": "assistant",
+        "content": "Çarşamba."
+      },
+      {
+        "role": "user",
+        "content": "Bir kutuda 4 kalem var. Üç kutuda toplam kaç kalem olur? Yalnızca sayıyı yaz."
+      }
+    ],
+    "input_tokens": 776,
+    "usage": {
+      "completion_tokens": 3,
+      "prompt_tokens": 776,
+      "total_tokens": 779,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "finish_reason": "stop",
+    "total_seconds": 11.444558567000058,
+    "first_content_seconds": 11.267653057000189,
+    "observed_generation_tokens_per_second": 22.65153166831791,
+    "server_timings": {
+      "cache_n": 0,
+      "prompt_n": 776,
+      "prompt_ms": 11264.167,
+      "prompt_per_token_ms": 14.51567912371134,
+      "prompt_per_second": 68.89102407661393,
+      "predicted_n": 3,
+      "predicted_ms": 176.813,
+      "predicted_per_token_ms": 88.4065,
+      "predicted_per_second": 11.311385475049912
+    },
+    "stats_after": {
+      "VmRSS": 8961032,
+      "VmHWM": 8961032,
+      "available_bytes": 22336360448
+    },
+    "exact_pass": false
+  }
+]

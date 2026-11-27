@@ -1,0 +1,20 @@
+{
+  "repository": "lmstudio-community/gemma-4-E4B-it-GGUF",
+  "revision": "99210a71094c6aa8559f764e0cadedd7d89de94d",
+  "file": {
+    "rfilename": "gemma-4-E4B-it-Q4_K_M.gguf",
+    "blobId": "b1485398d920835da6c53a64de83079977b3e66b",
+    "size": 5335291936,
+    "lfs": {
+      "sha256": "0ffb122c8b6921f13cbc34186e052524d0b5803b17f4867b7197a561400b3770",
+      "size": 5335291936,
+      "pointerSize": 135
+    }
+  },
+  "license": "apache-2.0",
+  "components_required_for_text": [
+    "gemma-4-E4B-it-Q4_K_M.gguf"
+  ],
+  "projector_required_for_text": false,
+  "source_api": "https://huggingface.co/api/models/lmstudio-community/gemma-4-E4B-it-GGUF?blobs=true"
+}

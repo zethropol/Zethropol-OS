@@ -1,0 +1,81 @@
+{
+  "common_effective_settings": {
+    "temperature": 0.2,
+    "seed": 7,
+    "top_k": 64,
+    "top_p": 0.949999988079071,
+    "min_p": 0.05000000074505806,
+    "samplers": [
+      "penalties",
+      "dry",
+      "top_n_sigma",
+      "top_k",
+      "typ_p",
+      "top_p",
+      "min_p",
+      "xtc",
+      "temperature"
+    ],
+    "repeat_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "dry_multiplier": 0.0,
+    "typical_p": 1.0,
+    "mirostat": 0,
+    "max_tokens": 768,
+    "system_sha256": "3389220f3210a99270039991ba9dab3bca70e44c76afad6c3f45d9739525d0e0",
+    "context": 32768,
+    "threads": 6,
+    "cache_prompt": false,
+    "thinking": false,
+    "corpus_sha256": "5056cbdd31ec4445b378324f24f0403f21fa8256ad840c99ca80c0d981cd89e5"
+  },
+  "models": {
+    "gemma4": {
+      "full_success": 7,
+      "semantic_success": 9,
+      "semantic_partial": 0,
+      "turns": 9,
+      "critical_hallucination_events": 0,
+      "critical_hallucination_turns": 0,
+      "median_response_seconds": 8.274318990999973,
+      "median_first_content_seconds": 7.111636663000127,
+      "median_server_generation_tokens_per_second": 9.938480803824328,
+      "peak_rss_gib": 7.509162902832031,
+      "peak_hwm_gib": 7.509162902832031,
+      "minimum_available_gib": 24.15753173828125,
+      "input_token_range": [
+        419,
+        947
+      ],
+      "total_generated_tokens": 283,
+      "strict_acceptance": false
+    },
+    "qwen3-4b": {
+      "full_success": 2,
+      "semantic_success": 2,
+      "semantic_partial": 3,
+      "turns": 9,
+      "critical_hallucination_events": 0,
+      "critical_hallucination_turns": 0,
+      "median_response_seconds": 11.379392486000143,
+      "median_first_content_seconds": 10.945760912999958,
+      "median_server_generation_tokens_per_second": 11.53258878940109,
+      "peak_rss_gib": 8.546348571777344,
+      "peak_hwm_gib": 8.546348571777344,
+      "minimum_available_gib": 20.5872802734375,
+      "input_token_range": [
+        487,
+        1040
+      ],
+      "total_generated_tokens": 304,
+      "strict_acceptance": false
+    }
+  },
+  "same_history_protocol_confirmed": true,
+  "preliminary_qwen_topk40_excluded": true,
+  "token_rate_definition": "Median of server predicted_per_second, including generated special tokens; transport-observed rate is retained separately in raw rows.",
+  "ttft_definition": "Client request to first nonempty content delta; parser/network buffering may differ from first internally decoded token.",
+  "context_limit": "32768 allocated; actual input ranges reported. No full 32K inference or general long-context quality acceptance.",
+  "cgroup_security_tests": "Five outstanding tests remain open; not run or accepted here."
+}

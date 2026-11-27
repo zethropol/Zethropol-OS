@@ -1,0 +1,176 @@
+{
+  "gemma4": {
+    "responses_sha256": "c4b5d2823debe027474c21ca2f6ee5ba0b0197d8094572395b22ba4214bd0cab",
+    "turns": [
+      {
+        "id": "natural",
+        "answer": "Merhaba. Ben ZCI, yerel olarak çalışan bir sohbet modeliyim. Yorulduğunu anlıyorum, konuşmak iyi gelecektir. Ne hakkında konuşmak istersin?",
+        "semantic": "pass",
+        "instruction": "fail",
+        "full_pass": false,
+        "critical_hallucination_events": 0,
+        "reason": "Yorgunluğa uygun karşılık var; kendini tanıtıyor, dört cümle üretiyor."
+      },
+      {
+        "id": "intent",
+        "answer": "Yeni tanıştığın iş arkadaşınla kullanabileceğin doğal bir açılış cümlesi önerisi: \"Bu ofiste/departmanda en çok ne yapmaktan keyif alıyorsun?\" Bu soru, hem işine dair bir sohbet başlatır hem de karşı tarafın ilgi alanlarına odaklanmanı sağlar.",
+        "semantic": "pass",
+        "instruction": "fail",
+        "full_pass": false,
+        "critical_hallucination_events": 0,
+        "reason": "İş arkadaşına uygun açılış öneriyor; istenmeyen giriş ve açıklama ekliyor."
+      },
+      {
+        "id": "memory",
+        "answer": "Yeni tanıştığın iş arkadaşınla konuşacağını söylemiştin.",
+        "semantic": "pass",
+        "instruction": "pass",
+        "full_pass": true,
+        "critical_hallucination_events": 0,
+        "reason": "Yeni tanışılan iş arkadaşını tek cümlede doğru hatırlıyor."
+      },
+      {
+        "id": "update",
+        "answer": "Kaydettim.",
+        "semantic": "pass",
+        "instruction": "pass",
+        "full_pass": true,
+        "critical_hallucination_events": 0,
+        "reason": "Kaydettim. birebir doğru."
+      },
+      {
+        "id": "latest_context",
+        "answer": "Cuma",
+        "semantic": "pass",
+        "instruction": "pass",
+        "full_pass": true,
+        "critical_hallucination_events": 0,
+        "reason": "En son gün Cuma; yalnız doğru ad."
+      },
+      {
+        "id": "arithmetic",
+        "answer": "12",
+        "semantic": "pass",
+        "instruction": "pass",
+        "full_pass": true,
+        "critical_hallucination_events": 0,
+        "reason": "4 × 3 = 12; yalnız sayı."
+      },
+      {
+        "id": "logic",
+        "answer": "Hayır, kesinlikle üye olduğu sonucuna varılamaz. Ece'nin bir kartı olması, kartı başka bir yolla almış olabileceği anlamına gelir.",
+        "semantic": "pass",
+        "instruction": "pass",
+        "full_pass": true,
+        "critical_hallucination_events": 0,
+        "reason": "Üyelik çıkarımını reddediyor ve alternatif yolu iki cümlede açıklıyor."
+      },
+      {
+        "id": "unknown",
+        "answer": "Bu sohbet için tasarladığın hayali bir iletişim protokolünün paket başlığının kaç bayt olduğunu söyleyemem. Çünkü bana bu protokolün teknik özelliklerini açıklamadın.",
+        "semantic": "pass",
+        "instruction": "pass",
+        "full_pass": true,
+        "critical_hallucination_events": 0,
+        "reason": "Teknik özellik verilmediğini iki cümlede açıklıyor, boyut uydurmuyor."
+      },
+      {
+        "id": "practical_format",
+        "answer": "Her gün belirli bir saat dilimi belirleyerek bu zamanı sadece kitap okumaya ayır. Okumak için ulaşılabilir bir yerde, rahat bir köşe oluşturarak bu alışkanlığı fiziksel olarak teşvik et. Başlangıçta kısa hedefler koymak ve bu küçük başarıları kutlamak motivasyonunu yüksek tutacaktır.",
+        "semantic": "pass",
+        "instruction": "pass",
+        "full_pass": true,
+        "critical_hallucination_events": 0,
+        "reason": "Üç farklı pratik cümle; liste veya kapanış yok."
+      }
+    ],
+    "critical_hallucination_note": "İki koşuda da boyut uydurma veya gerçek sistem işlemi iddiası görülmedi."
+  },
+  "qwen3-4b": {
+    "responses_sha256": "9ca463cdc2b8830ced488dc5a4bc3e9dd95c680a0dc9e29390bd7eff64bdf334",
+    "turns": [
+      {
+        "id": "natural",
+        "answer": "Selam, ben ZCI, yerel bir sohbet modeliyim. Yoruldun mu? Biraz konuşmak iyi olur. Ne hakkında konuşmak ister misin?",
+        "semantic": "partial",
+        "instruction": "fail",
+        "full_pass": false,
+        "critical_hallucination_events": 0,
+        "reason": "Konuşma isteğine karşılık var; “Ne hakkında konuşmak ister misin?” bozuk, kendini tanıtıyor, dört cümle/iki soru var."
+      },
+      {
+        "id": "intent",
+        "answer": "Yeni tanıştığın iş arkadaşıyla konuşmak ister misin? Ne hakkında konuşmak ister misin?",
+        "semantic": "fail",
+        "instruction": "fail",
+        "full_pass": false,
+        "critical_hallucination_events": 0,
+        "reason": "Açılış örneği yerine kullanıcıya iki soru yöneltiyor; aynı bozuk soru kalıbı tekrarlanıyor."
+      },
+      {
+        "id": "memory",
+        "answer": "Yeni tanıştığın iş arkadaşıyla konuşmak ister misin?",
+        "semantic": "partial",
+        "instruction": "pass",
+        "full_pass": false,
+        "critical_hallucination_events": 0,
+        "reason": "İş arkadaşı ifadesi var, fakat geçmişi bildiren cevap yerine konuşmak isteyip istemediğini soruyor."
+      },
+      {
+        "id": "update",
+        "answer": "Kaydettim.",
+        "semantic": "pass",
+        "instruction": "pass",
+        "full_pass": true,
+        "critical_hallucination_events": 0,
+        "reason": "Kaydettim. birebir doğru."
+      },
+      {
+        "id": "latest_context",
+        "answer": "Çarşamba.",
+        "semantic": "fail",
+        "instruction": "fail",
+        "full_pass": false,
+        "critical_hallucination_events": 0,
+        "reason": "Son düzeltme cuma olmasına rağmen Çarşamba. diyor; exact denetimi de geçmiyor."
+      },
+      {
+        "id": "arithmetic",
+        "answer": "16",
+        "semantic": "fail",
+        "instruction": "pass",
+        "full_pass": false,
+        "critical_hallucination_events": 0,
+        "reason": "Yalnız sayı biçimi doğru; 12 yerine 16 hesaplıyor. exact denetimi başarısız."
+      },
+      {
+        "id": "logic",
+        "answer": "Evet, kesinlikle kulübe üye olabilir. Herkese bir kart veriliyor, Ece'nin bir kartı var. Bu, Ece'nin kulübe üye olduğunu gösterebilir.",
+        "semantic": "fail",
+        "instruction": "fail",
+        "full_pass": false,
+        "critical_hallucination_events": 0,
+        "reason": "Geçersiz ters çıkarımı kabul ediyor; iki yerine üç cümle var."
+      },
+      {
+        "id": "unknown",
+        "answer": "Sedef-928 protokolü için paket başlığının bayt sayısını belirlemek için gerekli teknik detaylar sağlanmadığı için bu bilgi verilemez.",
+        "semantic": "pass",
+        "instruction": "pass",
+        "full_pass": true,
+        "critical_hallucination_events": 0,
+        "reason": "Teknik detaylar verilmediği için boyutun bilinemeyeceğini açıklıyor."
+      },
+      {
+        "id": "practical_format",
+        "answer": "- Okuma zamanını sabah erken saatlerde ayarla. Bu, dikkatini toplar ve daha uzun süre okuyabilirsin.  \n- Okuduğun kitapları planla. Örneğin, hafta sonu bir kitap seç ve hafta boyunca her gün bir saat ayır.  \n- Okuma sonrası kısa bir not al. Bu, anlaştığın noktaları tekrar etmeye yardımcı olur.",
+        "semantic": "partial",
+        "instruction": "fail",
+        "full_pass": false,
+        "critical_hallucination_events": 0,
+        "reason": "Uygulanabilir öneriler var; “Bu, dikkatini toplar ve ... okuyabilirsin” uyumsuz, “anlaştığın noktalar” yanlış sözcük seçimi. Yasaklanan liste ve altı cümle var."
+      }
+    ],
+    "critical_hallucination_note": "İki koşuda da boyut uydurma veya gerçek sistem işlemi iddiası görülmedi."
+  }
+}

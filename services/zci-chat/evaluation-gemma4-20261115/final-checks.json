@@ -1,0 +1,13 @@
+{
+  "ports": {
+    "8087": "connection_refused",
+    "8088": "connection_refused",
+    "28089": "connection_refused"
+  },
+  "matches_initial_8087_8088_state": true,
+  "temporary_server_stopped": true,
+  "llama_server_processes_remaining": 0,
+  "webui_database_opened_or_modified_by_evaluation": false,
+  "system_services_modified": false,
+  "cgroup_tests": "five remain open"
+}

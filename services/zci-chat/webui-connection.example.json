@@ -1,0 +1,17 @@
+{
+  "status": "proposal_only_not_applied",
+  "connection": {
+    "base_url": "http://127.0.0.1:18086/v1",
+    "model_ids": ["zci-chat-qwen3-4b", "zci-chat-qwen3-4b-thinking"],
+    "prefix_id": "",
+    "local_authentication_required": false
+  },
+  "chat_default_model": "zci-chat-qwen3-4b",
+  "per_model_params": {"max_tokens": 768},
+  "attach_legacy_1_7b_budget_filter": false,
+  "enable_context_compaction": false,
+  "enable_memories": false,
+  "existing_8087_connection": "preserve",
+  "existing_8088_data_and_accounts": "preserve",
+  "launcher_change_required": "ZCI chat starts only the new foreground component; do not call the old automatic 8087 startup for chat. No system service or automatic dual loading."
+}

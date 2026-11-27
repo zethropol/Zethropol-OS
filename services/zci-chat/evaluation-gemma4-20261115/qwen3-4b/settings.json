@@ -1,0 +1,13 @@
+{
+  "temperature": 0.2,
+  "seed": 7,
+  "output": 768,
+  "cache_prompt": false,
+  "top_k": 64,
+  "top_p": 0.95,
+  "min_p": 0.05,
+  "context": 32768,
+  "threads": 6,
+  "thinking": false,
+  "system_sha256": "3389220f3210a99270039991ba9dab3bca70e44c76afad6c3f45d9739525d0e0"
+}
