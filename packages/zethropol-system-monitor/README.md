@@ -22,7 +22,7 @@ Arch Linux package definition for the five-pod KDE Plasma 6 Zethropol System Mon
 - Legacy `plasma5support` and CLI `--monitor` dependencies are completely absent.
 - Licensing: `license=("GPL-3.0-or-later" "MIT")` — preserves `GPL-3.0-or-later` on the KPackage Plasmoid (`metadata.json`) and repository `MIT` license on the original Qt6/QML bridge sources without unauthorized relicensing. Compatible with dynamic linking to Qt6 (`LGPL-3.0-only` / `GPL-3.0-only` / `Qt-GPL-exception-1.0`).
 
-## Stage 04.6 Artifact Note
+## Stage 04.6 / 04.7 Deployment Note
 
-- Built offline and rootlessly via `makepkg`; production archive is stored in `packages/stage-04.6/` (unsigned development build; not installed live during Stage 04.6).
-- Before live installation in Stage 04.7, any user-local copy at `~/.local/share/plasma/plasmoids/org.zethropol.systemmonitor/` must be backed up and moved aside so it does not shadow the system KPackage while preserving `backgroundOpacity=90` in `~/.config/plasma-org.kde.plasma.desktop-appletsrc`.
+- Built offline and rootlessly via `makepkg`; production archive is stored in `packages/stage-04.6/` and deployed live during Stage 04.7 (`zethropol-system-monitor 0.1.0-1`, `pacman -Qkk`: 26 files, 0 modified; closure record: `docs/STAGE_04_SYSTEM_MONITOR_CLOSURE.md`).
+- User-local shadowing copy was backed up under `backups/system-monitor-user-backup-stage047-20261126-001200/` (12/12 `SHA256SUMS` verified) and moved aside so `kpackagetool6 -t Plasma/Applet -s org.zethropol.systemmonitor` resolves `/usr/share/plasma/plasmoids/org.zethropol.systemmonitor/`.

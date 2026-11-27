@@ -23,9 +23,8 @@ const QSet<QString> s_validActions = {
     QStringLiteral("disable")
 };
 
-const QSet<QString> s_quarantinedServices = {
-    QStringLiteral("zethropol-performance.service")
-};
+// zethropol-performance.service quarantine lifted after live 0.1.0-2 verification.
+const QSet<QString> s_quarantinedServices = {};
 
 const QSet<QString> s_protectedCriticalServices = {
     QStringLiteral("dbus.service"),

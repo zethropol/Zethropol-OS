@@ -2,7 +2,7 @@
 
 Bu dizin, ZCI ve sistem D-Bus servislerinden tamamen bağımsız **Zethropol TV** (`Qt6/QML` + `libmpv`) canlı TV oynatıcısı için Arch Linux paket tarifini içerir.
 
-> **Durum:** Paket tarifi (`PKGBUILD`, `.SRCINFO`) yalnızca izole geçici bir derleme dizininde root kullanmadan doğrulanmıştır; canlı sisteme kurulmamıştır. Canlı `pacman -U` kurulumu için ayrı kullanıcı onayı gerekir.
+> **Durum:** Paket tarifi (`PKGBUILD`, `.SRCINFO`) izole geçici derleme dizininde root kullanmadan doğrulanmış ve `zethropol-tv 0.1.0-1` canlı sisteme kurulmuştur (`pacman -Qkk`: 17 toplam dosya, 0 değiştirilmiş). İlerideki sürüm yükseltmeleri için ayrı kullanıcı onayı gerekir.
 
 ## Paket Üst Verileri ve Kurulum İçeriği
 

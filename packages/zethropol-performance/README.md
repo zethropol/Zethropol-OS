@@ -2,7 +2,7 @@
 
 Arch Linux package definition for the Zethropol Performance D-Bus service.
 
-> **Status:** Package recipe (`0.1.0-2`) is verified in an isolated rootless temporary build directory. Live package installation (`pacman -U`) and lifting of the `zethropol-performance` quarantine require separate explicit authorization.
+> **Status:** `zethropol-performance 0.1.0-2` is **deployed live and verified** (2026-11-27): `pacman -Qkk` (`18` files, `0` modified), `/etc/systemd/system/zethropol-performance.service.d/99-zethropol-quarantine.conf` backed up under `backups/performance-quarantine-backup/` and removed, `systemctl is-active`: `active`, `busctl GetState`: `success=true`, `code="ok"` (`18` live metrics), `systemd-analyze security`: `3.6 OK :-)`. Built artifacts remain verified in `packages/zethropol-performance/SHA256SUMS` (`2/2` OK; `.pkg.tar.zst` SHA-256: `b421a05162576ec92ad318e126389d98d012ab4003e04050513274772c549b13`, `0` `/home/Zevor` leaks).
 
 ## D-Bus identity
 

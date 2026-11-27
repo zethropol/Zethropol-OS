@@ -1,7 +1,7 @@
 pkgbase = zethropol-hardware
 	pkgdesc = Zethropol Hardware D-Bus service
 	pkgver = 0.1.0
-	pkgrel = 4
+	pkgrel = 5
 	url = https://github.com/zethropol/Zethropol-OS
 	arch = x86_64
 	license = MIT
@@ -11,7 +11,9 @@ pkgbase = zethropol-hardware
 	depends = gcc-libs
 	depends = dbus
 	depends = systemd
-	source = zethropol-hardware-0.1.0-4-src.tar.gz
-	sha256sums = 68924bfb372093eed82e38ed4d314e658095c266c1571ee0cd7a17a9fb3c8805
+	optdepends = smartmontools: SMART/NVMe disk diagnostics via zethropol-diagnostics-helper
+	optdepends = polkit: explicit authorization for elevated SMART/NVMe diagnostics
+	source = zethropol-hardware-0.1.0-5-src.tar.gz
+	sha256sums = 855bcf7585f3bfffe378a8a0ce67be2a7213d16bc01fbf785b8fdbc61b881c8f
 
 pkgname = zethropol-hardware

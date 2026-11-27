@@ -15,7 +15,8 @@ const VALID_ACTIONS: &[&str] = &["start", "stop", "restart", "enable", "disable"
 
 /// Services that are quarantined and MUST NOT be started, stopped, restarted,
 /// enabled, or disabled through the Services management interface.
-const QUARANTINED_SERVICES: &[&str] = &["zethropol-performance.service"];
+/// (`zethropol-performance.service` was removed after live verification of 0.1.0-2.)
+const QUARANTINED_SERVICES: &[&str] = &[];
 
 /// Critical system/session services that MUST NOT be stopped, disabled, or restarted
 /// through the Services management interface.
@@ -414,13 +415,11 @@ mod tests {
     }
 
     #[test]
-    fn blocks_quarantined_performance_service_for_all_actions() {
+    fn allows_remediated_performance_service_after_quarantine_lift() {
         for action in VALID_ACTIONS {
-            assert_eq!(
-                validate_service_request("zethropol-performance.service", action)
-                    .unwrap_err()
-                    .0,
-                "protected-service"
+            assert!(
+                validate_service_request("zethropol-performance.service", action).is_ok(),
+                "expected zethropol-performance.service {action} to be allowed after 0.1.0-2 remediation"
             );
         }
     }

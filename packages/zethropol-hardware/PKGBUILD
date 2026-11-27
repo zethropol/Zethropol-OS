@@ -1,25 +1,37 @@
 pkgname=zethropol-hardware
 pkgver=0.1.0
-pkgrel=4
+pkgrel=5
 pkgdesc="Zethropol Hardware D-Bus service"
 url="https://github.com/zethropol/Zethropol-OS"
 arch=("x86_64")
 license=("MIT")
 depends=("glibc" "gcc-libs" "dbus" "systemd")
+optdepends=(
+    "smartmontools: SMART/NVMe disk diagnostics via zethropol-diagnostics-helper"
+    "polkit: explicit authorization for elevated SMART/NVMe diagnostics"
+)
 makedepends=("cargo")
 checkdepends=("dbus")
 source=("${pkgname}-${pkgver}-${pkgrel}-src.tar.gz")
-sha256sums=("68924bfb372093eed82e38ed4d314e658095c266c1571ee0cd7a17a9fb3c8805")
+sha256sums=("855bcf7585f3bfffe378a8a0ce67be2a7213d16bc01fbf785b8fdbc61b881c8f")
 
 build() {
-    cd "$srcdir/${pkgname}-${pkgver}/services/hardware"
     export RUSTFLAGS="--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo --remap-path-prefix=${HOME}=/home/build --remap-path-prefix=${srcdir}=/build ${RUSTFLAGS:-}"
+
+    cd "$srcdir/${pkgname}-${pkgver}/services/hardware"
+    cargo build --release --locked --offline
+
+    cd "$srcdir/${pkgname}-${pkgver}/services/hardware/diagnostics-helper"
     cargo build --release --locked --offline
 }
 
 check() {
-    cd "$srcdir/${pkgname}-${pkgver}/services/hardware"
     export RUSTFLAGS="--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo --remap-path-prefix=${HOME}=/home/build --remap-path-prefix=${srcdir}=/build ${RUSTFLAGS:-}"
+
+    cd "$srcdir/${pkgname}-${pkgver}/services/hardware"
+    cargo test --locked --offline
+
+    cd "$srcdir/${pkgname}-${pkgver}/services/hardware/diagnostics-helper"
     cargo test --locked --offline
 }
 
@@ -27,8 +39,10 @@ package() {
     cd "$srcdir/${pkgname}-${pkgver}/services/hardware"
 
     install -Dm755 target/release/hardware "$pkgdir/usr/lib/zethropol/zethropol-hardware"
+    install -Dm755 diagnostics-helper/target/release/zethropol-diagnostics-helper "$pkgdir/usr/lib/zethropol/zethropol-diagnostics-helper"
     install -Dm644 deployment/dbus/org.zethropol.Hardware.conf "$pkgdir/etc/dbus-1/system.d/org.zethropol.Hardware.conf"
     install -Dm644 deployment/dbus/org.zethropol.Hardware.service "$pkgdir/usr/share/dbus-1/system-services/org.zethropol.Hardware.service"
     install -Dm644 deployment/systemd/zethropol-hardware.service "$pkgdir/usr/lib/systemd/system/zethropol-hardware.service"
+    install -Dm644 diagnostics-helper/polkit/org.zethropol.diagnostics.helper.policy "$pkgdir/usr/share/polkit-1/actions/org.zethropol.diagnostics.helper.policy"
     install -Dm644 "$srcdir/${pkgname}-${pkgver}/LICENSE" "$pkgdir/usr/share/licenses/${pkgname}/LICENSE"
 }

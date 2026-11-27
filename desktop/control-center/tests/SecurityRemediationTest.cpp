@@ -28,13 +28,13 @@ private slots:
                      qPrintable(badUnit));
         }
 
-        // Quarantined zethropol-performance.service MUST be blocked for ALL actions
+        // zethropol-performance.service quarantine was lifted after live 0.1.0-2 verification
+        QVERIFY(!ServiceService::isQuarantinedService(QStringLiteral("zethropol-performance.service")));
         for (const QString &act : {QStringLiteral("start"), QStringLiteral("stop"),
                                    QStringLiteral("restart"), QStringLiteral("enable"),
                                    QStringLiteral("disable")}) {
-            QVERIFY(!ServiceService::validateServiceRequest(
+            QVERIFY(ServiceService::validateServiceRequest(
                 QStringLiteral("zethropol-performance.service"), act, &reason));
-            QVERIFY(reason.contains(QStringLiteral("Karantinadaki"), Qt::CaseInsensitive));
         }
 
         // Critical system services blocked for stop/disable/restart

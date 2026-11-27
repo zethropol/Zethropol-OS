@@ -18,4 +18,4 @@ The service uses system-level D-Bus activation through systemd and is not enable
 - Declares versioned runtime dependency `zethropol-hardware>=0.1.0-4`.
 - Moves test-only `serde_json` to `[dev-dependencies]` so the production release binary omits it.
 - Built offline with `--locked --offline` and path remapping; preserves the previous rollback archive `zethropol-monitoring-0.1.0-2-x86_64.pkg.tar.zst` untouched.
-- Production package artifact is stored under `packages/stage-04.6/` (unsigned development build; not installed live during Stage 04.6).
+- Production package artifact is stored under `packages/stage-04.6/` and deployed live during Stage 04.7 (`zethropol-monitoring 0.1.0-3`, `pacman -Qkk`: 18 files, 0 modified; closure record: `docs/STAGE_04_SYSTEM_MONITOR_CLOSURE.md`).

@@ -547,6 +547,8 @@ Recovery operations must validate snapshot identifiers and requested description
 
 ### Applications Service
 
+> **Status Note (2026-11-27 — `P4A`):** The unfinished `services/applications/` Rust prototype was archived under `prototypes/archived-applications/`. Canonical application listing and removal remain handled by `desktop/control-center/src/ApplicationService.cpp` (`LC_ALL=C pacman -Qo`, protected package list, `pacman -R --print` precheck, and `pkexec /usr/bin/pacman -R -- <package>`).
+
 Logical identity:
 
 - Applications
