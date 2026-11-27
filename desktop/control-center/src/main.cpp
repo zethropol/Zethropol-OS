@@ -12,6 +12,7 @@
 #include "ApplicationService.h"
 #include "ProcessService.h"
 #include "NotificationService.h"
+#include "CompatibilityManager.h"
 #include "core/zethropol_power_client.h"
 #include "core/zethropol_monitoring_client.h"
 
@@ -35,6 +36,7 @@ int main(int argc, char *argv[])
     NotificationService notificationService;
     ZethropolPowerClient powerClient;
     ZethropolMonitoringClient monitoringClient;
+    CompatibilityManager compatibilityManager;
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("HardwareBridge"), &hardwareServiceClient);
     engine.rootContext()->setContextProperty(QStringLiteral("UpdateBridge"), &updateScanner);
@@ -47,6 +49,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("NotificationBridge"), &notificationService);
     engine.rootContext()->setContextProperty(QStringLiteral("PowerBridge"), &powerClient);
     engine.rootContext()->setContextProperty(QStringLiteral("MonitoringBridge"), &monitoringClient);
+    engine.rootContext()->setContextProperty(QStringLiteral("CompatibilityBridge"), &compatibilityManager);
 
     const QUrl url(QStringLiteral("qrc:/Zethropol/ControlCenter/qml/Main.qml"));
 

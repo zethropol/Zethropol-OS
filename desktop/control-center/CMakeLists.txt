@@ -26,6 +26,7 @@ set(CONTROL_CENTER_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ApplicationService.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ProcessService.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/NotificationService.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/CompatibilityManager.cpp
 )
 
 qt_add_executable(control_center
@@ -45,6 +46,7 @@ qt_add_qml_module(control_center
         qml/Main.qml
         qml/HardwarePage.qml
         qml/ProcessesPage.qml
+        qml/CompatibilityPage.qml
         qml/UpdateReport.qml
         qml/SystemState.qml
 )
@@ -89,7 +91,7 @@ if(BUILD_TESTING)
         ${ZETHROPOL_DBUS_SRCS})
     qt_add_resources(control_center_hardware_test "hardware_test_qml"
         PREFIX "/Zethropol/ControlCenter"
-        FILES qml/Main.qml qml/SystemState.qml qml/HardwarePage.qml qml/ProcessesPage.qml qml/UpdateReport.qml)
+        FILES qml/Main.qml qml/SystemState.qml qml/HardwarePage.qml qml/ProcessesPage.qml qml/CompatibilityPage.qml qml/UpdateReport.qml)
     target_include_directories(control_center_hardware_test PRIVATE src)
     target_link_libraries(control_center_hardware_test PRIVATE
         Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::DBus Qt6::Test)
@@ -136,7 +138,7 @@ if(BUILD_TESTING)
         ${ZETHROPOL_DBUS_SRCS})
     qt_add_resources(control_center_recovery_test "recovery_test_qml"
         PREFIX "/Zethropol/ControlCenter"
-        FILES qml/Main.qml qml/SystemState.qml qml/HardwarePage.qml qml/ProcessesPage.qml qml/UpdateReport.qml)
+        FILES qml/Main.qml qml/SystemState.qml qml/HardwarePage.qml qml/ProcessesPage.qml qml/CompatibilityPage.qml qml/UpdateReport.qml)
     target_include_directories(control_center_recovery_test PRIVATE src)
     target_link_libraries(control_center_recovery_test PRIVATE
         Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::DBus Qt6::Test)
@@ -158,7 +160,7 @@ if(BUILD_TESTING)
         ${ZETHROPOL_DBUS_SRCS})
     qt_add_resources(control_center_tabs_test "tabs_test_qml"
         PREFIX "/Zethropol/ControlCenter"
-        FILES qml/Main.qml qml/SystemState.qml qml/HardwarePage.qml qml/ProcessesPage.qml qml/UpdateReport.qml)
+        FILES qml/Main.qml qml/SystemState.qml qml/HardwarePage.qml qml/ProcessesPage.qml qml/CompatibilityPage.qml qml/UpdateReport.qml)
     target_include_directories(control_center_tabs_test PRIVATE src)
     target_link_libraries(control_center_tabs_test PRIVATE
         Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::DBus Qt6::Test)
@@ -168,5 +170,14 @@ if(BUILD_TESTING)
     set_tests_properties(control_center_tabs_test PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
         TIMEOUT 90)
+
+    qt_add_executable(control_center_compatibility_test
+        tests/CompatibilityManagerTest.cpp
+        src/CompatibilityManager.cpp
+        src/CompatibilityManager.h)
+    target_include_directories(control_center_compatibility_test PRIVATE src)
+    target_link_libraries(control_center_compatibility_test PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME control_center_compatibility_test
+             COMMAND control_center_compatibility_test)
 
 endif()

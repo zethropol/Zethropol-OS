@@ -1,4 +1,5 @@
 #include "ApplicationService.h"
+#include "CompatibilityManager.h"
 #include "HardwareServiceClient.h"
 #include "NotificationService.h"
 #include "ProcessService.h"
@@ -102,6 +103,7 @@ private slots:
         NotificationService notifications;
         ZethropolPowerClient power;
         ZethropolMonitoringClient monitoring;
+        CompatibilityManager compatibility;
 
         // Wait for isolated scanner to finish with missing tools (fail-closed)
         QTRY_VERIFY_WITH_TIMEOUT(!scanner.busy(), 5000);
@@ -127,7 +129,8 @@ private slots:
                  {"ProcessBridge", &processes},
                  {"NotificationBridge", &notifications},
                  {"PowerBridge", &power},
-                 {"MonitoringBridge", &monitoring}}) {
+                 {"MonitoringBridge", &monitoring},
+                 {"CompatibilityBridge", &compatibility}}) {
             engine.rootContext()->setContextProperty(pair.first, pair.second);
         }
 
@@ -137,7 +140,7 @@ private slots:
         QVERIFY(window);
         auto *pages = window->findChild<QQuickItem *>(QStringLiteral("controlCenterPages"));
         QVERIFY(pages);
-        QCOMPARE(pages->property("count").toInt(), 12);
+        QCOMPARE(pages->property("count").toInt(), 13);
 
         const QStringList expectedTabTitles = {
             QStringLiteral("Overview"),
@@ -152,9 +155,10 @@ private slots:
             QStringLiteral("Services"),
             QStringLiteral("Applications"),
             QStringLiteral("Processes"),
+            QStringLiteral("Compatibility"),
         };
 
-        for (int index = 0; index < 12; ++index) {
+        for (int index = 0; index < 13; ++index) {
             QVERIFY2(pages->setProperty("currentIndex", index),
                      qPrintable(QStringLiteral("Failed to switch to tab %1 (%2)").arg(index).arg(expectedTabTitles[index])));
             QTest::qWait(30);
@@ -226,6 +230,13 @@ private slots:
             case 11: // Processes
                 QVERIFY(!pageTexts.isEmpty());
                 break;
+            case 12: { // Compatibility
+                auto *compatPage = window->findChild<QQuickItem *>(QStringLiteral("compatibilityPage"));
+                QVERIFY(compatPage);
+                QVERIFY(pageTexts.contains(QStringLiteral("Windows Uyumluluğu")));
+                QVERIFY(pageTexts.contains(QStringLiteral("zethropol-compatibility")));
+                break;
+            }
             }
         }
 
@@ -261,6 +272,7 @@ private slots:
         NotificationService notifications;
         ZethropolPowerClient power;
         MockMonitoringBridge monitoring;
+        CompatibilityManager compatibility;
 
         QTRY_VERIFY_WITH_TIMEOUT(!scanner.busy(), 5000);
         QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
@@ -278,7 +290,8 @@ private slots:
                  {"ProcessBridge", &processes},
                  {"NotificationBridge", &notifications},
                  {"PowerBridge", &power},
-                 {"MonitoringBridge", &monitoring}}) {
+                 {"MonitoringBridge", &monitoring},
+                 {"CompatibilityBridge", &compatibility}}) {
             engine.rootContext()->setContextProperty(pair.first, pair.second);
         }
 
@@ -371,6 +384,7 @@ private slots:
         NotificationService notifications;
         ZethropolPowerClient power;
         ZethropolMonitoringClient monitoring;
+        CompatibilityManager compatibility;
 
         QTRY_VERIFY_WITH_TIMEOUT(!scanner.busy(), 5000);
         QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
@@ -394,7 +408,8 @@ private slots:
                  {"ProcessBridge", &processes},
                  {"NotificationBridge", &notifications},
                  {"PowerBridge", &power},
-                 {"MonitoringBridge", &monitoring}}) {
+                 {"MonitoringBridge", &monitoring},
+                 {"CompatibilityBridge", &compatibility}}) {
             engine.rootContext()->setContextProperty(pair.first, pair.second);
         }
 

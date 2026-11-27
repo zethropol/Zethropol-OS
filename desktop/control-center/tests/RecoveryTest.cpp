@@ -7,6 +7,7 @@
 #include "ApplicationService.h"
 #include "ProcessService.h"
 #include "NotificationService.h"
+#include "CompatibilityManager.h"
 #include "core/zethropol_power_client.h"
 #include "core/zethropol_monitoring_client.h"
 #include "core/zethropol_recovery_client.h"
@@ -750,6 +751,7 @@ echo '{"root":[{"number":0,"type":"single","description":"current"}]}'
         NotificationService notifications;
         ZethropolPowerClient power;
         ZethropolMonitoringClient monitoring;
+        CompatibilityManager compatibility;
 
         QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
         QVERIFY(recovery.available());
@@ -767,7 +769,8 @@ echo '{"root":[{"number":0,"type":"single","description":"current"}]}'
                  {QStringLiteral("ProcessBridge"), &processes},
                  {QStringLiteral("NotificationBridge"), &notifications},
                  {QStringLiteral("PowerBridge"), &power},
-                 {QStringLiteral("MonitoringBridge"), &monitoring}}) {
+                 {QStringLiteral("MonitoringBridge"), &monitoring},
+                 {QStringLiteral("CompatibilityBridge"), &compatibility}}) {
             engine.rootContext()->setContextProperty(pair.first, pair.second);
         }
 
@@ -778,7 +781,7 @@ echo '{"root":[{"number":0,"type":"single","description":"current"}]}'
 
         auto *pages = window->findChild<QQuickItem *>(QStringLiteral("controlCenterPages"));
         QVERIFY(pages);
-        QCOMPARE(pages->property("count").toInt(), 12);
+        QCOMPARE(pages->property("count").toInt(), 13);
         QVERIFY(pages->setProperty("currentIndex", 7));
         QTest::qWait(40);
 
@@ -1072,6 +1075,7 @@ EOF
         NotificationService notifications;
         ZethropolPowerClient power;
         ZethropolMonitoringClient monitoring;
+        CompatibilityManager compatibility;
 
         QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
         QVERIFY(recovery.available());
@@ -1089,7 +1093,8 @@ EOF
                  {QStringLiteral("ProcessBridge"), &processes},
                  {QStringLiteral("NotificationBridge"), &notifications},
                  {QStringLiteral("PowerBridge"), &power},
-                 {QStringLiteral("MonitoringBridge"), &monitoring}}) {
+                 {QStringLiteral("MonitoringBridge"), &monitoring},
+                 {QStringLiteral("CompatibilityBridge"), &compatibility}}) {
             engine.rootContext()->setContextProperty(pair.first, pair.second);
         }
 
@@ -1440,6 +1445,7 @@ EOF
         NotificationService notifications;
         ZethropolPowerClient power;
         ZethropolMonitoringClient monitoring;
+        CompatibilityManager compatibility;
 
         QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
         QVERIFY(recovery.available());
@@ -1457,7 +1463,8 @@ EOF
                  {QStringLiteral("ProcessBridge"), &processes},
                  {QStringLiteral("NotificationBridge"), &notifications},
                  {QStringLiteral("PowerBridge"), &power},
-                 {QStringLiteral("MonitoringBridge"), &monitoring}}) {
+                 {QStringLiteral("MonitoringBridge"), &monitoring},
+                 {QStringLiteral("CompatibilityBridge"), &compatibility}}) {
             engine.rootContext()->setContextProperty(pair.first, pair.second);
         }
 

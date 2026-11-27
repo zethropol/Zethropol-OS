@@ -7,6 +7,7 @@
 #include "ApplicationService.h"
 #include "ProcessService.h"
 #include "NotificationService.h"
+#include "CompatibilityManager.h"
 #include "core/zethropol_power_client.h"
 #include "core/zethropol_monitoring_client.h"
 #include <QDBusConnectionInterface>
@@ -424,6 +425,7 @@ private slots:
         NotificationService notifications;
         ZethropolPowerClient power;
         ZethropolMonitoringClient monitoring;
+        CompatibilityManager compatibility;
         QQmlApplicationEngine engine;
         QSignalSpy warnings(&engine, &QQmlEngine::warnings);
         for (const auto &pair : QList<QPair<QString, QObject *>>{
@@ -431,7 +433,8 @@ private slots:
                  {"RecoveryBridge", &recovery}, {"SecurityBridge", &security}, {"ServiceBridge", &services},
                  {"ApplicationBridge", &applications}, {"ProcessBridge", &processes},
                  {"NotificationBridge", &notifications},
-                 {"PowerBridge", &power}, {"MonitoringBridge", &monitoring}})
+                 {"PowerBridge", &power}, {"MonitoringBridge", &monitoring},
+                 {"CompatibilityBridge", &compatibility}})
             engine.rootContext()->setContextProperty(pair.first, pair.second);
         engine.load(QUrl(QStringLiteral("qrc:/Zethropol/ControlCenter/qml/Main.qml")));
         QVERIFY(!engine.rootObjects().isEmpty());
@@ -582,6 +585,7 @@ private:
         NotificationService notifications;
         ZethropolPowerClient power;
         ZethropolMonitoringClient monitoring;
+        CompatibilityManager compatibility;
         QQmlApplicationEngine engine;
         QSignalSpy warnings(&engine, &QQmlEngine::warnings);
         for (const auto &pair : QList<QPair<QString, QObject *>>{
@@ -589,7 +593,8 @@ private:
                  {"RecoveryBridge", &recovery}, {"SecurityBridge", &security}, {"ServiceBridge", &services},
                  {"ApplicationBridge", &applications}, {"ProcessBridge", &processes},
                  {"NotificationBridge", &notifications},
-                 {"PowerBridge", &power}, {"MonitoringBridge", &monitoring}})
+                 {"PowerBridge", &power}, {"MonitoringBridge", &monitoring},
+                 {"CompatibilityBridge", &compatibility}})
             engine.rootContext()->setContextProperty(pair.first, pair.second);
         engine.load(QUrl(QStringLiteral("qrc:/Zethropol/ControlCenter/qml/Main.qml")));
         QVERIFY(!engine.rootObjects().isEmpty());
@@ -598,9 +603,9 @@ private:
         auto *pages = window->findChild<QQuickItem *>("controlCenterPages");
         QVERIFY(pages);
         // Overview, Hardware, Diagnostics, System, Performance, Power, Updates,
-        // Recovery, Security, Services, Applications, Processes.
-        QCOMPARE(pages->property("count").toInt(), 12);
-        for (int index = 0; index < 12; ++index) {
+        // Recovery, Security, Services, Applications, Processes, Compatibility.
+        QCOMPARE(pages->property("count").toInt(), 13);
+        for (int index = 0; index < 13; ++index) {
             QVERIFY(pages->setProperty("currentIndex", index));
             QTest::qWait(35);
             QCOMPARE(pages->property("currentIndex").toInt(), index);
