@@ -1,5 +1,6 @@
 Zethropol Recovery Environment
 
-System recovery and repair environment.
+System recovery and repair environment (read-only by default).
 
-Available tools: Btrfs, Snapper, Limine, arch-chroot
+Run 'zethropol-recovery' for system diagnostics.
+Available tools: Btrfs, Snapper, Limine, arch-chroot, zethropol-recovery

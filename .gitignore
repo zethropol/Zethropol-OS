@@ -41,3 +41,6 @@ packages/*/*-src.tar.gz
 packages/*/SHA256SUMS
 packages/*/rollback-*/
 packages/stage-04.6/
+packages/repo/x86_64/
+build/recovery/work/
+build/recovery/out/

@@ -51,7 +51,6 @@ lftp
 libfido2
 libusb-compat
 linux
-linux-atm
 linux-firmware
 linux-firmware-marvell
 livecd-sounds
@@ -73,6 +72,7 @@ mtools
 nano
 nbd
 ndisc6
+nfs-utils
 nilfs-utils
 nmap
 ntfsprogs
@@ -126,7 +126,9 @@ xdg-utils
 xfsprogs
 xl2tpd
 zsh
+# Zethropol OS Recovery Environment packages
 snapper
 fish
-
+limine
 limine-snapper-sync
+zethropol-recovery

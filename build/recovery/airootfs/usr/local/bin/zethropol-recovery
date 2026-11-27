@@ -2,17 +2,37 @@
 
 echo "=== Zethropol Recovery ==="
 echo ""
+echo "Package:"
+pacman -Q zethropol-recovery 2>/dev/null; or echo "  zethropol-recovery: not installed"
+echo ""
+echo "Service:"
+set -l svc_state (systemctl is-active zethropol-recovery.service 2>/dev/null)
+if test -n "$svc_state"
+    echo "  zethropol-recovery.service: $svc_state"
+else
+    echo "  zethropol-recovery.service: unknown"
+end
+if command -q busctl
+    set -l dbus_state (busctl --json=short call org.zethropol.Recovery /org/zethropol/Recovery org.zethropol.Recovery.v1 GetState 2>/dev/null)
+    if test $status -eq 0 -a -n "$dbus_state"
+        echo "  D-Bus org.zethropol.Recovery.v1.GetState: OK"
+    else
+        echo "  D-Bus org.zethropol.Recovery.v1.GetState: unavailable"
+    end
+end
+echo ""
 echo "Btrfs:"
-sudo btrfs filesystem show
+btrfs filesystem show 2>/dev/null; or echo "  No Btrfs filesystems detected"
 echo ""
 echo "Block devices:"
 lsblk -o NAME,SIZE,FSTYPE,TYPE,MOUNTPOINTS
 echo ""
 echo "Snapper configurations:"
-sudo snapper list-configs
+snapper list-configs 2>/dev/null; or echo "  No Snapper configurations detected"
 echo ""
 echo "Recovery tools:"
 echo "  btrfs"
 echo "  snapper"
 echo "  limine-snapper-restore"
 echo "  arch-chroot"
+echo "  zethropol-recovery (D-Bus service: /usr/lib/zethropol/zethropol-recovery)"
