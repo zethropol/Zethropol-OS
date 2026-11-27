@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Zethropol Windows Compatibility Runner
+Name[tr]=Zethropol Windows Uyumluluk Çalıştırıcısı
+Comment=Run Windows executables and installers in an isolated Zethropol Wine prefix
+Comment[tr]=Windows uygulamalarını ve kurulum dosyalarını yalıtılmış Zethropol Wine profilinde çalıştır
+Exec=/usr/bin/zethropol-wine-run -- %f
+Icon=application-x-ms-dos-executable
+Terminal=false
+NoDisplay=true
+StartupNotify=true
+MimeType=application/x-ms-dos-executable;application/x-msi;application/x-ms-shortcut;
+Categories=Utility;

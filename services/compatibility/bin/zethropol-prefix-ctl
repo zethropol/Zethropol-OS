@@ -1,0 +1,247 @@
+#!/usr/bin/env python3
+"""CLI for managing isolated Zethropol OS Wine compatibility prefixes."""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+
+# Support both source-tree execution and system installation under /usr/lib/zethropol/compatibility
+_THIS_DIR = Path(__file__).resolve().parent
+for _cand in (_THIS_DIR.parent, Path("/usr/lib/zethropol/compatibility")):
+    if (_cand / "zethropol_compat").is_dir() and str(_cand) not in sys.path:
+        sys.path.insert(0, str(_cand))
+
+from zethropol_compat import __version__
+from zethropol_compat.config import (
+    CompatibilityError,
+    TEMPLATES,
+    VALID_RENDERERS,
+    load_profile_metadata,
+    prefix_dir,
+    validate_profile_name,
+)
+from zethropol_compat.prefix import (
+    audit_prefix,
+    enforce_prefix_isolation,
+    init_prefix,
+    list_profiles,
+    remove_profile,
+)
+from zethropol_compat.probe import probe_bwrap, probe_translation_layers, probe_vulkan, probe_wine
+from zethropol_compat.shortcut import sync_prefix_shortcuts
+
+MIME_TYPES = (
+    "application/x-ms-dos-executable",
+    "application/x-msi",
+    "application/x-ms-shortcut",
+)
+
+
+def _cmd_init(args: argparse.Namespace) -> int:
+    sandbox = None
+    if args.no_sandbox:
+        sandbox = False
+    meta, audit = init_prefix(
+        profile=args.profile,
+        template=args.template,
+        renderer=args.renderer,
+        sandbox=sandbox,
+        wine_bin=args.wine_bin,
+        force=args.force,
+    )
+    payload = {"metadata": meta.to_dict(), "audit": audit.to_dict()}
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        print(f"Initialized profile '{meta.profile}' ({meta.template}, effective_arch={meta.effective_arch})")
+        print(f"  Prefix: {prefix_dir(meta.profile)}")
+        print(f"  Locale: {meta.locale}, Renderer: {meta.renderer}, Sandbox: {meta.sandbox}")
+        print(f"  Isolation audit: {'PASS' if audit.passed else 'FAIL'}")
+        for chk in audit.checks:
+            mark = "PASS" if chk.passed else "FAIL"
+            print(f"    [{mark}] {chk.id}: {chk.detail}")
+    return 0 if audit.passed else 1
+
+
+def _cmd_list(args: argparse.Namespace) -> int:
+    items = list_profiles()
+    if args.json:
+        print(json.dumps({"profiles": items}, ensure_ascii=False, indent=2))
+        return 0
+    if not items:
+        print("No Zethropol Wine profiles initialized.")
+        return 0
+    for item in items:
+        if item.get("metadata_valid", True):
+            print(
+                f"{item['profile']}  template={item['template']}  arch={item['effective_arch']}  "
+                f"renderer={item['renderer']}  locale={item['locale']}  sandbox={item['sandbox']}"
+            )
+        else:
+            print(f"{item['profile']}  (invalid metadata)")
+    return 0
+
+
+def _cmd_info(args: argparse.Namespace) -> int:
+    clean = validate_profile_name(args.profile)
+    pfx = prefix_dir(clean)
+    meta = load_profile_metadata(pfx)
+    audit = audit_prefix(clean)
+    payload = {"metadata": meta.to_dict(), "prefix_path": str(pfx), "audit": audit.to_dict()}
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _cmd_audit(args: argparse.Namespace) -> int:
+    if args.fix:
+        clean = validate_profile_name(args.profile)
+        enforce_prefix_isolation(prefix_dir(clean))
+    report = audit_prefix(args.profile)
+    if args.json:
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+    else:
+        print(f"Audit for '{report.profile}' ({report.prefix_path}): {'PASS' if report.passed else 'FAIL'}")
+        for chk in report.checks:
+            mark = "PASS" if chk.passed else "FAIL"
+            print(f"  [{mark}] {chk.id}: {chk.detail}")
+    return 0 if report.passed else 1
+
+
+def _cmd_probe(args: argparse.Namespace) -> int:
+    wine_info = probe_wine(args.wine_bin)
+    vk = probe_vulkan()
+    layers = probe_translation_layers()
+    payload = {
+        "version": __version__,
+        "wine": wine_info.to_dict(),
+        "vulkan": vk.to_dict(),
+        "translation_layers": layers.to_dict(),
+        "bwrap": probe_bwrap() or "not-installed",
+    }
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        print(f"Wine: {wine_info.version} ({wine_info.binary}, mode={wine_info.mode})")
+        print(f"Vulkan: hardware_1.3+={vk.hardware_vulkan_13} ({vk.reason})")
+        print(f"DXVK: {layers.dxvk_available} ({layers.dxvk_source})")
+        print(f"VKD3D-Proton: {layers.vkd3d_available} ({layers.vkd3d_source})")
+        print(f"bubblewrap: {payload['bwrap']}")
+    return 0
+
+
+def _cmd_sync_shortcuts(args: argparse.Namespace) -> int:
+    res = sync_prefix_shortcuts(args.profile)
+    if args.json:
+        print(json.dumps(res, ensure_ascii=False, indent=2))
+    else:
+        print(f"Synced shortcuts for '{res['profile']}': {len(res['converted'])} converted, {len(res['skipped'])} skipped")
+        for path in res["converted"]:
+            print(f"  + {path}")
+    return 0
+
+
+def _cmd_remove(args: argparse.Namespace) -> int:
+    res = remove_profile(args.profile, confirm=args.yes)
+    if args.json:
+        print(json.dumps(res, ensure_ascii=False, indent=2))
+    else:
+        print(f"Removed profile '{res['removed_profile']}' ({len(res['removed_desktop_files'])} managed desktop files removed)")
+    return 0
+
+
+def _cmd_set_default_handler(args: argparse.Namespace) -> int:
+    xdg_mime = shutil.which("xdg-mime")
+    if not xdg_mime:
+        raise CompatibilityError("xdg-mime not found (install 'xdg-utils').")
+    for mime in MIME_TYPES:
+        res = subprocess.run(
+            [xdg_mime, "default", "org.zethropol.wine-run.desktop", mime],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if res.returncode != 0:
+            raise CompatibilityError(f"xdg-mime failed for {mime}: {res.stderr.strip()}")
+    if args.json:
+        print(json.dumps({"desktop": "org.zethropol.wine-run.desktop", "mime_types": list(MIME_TYPES)}, indent=2))
+    else:
+        print("Registered org.zethropol.wine-run.desktop as user default for:", ", ".join(MIME_TYPES))
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="zethropol-prefix-ctl",
+        description="Manage isolated Zethropol OS Wine compatibility prefixes.",
+    )
+    p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    sub = p.add_subparsers(dest="command", required=True)
+
+    p_init = sub.add_parser("init", help="Initialize an isolated Wine prefix profile")
+    p_init.add_argument("profile", help="Profile name (e.g. default-win64, classic-win32, office)")
+    p_init.add_argument("--template", choices=sorted(TEMPLATES), default="default-win64")
+    p_init.add_argument("--renderer", choices=VALID_RENDERERS, default=None)
+    p_init.add_argument("--no-sandbox", action="store_true", help="Disable default bwrap sandbox in profile metadata")
+    p_init.add_argument("--wine-bin", default=None, help="Explicit Wine binary path")
+    p_init.add_argument("--force", action="store_true", help="Re-initialize existing profile")
+    p_init.add_argument("--json", action="store_true")
+    p_init.set_defaults(func=_cmd_init)
+
+    p_list = sub.add_parser("list", help="List initialized profiles")
+    p_list.add_argument("--json", action="store_true")
+    p_list.set_defaults(func=_cmd_list)
+
+    p_info = sub.add_parser("info", help="Show profile metadata and isolation audit")
+    p_info.add_argument("profile")
+    p_info.add_argument("--json", action="store_true")
+    p_info.set_defaults(func=_cmd_info)
+
+    p_audit = sub.add_parser("audit", help="Audit Z:\\ and $HOME isolation for a profile")
+    p_audit.add_argument("profile")
+    p_audit.add_argument("--fix", action="store_true", help="Re-apply prefix isolation before auditing")
+    p_audit.add_argument("--json", action="store_true")
+    p_audit.set_defaults(func=_cmd_audit)
+
+    p_probe = sub.add_parser("probe", help="Inspect host Wine, Vulkan, DXVK/VKD3D, and bwrap capabilities")
+    p_probe.add_argument("--wine-bin", default=None)
+    p_probe.add_argument("--json", action="store_true")
+    p_probe.set_defaults(func=_cmd_probe)
+
+    p_sync = sub.add_parser("sync-shortcuts", help="Convert prefix .lnk shortcuts to sanitized .desktop files")
+    p_sync.add_argument("profile")
+    p_sync.add_argument("--json", action="store_true")
+    p_sync.set_defaults(func=_cmd_sync_shortcuts)
+
+    p_rm = sub.add_parser("remove", help="Remove a profile prefix and its managed .desktop shortcuts")
+    p_rm.add_argument("profile")
+    p_rm.add_argument("--yes", action="store_true", help="Confirm destructive profile removal")
+    p_rm.add_argument("--json", action="store_true")
+    p_rm.set_defaults(func=_cmd_remove)
+
+    p_def = sub.add_parser("set-default-handler", help="Set org.zethropol.wine-run.desktop as user default for .exe/.msi/.lnk")
+    p_def.add_argument("--json", action="store_true")
+    p_def.set_defaults(func=_cmd_set_default_handler)
+
+    return p
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    try:
+        return int(args.func(args))
+    except CompatibilityError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

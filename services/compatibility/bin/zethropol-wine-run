@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+"""Isolated runner for Windows .exe, .msi, and .lnk files on Zethropol OS."""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+import sys
+
+_THIS_DIR = Path(__file__).resolve().parent
+for _cand in (_THIS_DIR.parent, Path("/usr/lib/zethropol/compatibility")):
+    if (_cand / "zethropol_compat").is_dir() and str(_cand) not in sys.path:
+        sys.path.insert(0, str(_cand))
+
+from zethropol_compat import __version__
+from zethropol_compat.config import CompatibilityError, VALID_RENDERERS
+from zethropol_compat.runner import build_launch_plan, execute_launch_plan
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="zethropol-wine-run",
+        description="Run Windows .exe, .msi, or .lnk targets inside an isolated Zethropol Wine profile.",
+    )
+    p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    p.add_argument("--profile", default="default-win64", help="Target profile name (default: default-win64)")
+    p.add_argument("--renderer", choices=VALID_RENDERERS, default=None, help="Override graphics renderer (auto|dxvk|wined3d)")
+    p.add_argument("--no-sandbox", action="store_true", help="Disable OS-level bubblewrap write sandbox")
+    p.add_argument("--no-sync-shortcuts", action="store_true", help="Skip post-run .lnk -> .desktop sync")
+    p.add_argument("--no-auto-init", action="store_true", help="Do not auto-initialize canonical default profiles")
+    p.add_argument("--wine-bin", default=None, help="Explicit Wine binary path")
+    p.add_argument("--dry-run", action="store_true", help="Print resolved launch plan without executing Wine")
+    p.add_argument("--json", action="store_true", help="Output dry-run plan as JSON")
+    p.add_argument("target", help="Path to Windows .exe, .msi, or .lnk file")
+    p.add_argument("target_args", nargs=argparse.REMAINDER, help="Arguments forwarded to the Windows application")
+    return p
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    extra = list(args.target_args)
+    if extra and extra[0] == "--":
+        extra = extra[1:]
+
+    try:
+        plan = build_launch_plan(
+            target_path=Path(args.target),
+            extra_args=extra,
+            profile=args.profile,
+            renderer_override=args.renderer,
+            sandbox_override=False if args.no_sandbox else None,
+            wine_bin=args.wine_bin,
+            auto_init_default=not args.no_auto_init,
+        )
+        if args.dry_run:
+            if args.json:
+                print(json.dumps(plan.to_dict(), ensure_ascii=False, indent=2))
+            else:
+                print(f"Profile: {plan.profile} ({plan.effective_arch})")
+                print(f"Target:  {plan.target_host_path} -> {plan.target_windows_path} ({plan.target_kind})")
+                print(f"Renderer: {plan.renderer.effective} ({plan.renderer.reason})")
+                print(f"Sandbox: {plan.sandbox_enabled} ({plan.sandbox_tool})")
+                if plan.sandbox_warning:
+                    print(f"Warning: {plan.sandbox_warning}")
+                print(f"Command: {' '.join(plan.command)}")
+            return 0
+        return execute_launch_plan(plan, sync_shortcuts=not args.no_sync_shortcuts)
+    except CompatibilityError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
