@@ -1881,17 +1881,53 @@ struct LimineEntry {
     module_paths: Vec<String>,
 }
 
+#[derive(Debug, Clone)]
+struct RawLimineNode {
+    depth: usize,
+    title_segment: String,
+    protocol: String,
+    kernel_path: String,
+    module_paths: Vec<String>,
+    has_non_comment_option: bool,
+}
+
 fn resolve_esp_relative_path(esp_dir: &Path, raw_uri: &str) -> Option<PathBuf> {
     let trimmed = raw_uri.trim();
     if trimmed.is_empty() {
         return None;
     }
-    let rel = if let Some(rest) = trimmed.strip_prefix("boot:///") {
+    // Limine paths may carry an optional `#<blake2b-hex-hash>` integrity suffix.
+    let without_hash = match trimmed.split_once('#') {
+        Some((path_part, hash_part)) => {
+            if hash_part.is_empty() || !hash_part.bytes().all(|b| b.is_ascii_hexdigit()) {
+                return None;
+            }
+            path_part
+        }
+        None => trimmed,
+    };
+    // Limine allows a leading `$` before a resource to indicate transparent gzip decompression.
+    let resource = without_hash.strip_prefix('$').unwrap_or(without_hash);
+    let rel = if let Some(after_boot) = resource.strip_prefix("boot(") {
+        let (part_arg, rest) = after_boot.split_once("):/")?;
+        if !part_arg.is_empty() {
+            if !part_arg.bytes().all(|b| b.is_ascii_digit()) {
+                return None;
+            }
+            let part_num = part_arg.parse::<u32>().ok()?;
+            if part_num == 0 {
+                return None;
+            }
+        }
         rest
-    } else if let Some(rest) = trimmed.strip_prefix("boot://") {
+    } else if let Some(rest) = resource.strip_prefix("boot:///") {
         rest
+    } else if let Some(rest) = resource.strip_prefix("boot://") {
+        rest
+    } else if resource.contains("://") || resource.contains("):") {
+        return None;
     } else {
-        trimmed.trim_start_matches('/')
+        resource.trim_start_matches('/')
     };
     if rel.is_empty() {
         return None;
@@ -1911,39 +1947,53 @@ fn resolve_esp_relative_path(esp_dir: &Path, raw_uri: &str) -> Option<PathBuf> {
 }
 
 fn parse_limine_entries(content: &str) -> Vec<LimineEntry> {
-    let mut entries = Vec::new();
-    let mut current: Option<LimineEntry> = None;
+    let mut nodes: Vec<RawLimineNode> = Vec::new();
+    let mut current: Option<RawLimineNode> = None;
 
     for raw_line in content.lines() {
         let trimmed = raw_line.trim();
         if trimmed.is_empty() || trimmed.starts_with('#') {
             continue;
         }
-        if trimmed.starts_with('/') && !trimmed.contains(':') {
-            if let Some(entry) = current.take() {
-                entries.push(entry);
+        if trimmed.starts_with('/') {
+            if let Some(node) = current.take() {
+                nodes.push(node);
             }
-            current = Some(LimineEntry {
-                title: trimmed.trim_start_matches('/').trim().to_string(),
+            let depth = trimmed.bytes().take_while(|&b| b == b'/').count();
+            let rest = &trimmed[depth..];
+            let title_segment = rest.strip_prefix('+').unwrap_or(rest).trim().to_string();
+            current = Some(RawLimineNode {
+                depth,
+                title_segment,
+                protocol: String::new(),
                 kernel_path: String::new(),
                 module_paths: Vec::new(),
+                has_non_comment_option: false,
             });
             continue;
         }
 
-        if let Some(ref mut entry) = current {
+        if let Some(ref mut node) = current {
             if let Some((key, val)) = trimmed.split_once(':') {
                 let k = key.trim().to_ascii_lowercase();
                 let v = val.trim().to_string();
+                if k != "comment" {
+                    node.has_non_comment_option = true;
+                }
                 match k.as_str() {
+                    "protocol" => {
+                        if node.protocol.is_empty() {
+                            node.protocol = v.to_ascii_lowercase();
+                        }
+                    }
                     "kernel_path" | "image_path" | "path" => {
-                        if entry.kernel_path.is_empty() {
-                            entry.kernel_path = v;
+                        if node.kernel_path.is_empty() {
+                            node.kernel_path = v;
                         }
                     }
                     "module_path" => {
                         if !v.is_empty() {
-                            entry.module_paths.push(v);
+                            node.module_paths.push(v);
                         }
                     }
                     _ => {}
@@ -1952,9 +2002,50 @@ fn parse_limine_entries(content: &str) -> Vec<LimineEntry> {
         }
     }
 
-    if let Some(entry) = current {
-        entries.push(entry);
+    if let Some(node) = current {
+        nodes.push(node);
     }
+
+    let mut entries = Vec::new();
+    let mut ancestors: Vec<(usize, String)> = Vec::new();
+
+    for (idx, node) in nodes.iter().enumerate() {
+        while ancestors.last().is_some_and(|(d, _)| *d >= node.depth) {
+            ancestors.pop();
+        }
+
+        let next_is_deeper = nodes.get(idx + 1).is_some_and(|next| next.depth > node.depth);
+        if next_is_deeper && !node.has_non_comment_option {
+            ancestors.push((node.depth, node.title_segment.clone()));
+            continue;
+        }
+
+        if matches!(
+            node.protocol.as_str(),
+            "efi" | "efi_chainload" | "chainload" | "bios_chainload"
+        ) {
+            continue;
+        }
+
+        let title = if ancestors.is_empty() {
+            node.title_segment.clone()
+        } else {
+            ancestors
+                .iter()
+                .map(|(_, seg)| seg.as_str())
+                .chain(std::iter::once(node.title_segment.as_str()))
+                .filter(|seg| !seg.is_empty())
+                .collect::<Vec<_>>()
+                .join(" / ")
+        };
+
+        entries.push(LimineEntry {
+            title,
+            kernel_path: node.kernel_path.clone(),
+            module_paths: node.module_paths.clone(),
+        });
+    }
+
     entries
 }
 
@@ -2204,7 +2295,7 @@ fn check_limine_integration(config: &DetectionConfig) -> (String, String, String
                             "Limine entry '{}' has an invalid or unsafe kernel path '{}'.",
                             entry.title, entry.kernel_path
                         ),
-                        "Use valid boot:/// paths inside /boot.".to_string(),
+                        "Use valid boot():/ or boot:/// paths inside /boot.".to_string(),
                         Vec::new(),
                     );
                 };
@@ -2234,7 +2325,7 @@ fn check_limine_integration(config: &DetectionConfig) -> (String, String, String
                                 "Limine entry '{}' has an invalid initramfs path '{}'.",
                                 entry.title, mod_uri
                             ),
-                            "Use valid boot:/// initramfs paths inside /boot.".to_string(),
+                            "Use valid boot():/ or boot:/// initramfs paths inside /boot.".to_string(),
                             Vec::new(),
                         );
                     };
@@ -7820,5 +7911,206 @@ echo '{{"root":[
         assert!(r14_ok.success, "expected standalone manual deletion to succeed: {:?}", r14_ok);
         let logged = fs::read_to_string(&delete_marker).unwrap();
         assert!(logged.contains("-c root delete --sync 14"), "unexpected snapper args: {logged}");
+    }
+
+    #[test]
+    fn boot_13_limine_12_hierarchical_entries_and_boot_uri_pass() {
+        let fx = TestFixture::new();
+        let mut cfg = fx.base_config();
+        cfg.pkcheck_bin = fx.write_exec("bin/pkcheck-ok", "exit 0\n");
+
+        // Verify URI resolver directly for Limine 8-12 boot():/, boot(N):/, hashes, gzip, and legacy URIs.
+        let esp = fx.path("boot");
+        assert_eq!(
+            resolve_esp_relative_path(&esp, "boot():/vmlinuz-linux-cachyos"),
+            Some(esp.join("vmlinuz-linux-cachyos"))
+        );
+        assert_eq!(
+            resolve_esp_relative_path(&esp, "boot(1):/vmlinuz-linux-cachyos#0123456789abcdef"),
+            Some(esp.join("vmlinuz-linux-cachyos"))
+        );
+        assert_eq!(
+            resolve_esp_relative_path(&esp, "$boot():/initramfs-linux-cachyos.img#deadbeef"),
+            Some(esp.join("initramfs-linux-cachyos.img"))
+        );
+        assert_eq!(
+            resolve_esp_relative_path(&esp, "boot:///vmlinuz-linux-cachyos"),
+            Some(esp.join("vmlinuz-linux-cachyos"))
+        );
+
+        // Real Limine 12 + limine-snapper-sync nested directory layout with timestamp colons and limine_history files.
+        fx.write(
+            "boot/a1b2c3d4/limine_history/vmlinuz-linux-cachyos_sha256_abc",
+            "hist-kernel",
+        );
+        fx.write(
+            "boot/a1b2c3d4/limine_history/initramfs-linux-cachyos.img_sha256_def",
+            "hist-initramfs",
+        );
+        fx.write(
+            "boot/limine.conf",
+            concat!(
+                "timeout: 5\n",
+                "/+Zethropol OS\n",
+                "    comment: machine-id=a1b2c3d4\n",
+                "    //7.3.4-1-cachyos\n",
+                "        protocol: linux\n",
+                "        kernel_path: boot():/vmlinuz-linux-cachyos#0123456789abcdef\n",
+                "        module_path: boot():/initramfs-linux-cachyos.img#fedcba9876543210\n",
+                "    //7.3.4-1-cachyos Fallback\n",
+                "        protocol: linux\n",
+                "        kernel_path: boot(1):/vmlinuz-linux-cachyos\n",
+                "        module_path: boot(1):/initramfs-linux-cachyos-fallback.img\n",
+                "    //Snapshots\n",
+                "    ### Auto-generated by limine-snapper-sync\n",
+                "    comment: 1 / 8 snapshots\n",
+                "    ///12 │ 2026-11-27 19:24:02\n",
+                "    comment: Manual pre-change\n",
+                "    ////7.3.4-1-cachyos\n",
+                "    protocol: linux\n",
+                "    kernel_path: boot():/a1b2c3d4/limine_history/vmlinuz-linux-cachyos_sha256_abc\n",
+                "    module_path: boot():/a1b2c3d4/limine_history/initramfs-linux-cachyos.img_sha256_def\n",
+                "/Windows Boot Manager\n",
+                "    protocol: efi_chainload\n",
+                "    image_path: guid(11111111-2222-3333-4444-555555555555):/EFI/Microsoft/Boot/bootmgfw.efi\n",
+            ),
+        );
+
+        let parsed = parse_limine_entries(&fs::read_to_string(fx.path("boot/limine.conf")).unwrap());
+        assert_eq!(parsed.len(), 3);
+        assert_eq!(parsed[0].title, "Zethropol OS / 7.3.4-1-cachyos");
+        assert_eq!(parsed[1].title, "Zethropol OS / 7.3.4-1-cachyos Fallback");
+        assert_eq!(
+            parsed[2].title,
+            "Zethropol OS / Snapshots / 12 │ 2026-11-27 19:24:02 / 7.3.4-1-cachyos"
+        );
+
+        let report = run_rollback_preflight(&cfg, 12, false);
+        assert_eq!(report.overall_status, "ready");
+        assert!(report.can_proceed);
+        assert!(!report.rollback_execution_enabled);
+        for chk in &report.checks {
+            assert_eq!(chk.status, "pass", "check {} failed: {}", chk.id, chk.reason);
+        }
+
+        // Even when preflight is ready, rollback execution remains strictly locked.
+        let mgr = RecoveryManager::new();
+        let rb = mgr.rollback_to_point_with_caller(&cfg, Some(":1.42"), 12);
+        assert!(!rb.success);
+        assert_eq!(rb.code, "unsupported");
+        assert!(rb.message.contains("rollback execution is disabled"));
+    }
+
+    #[test]
+    fn boot_14_limine_12_rejects_broken_leaf_unsafe_uri_and_snapshot_only_tree() {
+        let fx = TestFixture::new();
+        let cfg = fx.base_config();
+        let esp = fx.path("boot");
+
+        // Unsafe / invalid URIs must be rejected.
+        for bad in [
+            "boot():/../../etc/passwd",
+            "boot():///etc/passwd",
+            "boot(0):/vmlinuz-linux-cachyos",
+            "boot(abc):/vmlinuz-linux-cachyos",
+            "boot():/",
+            "boot():/vmlinuz-linux-cachyos#",
+            "boot():/vmlinuz-linux-cachyos#not-hex!",
+            "tftp():/vmlinuz-linux-cachyos",
+            "http://example.invalid/vmlinuz",
+        ] {
+            assert_eq!(
+                resolve_esp_relative_path(&esp, bad),
+                None,
+                "expected URI '{}' to be rejected",
+                bad
+            );
+        }
+
+        // 1. Leaf entry inside a directory missing module_path must block.
+        fx.write(
+            "boot/limine.conf",
+            concat!(
+                "/+Zethropol OS\n",
+                "    //7.3.4-1-cachyos\n",
+                "        protocol: linux\n",
+                "        kernel_path: boot():/vmlinuz-linux-cachyos\n",
+                "    //7.3.4-1-cachyos Fallback\n",
+                "        protocol: linux\n",
+                "        kernel_path: boot():/vmlinuz-linux-cachyos\n",
+                "        module_path: boot():/initramfs-linux-cachyos-fallback.img\n",
+            ),
+        );
+        let missing_mod = run_rollback_preflight(&cfg, 12, false);
+        assert_eq!(missing_mod.overall_status, "blocked");
+        assert!(!missing_mod.can_proceed);
+        assert_eq!(missing_mod.limine_status, "blocked");
+
+        // 2. Directory tree containing ONLY //Snapshots entries (primary removed) must block.
+        fx.write(
+            "boot/limine.conf",
+            concat!(
+                "/+Zethropol OS\n",
+                "    //Snapshots\n",
+                "    ///12 │ 2026-11-27 19:24:02\n",
+                "    ////7.3.4-1-cachyos\n",
+                "        protocol: linux\n",
+                "        kernel_path: boot():/vmlinuz-linux-cachyos\n",
+                "        module_path: boot():/initramfs-linux-cachyos.img\n",
+                "    ////7.3.4-1-cachyos Fallback\n",
+                "        protocol: linux\n",
+                "        kernel_path: boot():/vmlinuz-linux-cachyos\n",
+                "        module_path: boot():/initramfs-linux-cachyos-fallback.img\n",
+            ),
+        );
+        let snap_only = run_rollback_preflight(&cfg, 12, false);
+        assert_eq!(snap_only.overall_status, "blocked");
+        assert!(!snap_only.can_proceed);
+        assert_eq!(snap_only.limine_status, "blocked");
+
+        // 3. Traversal in boot():/ URI must block.
+        fx.write(
+            "boot/limine.conf",
+            concat!(
+                "/+Zethropol OS\n",
+                "    //7.3.4-1-cachyos\n",
+                "        protocol: linux\n",
+                "        kernel_path: boot():/../../etc/passwd\n",
+                "        module_path: boot():/initramfs-linux-cachyos.img\n",
+                "    //7.3.4-1-cachyos Fallback\n",
+                "        protocol: linux\n",
+                "        kernel_path: boot():/vmlinuz-linux-cachyos\n",
+                "        module_path: boot():/initramfs-linux-cachyos-fallback.img\n",
+            ),
+        );
+        let traversal = run_rollback_preflight(&cfg, 12, false);
+        assert_eq!(traversal.overall_status, "blocked");
+        assert!(!traversal.can_proceed);
+        assert_eq!(traversal.limine_status, "blocked");
+    }
+
+    #[test]
+    fn deployment_systemd_unit_preserves_usr_lib_modules_and_blocks_module_loading() {
+        let unit_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("deployment/systemd/zethropol-recovery.service");
+        let unit = fs::read_to_string(&unit_path)
+            .expect("zethropol-recovery.service must exist in deployment/systemd");
+        assert!(
+            !unit.contains("ProtectKernelModules=true")
+                && !unit.contains("ProtectKernelModules=yes"),
+            "ProtectKernelModules hides /usr/lib/modules and breaks kernel_modules_compatibility"
+        );
+        assert!(
+            unit.contains("ProtectSystem=full"),
+            "ProtectSystem=full must keep /usr/lib/modules read-only"
+        );
+        assert!(
+            unit.contains("CapabilityBoundingSet=~CAP_SYS_MODULE"),
+            "Unit must explicitly drop CAP_SYS_MODULE"
+        );
+        assert!(
+            unit.contains("SystemCallFilter=~@module"),
+            "Unit must explicitly block @module syscalls"
+        );
     }
 }

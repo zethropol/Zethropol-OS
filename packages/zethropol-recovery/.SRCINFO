@@ -1,7 +1,7 @@
 pkgbase = zethropol-recovery
 	pkgdesc = Zethropol Recovery D-Bus service
 	pkgver = 0.1.0
-	pkgrel = 2
+	pkgrel = 3
 	url = https://github.com/zethropol/Zethropol-OS
 	arch = x86_64
 	license = MIT
@@ -11,7 +11,7 @@ pkgbase = zethropol-recovery
 	depends = systemd
 	depends = polkit
 	optdepends = snapper: Btrfs recovery point backend
-	source = zethropol-recovery-0.1.0-2-src.tar.gz
-	sha256sums = 13d0bcb9d95ea68fcaf7f5c4f6cbe742f4909b004cb2e73671fafafc7d4229c3
+	source = zethropol-recovery-0.1.0-3-src.tar.gz
+	sha256sums = b1869914e21f650cb08abada234c1ab1c579411699190bba5f7ec734a8679ba0
 
 pkgname = zethropol-recovery
