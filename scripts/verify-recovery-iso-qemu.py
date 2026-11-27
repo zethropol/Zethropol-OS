@@ -26,7 +26,13 @@ import time
 
 OVMF_CODE = Path('/usr/share/edk2/x64/OVMF_CODE.4m.fd')
 OVMF_VARS_SRC = Path('/usr/share/edk2/x64/OVMF_VARS.4m.fd')
-ANSI_RE = re.compile(r'\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07|\r')
+ANSI_RE = re.compile(
+    r'\x1b\[[0-9;?]*[A-Za-z]'
+    r'|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)'
+    r'|\x1b\([A-Za-z0-9]'
+    r'|\x1b[=>]'
+    r'|\r'
+)
 
 
 def strip_ansi(text: str) -> str:
@@ -46,7 +52,7 @@ def find_latest_iso() -> Path:
 
 def read_until(master_fd: int, pattern: str, timeout: float, log_chunks: list) -> str:
     deadline = time.monotonic() + timeout
-    buf = ''
+    raw_buf = ''
     while time.monotonic() < deadline:
         remaining = max(0.05, min(0.5, deadline - time.monotonic()))
         r, _, _ = select.select([master_fd], [], [], remaining)
@@ -60,10 +66,11 @@ def read_until(master_fd: int, pattern: str, timeout: float, log_chunks: list) -
             break
         chunk = data.decode('utf-8', errors='replace')
         log_chunks.append(chunk)
-        buf += strip_ansi(chunk)
-        if re.search(pattern, buf):
-            return buf
-    raise TimeoutError(f'Timed out after {timeout}s waiting for pattern {pattern!r}. Tail:\n{buf[-1500:]}')
+        raw_buf += chunk
+        clean = strip_ansi(raw_buf)
+        if re.search(pattern, clean):
+            return clean
+    raise TimeoutError(f'Timed out after {timeout}s waiting for pattern {pattern!r}. Tail:\n{strip_ansi(raw_buf)[-1500:]}')
 
 
 def run_serial_cmd(master_fd: int, cmd: str, tag: str, timeout: float, log_chunks: list) -> str:
@@ -123,6 +130,10 @@ def main() -> int:
         # Wait for autologin zsh prompt on ttyS0
         read_until(master_fd, r'root@zethropol-recovery[^\n]*[#%]\s*', args.boot_timeout, log_chunks)
         print('==> Live UEFI ISO shell reached on ttyS0!', flush=True)
+
+        # Disable TTY echo & ZLE so command payloads are not matched as output delimiters
+        os.write(master_fd, b"stty -echo; unsetopt zle 2>/dev/null || true; printf '\\n__ZETH_READY__\\n'\n")
+        read_until(master_fd, r'\n__ZETH_READY__\n', 20, log_chunks)
 
         efi_out, efi_rc = run_serial_cmd(master_fd, 'test -d /sys/firmware/efi && echo EFI_OK', 'EFI', 20, log_chunks)
         host_out, host_rc = run_serial_cmd(master_fd, 'cat /etc/hostname', 'HOST', 20, log_chunks)
