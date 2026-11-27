@@ -1,6 +1,6 @@
 pkgname=zethropol-control-center
 pkgver=0.1.0
-pkgrel=4
+pkgrel=5
 pkgdesc="Zethropol OS desktop control center"
 arch=('x86_64')
 url="https://github.com/zethropol/Zethropol-OS"
@@ -34,11 +34,12 @@ optdepends=(
     'snapper: Btrfs snapshot backend for Recovery'
     'fwupd: firmware metadata via zethropol-hardware'
     'smartmontools: SMART diagnostics via zethropol-hardware'
+    'zethropol-compatibility: Windows compatibility prefix management and Wine runner'
     'zethropol-diagnostics: Zethropol Diagnostics D-Bus service'
     'zethropol-security: Zethropol Security D-Bus service'
 )
 source=("${pkgname}-${pkgver}-${pkgrel}-src.tar.gz")
-sha256sums=('d0a95506aaa91c50de1a33451b1a3511d045a94d333491eb1aab43ed8a485d6f')
+sha256sums=('fb29a379fe94c727796b237ade06d21f2f35f201b0aed7bc8b780f0ad07a2a18')
 
 build() {
     cmake -S "$srcdir/${pkgname}-${pkgver}/desktop/control-center" \
@@ -56,6 +57,7 @@ check() {
                    control_center_update_installer_test \
                    control_center_process_service_test \
                    control_center_security_remediation_test \
+                   control_center_compatibility_test \
                    control_center_tabs_test \
                    control_center_hardware_test
 
@@ -64,6 +66,8 @@ check() {
         "$srcdir/build/control_center_update_installer_test"
     "$srcdir/build/control_center_process_service_test"
     "$srcdir/build/control_center_security_remediation_test"
+    QT_QPA_PLATFORM=offscreen \
+        "$srcdir/build/control_center_compatibility_test"
     QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
         sh "$srcdir/${pkgname}-${pkgver}/desktop/control-center/tests/hardware-private-bus.sh" \
         "$srcdir/build/control_center_tabs_test"
@@ -91,7 +95,7 @@ package() {
         "$_qmlroot/qmldir"
 
     local _qml
-    for _qml in HardwarePage.qml Main.qml ProcessesPage.qml SystemState.qml UpdateReport.qml; do
+    for _qml in CompatibilityPage.qml HardwarePage.qml Main.qml ProcessesPage.qml SystemState.qml UpdateReport.qml; do
         install -Dm644 "$srcdir/build/Zethropol/ControlCenter/qml/$_qml" \
             "$_qmlroot/qml/$_qml"
     done
