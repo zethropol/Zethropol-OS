@@ -1,16 +1,17 @@
 pkgbase = zethropol-services
 	pkgdesc = Zethropol Services D-Bus service
 	pkgver = 0.1.0
-	pkgrel = 2
+	pkgrel = 3
 	url = https://github.com/zethropol/Zethropol-OS
 	arch = x86_64
 	license = MIT
 	makedepends = cargo
 	depends = glibc
+	depends = gcc-libs
 	depends = dbus
 	depends = systemd
 	depends = polkit
-	source = zethropol-services-0.1.0-2-src.tar.gz
-	sha256sums = 60f73642781e89d042ab62d44e3f080d83f1c9df8d7df90957d07528a39c6bea
+	source = zethropol-services-0.1.0-3-src.tar.gz
+	sha256sums = bdf9f6cea31a4f046b9b05af8edf427ccb471f7d2ee4607fc2351a74d2e0aaf1
 
 pkgname = zethropol-services

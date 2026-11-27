@@ -1,6 +1,6 @@
 pkgname=zethropol-control-center
 pkgver=0.1.0
-pkgrel=3
+pkgrel=4
 pkgdesc="Zethropol OS desktop control center"
 arch=('x86_64')
 url="https://github.com/zethropol/Zethropol-OS"
@@ -38,13 +38,14 @@ optdepends=(
     'zethropol-security: Zethropol Security D-Bus service'
 )
 source=("${pkgname}-${pkgver}-${pkgrel}-src.tar.gz")
-sha256sums=('93f89fc923cb7d04f0c33c5fbae2ac03b8f46881dfef97d0e112fbfe94e5d6c7')
+sha256sums=('d0a95506aaa91c50de1a33451b1a3511d045a94d333491eb1aab43ed8a485d6f')
 
 build() {
     cmake -S "$srcdir/${pkgname}-${pkgver}/desktop/control-center" \
           -B "$srcdir/build" \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_INSTALL_PREFIX=/usr \
+          -DCMAKE_CXX_FLAGS="${CXXFLAGS} -ffile-prefix-map=${srcdir}=/build -fdebug-prefix-map=${srcdir}=/build" \
           -DBUILD_TESTING=ON
     cmake --build "$srcdir/build" --parallel --target control_center
 }

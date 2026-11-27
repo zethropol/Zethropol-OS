@@ -2,13 +2,13 @@
 
 Arch Linux package definition for the Zethropol Performance D-Bus service.
 
-> **Status:** `zethropol-performance 0.1.0-2` is **deployed live and verified** (2026-11-27): `pacman -Qkk` (`18` files, `0` modified), `/etc/systemd/system/zethropol-performance.service.d/99-zethropol-quarantine.conf` backed up under `backups/performance-quarantine-backup/` and removed, `systemctl is-active`: `active`, `busctl GetState`: `success=true`, `code="ok"` (`18` live metrics), `systemd-analyze security`: `3.6 OK :-)`. Built artifacts remain verified in `packages/zethropol-performance/SHA256SUMS` (`2/2` OK; `.pkg.tar.zst` SHA-256: `b421a05162576ec92ad318e126389d98d012ab4003e04050513274772c549b13`, `0` `/home/Zevor` leaks).
+> **Status:** Live installed version is `zethropol-performance 0.1.0-2` (verified 2026-11-27, quarantine removed, `systemd-analyze security`: `3.6 OK :-)`). Next release **`zethropol-performance 0.1.0-3`** (`P4C`: zero-fork `org.zethropol.Hardware.v1.GetTelemetry` client + `connection.closed().await` recovery) is **built and verified rootlessly** (`10/10` Rust tests including private D-Bus test, `0` `/home/Zevor` leaks, `.pkg.tar.zst` SHA-256 `85bed4d2c34dc33b46aa32fd700016b15c8edc03cb08a969d9d5107ed6410830`) and awaits explicit live `pacman -U` approval.
 
 ## D-Bus identity
 
 - Bus name: `org.zethropol.Performance`
 - Object path: `/org/zethropol/Performance`
-- Interface: `org.zethropol.Performance.v1` (read-only `GetState` projection over `org.zethropol.Hardware.v1.GetState`)
+- Interface: `org.zethropol.Performance.v1` (read-only `GetState` projection over zero-fork `org.zethropol.Hardware.v1.GetTelemetry` as of `0.1.0-3`)
 
 ## Runtime components
 

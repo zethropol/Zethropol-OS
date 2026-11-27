@@ -1,22 +1,24 @@
 pkgname=zethropol-services
 pkgver=0.1.0
-pkgrel=2
+pkgrel=3
 pkgdesc="Zethropol Services D-Bus service"
 url="https://github.com/zethropol/Zethropol-OS"
 arch=("x86_64")
 license=("MIT")
-depends=("glibc" "dbus" "systemd" "polkit")
+depends=("glibc" "gcc-libs" "dbus" "systemd" "polkit")
 makedepends=("cargo")
 source=("${pkgname}-${pkgver}-${pkgrel}-src.tar.gz")
-sha256sums=("60f73642781e89d042ab62d44e3f080d83f1c9df8d7df90957d07528a39c6bea")
+sha256sums=("bdf9f6cea31a4f046b9b05af8edf427ccb471f7d2ee4607fc2351a74d2e0aaf1")
 
 build() {
     cd "$srcdir/${pkgname}-${pkgver}/services/services"
+    export RUSTFLAGS="--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo --remap-path-prefix=${HOME}=/home/build --remap-path-prefix=${srcdir}=/build ${RUSTFLAGS:-}"
     cargo build --release --locked --offline
 }
 
 check() {
     cd "$srcdir/${pkgname}-${pkgver}/services/services"
+    export RUSTFLAGS="--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo --remap-path-prefix=${HOME}=/home/build --remap-path-prefix=${srcdir}=/build ${RUSTFLAGS:-}"
     cargo test --locked --offline
 }
 
@@ -28,4 +30,5 @@ package() {
     install -Dm644 deployment/dbus/org.zethropol.Services.service "$pkgdir/usr/share/dbus-1/system-services/org.zethropol.Services.service"
     install -Dm644 deployment/systemd/zethropol-services.service "$pkgdir/usr/lib/systemd/system/zethropol-services.service"
     install -Dm644 deployment/polkit/org.zethropol.services.policy "$pkgdir/usr/share/polkit-1/actions/org.zethropol.services.policy"
+    install -Dm644 "$srcdir/${pkgname}-${pkgver}/LICENSE" "$pkgdir/usr/share/licenses/${pkgname}/LICENSE"
 }

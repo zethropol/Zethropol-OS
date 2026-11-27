@@ -54,14 +54,16 @@
 
 ## 3. Açık Takip Kayıtları
 
-1. **Canlı Paket Yükseltme Kuyruğu (Kaynakta Hazır, Ayrı Canlı Onay Bekler):**
-   - `zethropol-performance 0.1.0-3` (`P4C` `GetTelemetry` istemcisi + bağlantı kopma kurtarması; canlıda `0.1.0-2`).
-   - `zethropol-services` ve `zethropol-control-center` sonraki sürümleri (`P2B` karantina temizliği dahil; canlıda `services 0.1.0-2` ve `control-center 0.1.0-3`).
-2. **ZCI / ZEKANS Takip Kaydı (`P3C`):**
-   - `P3A` doğrulandı (`9/9` + izole WebUI `PASS`). Canlı kullanıcı servisinin (`8087`/`8088`, gerçek `webui.db`/`settings.json`) varsayılan modele geçirilmesi (`P3C`) ayrı açık kullanıcı onayı bekler; `AGENTS.md` ve `docs/SECURITY.md` gereği ZCI/ZEKANS için ayrıcalık veya güvenlik istisnası varsayılmaz.
+1. **Canlı Paket Yükseltme Kuyruğu (İzole Paketler Üretildi & Doğrulandı, Canlı `pacman -U` Onayı Bekler):**
+   - `zethropol-performance 0.1.0-3` (`P4C` `GetTelemetry` + bağlantı kopma kurtarması; `10/10` Rust testi, `0` `/home/Zevor` sızıntısı, `.pkg.tar.zst` SHA-256 `85bed4d2c34dc33b46aa32fd700016b15c8edc03cb08a969d9d5107ed6410830`; canlıda `0.1.0-2`).
+   - `zethropol-services 0.1.0-3` (`P2B` karantina temizliği + `--remap-path-prefix`; `5/5` Rust testi, `0` `/home/Zevor` sızıntısı, `.pkg.tar.zst` SHA-256 `d4255ef7122b9f4067390875fa729e8189695fb031b203083510a984d3375fe3`; canlıda `0.1.0-2`).
+   - `zethropol-control-center 0.1.0-4` (`P2B` karantina temizliği + `m_liveExecutionEnabled=false` korunarak; `6/6` QTest hedefi / `62/62` senaryo PASS, `0` `/home/Zevor` sızıntısı, `.pkg.tar.zst` SHA-256 `8ae82fcc4c604c6acf2f47d72f356dc70fcde28c4cc897f26e4442febdddfdf7`; canlıda `0.1.0-3`).
+2. **ZCI / ZEKANS Takip Kaydı (`P3C` — Canlı `8088` WebUI Ön Kontrolü Tamamlandı):**
+   - `P3A` commit edildi (`203286c`). Ön kontrol bulgusu: `~/.local/share/zci/{start.sh,start-chat.py}` ve `~/.local/bin/zci-code` başlatıcıları 2026-11-16 tarihinde `shared_gemma.py` (`19086`/`29016`) üzerine geçirilmiş ve `backups/gemma-live-transition-20261116` yedeği alınmış durumda; şu an hiçbir ZCI portu (`8087`/`8088`/`19086`/`29016`) dinlemiyor ve `~/.local/share/zci/webui/{documents,model,webui}.pid` bayat PID dosyaları mevcut. `webui/settings.json` ve `webui/data/webui.db` gizlilik sınırı gereği okunmadı; canlı `8088` doğrulaması ve olası ayar/başlatıcı güncellemesi açık kullanıcı onayı bekler.
 3. **İsteğe Bağlı Depo Temizliği (Düşük Öncelikli Mimari Bakım):**
    - `Performance` ile `Power` servisi rol sınırı değerlendirmesi ve kök dizin artıklarının (`src/main.rs`, boş `desktop/control-center/src/core/`) gözden geçirilmesi.
 4. **Control Center Kilitli / `NOT VERIFIED` Kapsamı (`P5` — İzole KVM/QEMU Btrfs + Limine VM):**
    - Canlı masaüstündeki `m_liveExecutionEnabled=false`, `rollback_execution_enabled=false` ve `repair_execution_enabled=false` kilitleri korunur; 7 canlı durum değiştiren işlem ile `docs/RECOVERY_FAILURE_TEST_MATRIX.md` (`/boot umask=0077`, `snap-pac`, Limine snapshot boot) doğrulamaları izole **KVM/QEMU Btrfs + Limine VM** üzerinde yürütülecektir.
+   - Ortam ön kontrolü (2026-11-27): `/dev/kvm`, `btrfs`, `limine` ve `mkarchiso` **mevcut**; **`qemu-system-x86_64`, `qemu-img` ve `edk2-ovmf` (`/usr/share/edk2/x64`) eksik** (tek komutluk kurulum: `sudo pacman -S --needed qemu-base edk2-ovmf`, isteğe bağlı `swtpm`).
 5. **Kurulum ve ISO Altyapısı (`P6` / Aşama 7) ve Çoklu Donanım (`P7` / Aşama 8):**
    - Tekrarlanabilir yerel paket deposu, `build/recovery/` ArchISO güncellemesi + QEMU/OVMF testi (`P6`) ve dış donanım bağımlı çoklu donanım doğrulaması (`P7`) sonraki faz kayıtlarıdır.

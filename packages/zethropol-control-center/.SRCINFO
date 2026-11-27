@@ -1,7 +1,7 @@
 pkgbase = zethropol-control-center
 	pkgdesc = Zethropol OS desktop control center
 	pkgver = 0.1.0
-	pkgrel = 3
+	pkgrel = 4
 	url = https://github.com/zethropol/Zethropol-OS
 	arch = x86_64
 	license = MIT
@@ -33,7 +33,7 @@ pkgbase = zethropol-control-center
 	optdepends = smartmontools: SMART diagnostics via zethropol-hardware
 	optdepends = zethropol-diagnostics: Zethropol Diagnostics D-Bus service
 	optdepends = zethropol-security: Zethropol Security D-Bus service
-	source = zethropol-control-center-0.1.0-3-src.tar.gz
-	sha256sums = 93f89fc923cb7d04f0c33c5fbae2ac03b8f46881dfef97d0e112fbfe94e5d6c7
+	source = zethropol-control-center-0.1.0-4-src.tar.gz
+	sha256sums = d0a95506aaa91c50de1a33451b1a3511d045a94d333491eb1aab43ed8a485d6f
 
 pkgname = zethropol-control-center

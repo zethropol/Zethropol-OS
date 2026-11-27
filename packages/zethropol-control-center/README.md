@@ -1,6 +1,6 @@
-# Zethropol Control Center Package (`0.1.0-2` Tarihsel Hazırlık Notu — Güncel Kurulu Taban: `0.1.0-3`)
+# Zethropol Control Center Package (`0.1.0-4` İzole Hazırlık — Kurulu Taban: `0.1.0-3`)
 
-> **Güncel Durum (2026-11-27):** Bu belge tarihsel `0.1.0-2` (03.2.17) paket hazırlık kaydını korur. Canlı sistemde kurulu ve resmen kabul edilmiş referans sürüm **`zethropol-control-center 0.1.0-3`** paketidir (`PKGBUILD`, `pacman -Qkk`: 23 toplam dosya, 0 değiştirilmiş; resmî kapanış: `docs/CONTROL_CENTER_CLOSURE_0.1.0-3.md`).
+> **Güncel Durum (2026-11-27):** Canlı sistemde kurulu referans sürüm **`zethropol-control-center 0.1.0-3`** paketidir (`docs/CONTROL_CENTER_CLOSURE_0.1.0-3.md`). Yeni **`zethropol-control-center 0.1.0-4`** paketi (`P2B`: `ServiceService.cpp` içindeki eski `zethropol-performance.service` karantina sabitinin temizlenmesi + `m_liveExecutionEnabled=false` kilidi korunarak) root'suz `makepkg --clean --force` ile **izole olarak derlenip doğrulandı** (`6/6` QTest hedefi, toplam `62/62` senaryo PASS, ELF `/home/Zevor` sızıntısı `0`, `.pkg.tar.zst` SHA-256 `8ae82fcc4c604c6acf2f47d72f356dc70fcde28c4cc897f26e4442febdddfdf7`); canlı `pacman -U` kurulumu ayrı onay bekler. Aşağıdaki bölüm tarihsel `0.1.0-2` (03.2.17) paket hazırlık kaydını korur.
 
 Bu dizin, kurulu `zethropol-control-center 0.1.0-1` paketine dokunmadan 03.2.17 kapsamında kabul edilen **7 Control Center dosyasından** root'suz olarak hazırlanan `zethropol-control-center 0.1.0-2` paketini ve doğrulama kayıtlarını içerir.
 
