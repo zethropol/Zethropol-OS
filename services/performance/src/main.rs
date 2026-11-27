@@ -7,7 +7,7 @@ fn main() {
     runtime.block_on(async {
         let service = dbus::PerformanceService;
 
-        let _connection = zbus::connection::Builder::system()
+        let connection = zbus::connection::Builder::system()
             .expect("failed to connect to system D-Bus")
             .name("org.zethropol.Performance")
             .expect("failed to acquire D-Bus service name")
@@ -17,6 +17,8 @@ fn main() {
             .await
             .expect("failed to build Performance D-Bus service connection");
 
-        std::future::pending::<()>().await;
+        connection.closed().await;
+        eprintln!("Performance D-Bus connection closed; exiting for service manager recovery.");
+        std::process::exit(1);
     });
 }

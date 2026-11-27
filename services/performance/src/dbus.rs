@@ -2,11 +2,13 @@ use std::collections::HashMap;
 
 use serde_json::Value;
 use zbus::interface;
+use zbus::proxy::CacheProperties;
 use zbus::zvariant::{OwnedValue, Str};
 
 const HARDWARE_SERVICE: &str = "org.zethropol.Hardware";
 const HARDWARE_PATH: &str = "/org/zethropol/Hardware";
 const HARDWARE_INTERFACE: &str = "org.zethropol.Hardware.v1";
+const HARDWARE_TELEMETRY_METHOD: &str = "GetTelemetry";
 
 fn value_to_owned(value: Value) -> Option<OwnedValue> {
     match value {
@@ -35,24 +37,66 @@ fn value_to_owned(value: Value) -> Option<OwnedValue> {
     }
 }
 
-async fn read_hardware_state() -> zbus::fdo::Result<HashMap<String, OwnedValue>> {
-    let connection = zbus::Connection::system()
+async fn read_hardware_telemetry(
+    connection: &zbus::Connection,
+) -> zbus::fdo::Result<HashMap<String, OwnedValue>> {
+    let proxy: zbus::Proxy<'_> = zbus::proxy::Builder::new(connection)
+        .destination(HARDWARE_SERVICE)
+        .map_err(|error| zbus::fdo::Error::Failed(error.to_string()))?
+        .path(HARDWARE_PATH)
+        .map_err(|error| zbus::fdo::Error::Failed(error.to_string()))?
+        .interface(HARDWARE_INTERFACE)
+        .map_err(|error| zbus::fdo::Error::Failed(error.to_string()))?
+        .cache_properties(CacheProperties::No)
+        .build()
         .await
         .map_err(|error| zbus::fdo::Error::Failed(error.to_string()))?;
 
-    let proxy = zbus::Proxy::new(
-        &connection,
-        HARDWARE_SERVICE,
-        HARDWARE_PATH,
-        HARDWARE_INTERFACE,
-    )
-    .await
-    .map_err(|error| zbus::fdo::Error::Failed(error.to_string()))?;
-
     proxy
-        .call("GetState", &())
+        .call(HARDWARE_TELEMETRY_METHOD, &())
         .await
         .map_err(|error| zbus::fdo::Error::Failed(error.to_string()))
+}
+
+fn unwrap_hardware_envelope(
+    hardware_result: &HashMap<String, OwnedValue>,
+) -> zbus::fdo::Result<&OwnedValue> {
+    let success = hardware_result
+        .get("success")
+        .and_then(|value| bool::try_from(value).ok())
+        .unwrap_or(false);
+    if !success {
+        let code = hardware_result
+            .get("code")
+            .and_then(|value| value.try_clone().ok())
+            .and_then(|value| String::try_from(value).ok())
+            .unwrap_or_else(|| "unknown".to_string());
+        let message = hardware_result
+            .get("message")
+            .and_then(|value| value.try_clone().ok())
+            .and_then(|value| String::try_from(value).ok())
+            .unwrap_or_default();
+        let detail = if message.is_empty() {
+            format!("hardware telemetry failed (code={code})")
+        } else {
+            format!("hardware telemetry failed (code={code}): {message}")
+        };
+        return Err(zbus::fdo::Error::Failed(detail));
+    }
+
+    hardware_result
+        .get("data")
+        .ok_or_else(|| zbus::fdo::Error::Failed("hardware telemetry has no data".to_string()))
+}
+
+fn extract_number(value: &OwnedValue) -> Option<f64> {
+    let parsed = f64::try_from(value)
+        .ok()
+        .or_else(|| u64::try_from(value).ok().map(|v| v as f64))
+        .or_else(|| i64::try_from(value).ok().map(|v| v as f64))
+        .or_else(|| u32::try_from(value).ok().map(|v| v as f64))
+        .or_else(|| i32::try_from(value).ok().map(|v| v as f64))?;
+    parsed.is_finite().then_some(parsed)
 }
 
 fn extract_performance(value: &OwnedValue) -> zbus::fdo::Result<Value> {
@@ -68,9 +112,7 @@ fn extract_performance(value: &OwnedValue) -> zbus::fdo::Result<Value> {
     };
 
     let number = |section: &HashMap<String, OwnedValue>, name: &str| -> Option<f64> {
-        section
-            .get(name)
-            .and_then(|value| f64::try_from(value).ok())
+        section.get(name).and_then(extract_number)
     };
 
     let mut performance = serde_json::Map::new();
@@ -153,12 +195,12 @@ pub struct PerformanceService;
 
 #[interface(name = "org.zethropol.Performance.v1")]
 impl PerformanceService {
-    async fn get_state(&self) -> zbus::fdo::Result<HashMap<String, OwnedValue>> {
-        let hardware_result = read_hardware_state().await?;
-
-        let hardware_data = hardware_result
-            .get("data")
-            .ok_or_else(|| zbus::fdo::Error::Failed("hardware state has no data".to_string()))?;
+    async fn get_state(
+        &self,
+        #[zbus(connection)] connection: &zbus::Connection,
+    ) -> zbus::fdo::Result<HashMap<String, OwnedValue>> {
+        let hardware_result = read_hardware_telemetry(connection).await?;
+        let hardware_data = unwrap_hardware_envelope(&hardware_result)?;
 
         let performance = extract_performance(hardware_data)?;
         let json = serde_json::to_value(performance)
@@ -388,5 +430,231 @@ mod tests {
             !unit.contains("ReadWritePaths="),
             "read-only performance service should not declare ReadWritePaths"
         );
+    }
+
+    #[test]
+    fn hardware_client_uses_get_telemetry_only() {
+        assert_eq!(HARDWARE_TELEMETRY_METHOD, "GetTelemetry");
+    }
+
+    #[test]
+    fn unwrap_hardware_envelope_rejects_unsuccessful_or_dataless_replies() {
+        let mut failed = HashMap::new();
+        failed.insert("success".to_string(), OwnedValue::from(false));
+        failed.insert("code".to_string(), OwnedValue::from(Str::from("hardware_error")));
+        failed.insert("message".to_string(), OwnedValue::from(Str::from("sensor offline")));
+        let err = unwrap_hardware_envelope(&failed).expect_err("success=false must fail");
+        assert!(err.to_string().contains("hardware_error"));
+        assert!(err.to_string().contains("sensor offline"));
+
+        let mut missing_data = HashMap::new();
+        missing_data.insert("success".to_string(), OwnedValue::from(true));
+        missing_data.insert("code".to_string(), OwnedValue::from(Str::from("ok")));
+        assert!(unwrap_hardware_envelope(&missing_data).is_err());
+
+        let mut valid = HashMap::new();
+        valid.insert("success".to_string(), OwnedValue::from(true));
+        valid.insert("code".to_string(), OwnedValue::from(Str::from("ok")));
+        valid.insert("data".to_string(), owned_object(vec![]));
+        assert!(unwrap_hardware_envelope(&valid).is_ok());
+    }
+
+    #[test]
+    fn extract_performance_coerces_integers_and_skips_non_finite_values() {
+        let root = owned_object(vec![
+            (
+                "cpu",
+                owned_object(vec![
+                    ("usage_percent", OwnedValue::from(25_u64)),
+                    ("temperature_c", OwnedValue::from(f64::NAN)),
+                    ("frequency_ghz", OwnedValue::from(f64::INFINITY)),
+                ]),
+            ),
+            (
+                "gpu",
+                owned_object(vec![
+                    ("core_clock_mhz", OwnedValue::from(1200_i64)),
+                    ("memory_clock_mhz", OwnedValue::from(1750_u32)),
+                    ("temperature_c", OwnedValue::from(48_i32)),
+                ]),
+            ),
+        ]);
+
+        let extracted = extract_performance(&root).expect("mixed integer/float map should extract");
+        let obj = extracted.as_object().expect("result should be JSON object");
+
+        assert_eq!(obj.len(), 4);
+        assert_eq!(obj["cpu_usage_percent"], Value::from(25.0));
+        assert!(!obj.contains_key("cpu_temperature_c"));
+        assert!(!obj.contains_key("cpu_frequency_ghz"));
+        assert_eq!(obj["gpu_core_clock_mhz"], Value::from(1200.0));
+        assert_eq!(obj["gpu_memory_clock_mhz"], Value::from(1750.0));
+        assert_eq!(obj["gpu_temperature_c"], Value::from(48.0));
+    }
+
+    struct PrivateDbusDaemon {
+        child: std::process::Child,
+        address: String,
+    }
+
+    impl PrivateDbusDaemon {
+        fn start() -> Self {
+            use std::io::{BufRead, BufReader};
+            use std::process::{Command, Stdio};
+
+            let mut child = Command::new("/usr/bin/dbus-daemon")
+                .args(["--session", "--nofork", "--nopidfile", "--print-address=1"])
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .spawn()
+                .expect("failed to spawn private dbus-daemon for test");
+
+            let stdout = child.stdout.take().expect("dbus-daemon stdout should be piped");
+            let mut reader = BufReader::new(stdout);
+            let mut address = String::new();
+            reader
+                .read_line(&mut address)
+                .expect("failed to read private dbus-daemon address");
+            let address = address.trim().to_string();
+            assert!(!address.is_empty(), "private dbus-daemon returned empty address");
+            Self { child, address }
+        }
+    }
+
+    impl Drop for PrivateDbusDaemon {
+        fn drop(&mut self) {
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
+    }
+
+    struct FakeHardwareService {
+        get_telemetry_calls: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+        get_state_calls: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    #[interface(name = "org.zethropol.Hardware.v1")]
+    impl FakeHardwareService {
+        async fn get_telemetry(&self) -> zbus::fdo::Result<HashMap<String, OwnedValue>> {
+            self.get_telemetry_calls
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+
+            let data = owned_object(vec![
+                (
+                    "cpu",
+                    owned_object(vec![
+                        ("usage_percent", OwnedValue::from(18.5_f64)),
+                        ("temperature_c", OwnedValue::from(49.0_f64)),
+                        ("frequency_ghz", OwnedValue::from(3.6_f64)),
+                    ]),
+                ),
+                (
+                    "memory",
+                    owned_object(vec![
+                        ("used_gb", OwnedValue::from(8.0_f64)),
+                        ("total_gb", OwnedValue::from(32.0_f64)),
+                    ]),
+                ),
+                (
+                    "normalized_storage",
+                    owned_object(vec![
+                        ("used_gb", OwnedValue::from(120_u64)),
+                        ("capacity_gb", OwnedValue::from(500_u64)),
+                        ("available_gb", OwnedValue::from(380_u64)),
+                    ]),
+                ),
+            ]);
+
+            let mut envelope = HashMap::new();
+            envelope.insert("success".to_string(), OwnedValue::from(true));
+            envelope.insert("code".to_string(), OwnedValue::from(Str::from("ok")));
+            envelope.insert("message".to_string(), OwnedValue::from(Str::from("")));
+            envelope.insert("operationId".to_string(), OwnedValue::from(Str::from("")));
+            envelope.insert("data".to_string(), data);
+            Ok(envelope)
+        }
+
+        async fn get_state(&self) -> zbus::fdo::Result<HashMap<String, OwnedValue>> {
+            self.get_state_calls
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Err(zbus::fdo::Error::Failed(
+                "heavy Hardware.v1.GetState must never be called by Performance".to_string(),
+            ))
+        }
+    }
+
+    #[tokio::test]
+    async fn private_bus_get_state_uses_hardware_get_telemetry_only() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let daemon = PrivateDbusDaemon::start();
+        let get_telemetry_calls = Arc::new(AtomicUsize::new(0));
+        let get_state_calls = Arc::new(AtomicUsize::new(0));
+
+        let fake_hw = FakeHardwareService {
+            get_telemetry_calls: Arc::clone(&get_telemetry_calls),
+            get_state_calls: Arc::clone(&get_state_calls),
+        };
+
+        let _hw_conn = zbus::connection::Builder::address(daemon.address.as_str())
+            .expect("valid private bus address")
+            .name(HARDWARE_SERVICE)
+            .expect("valid hardware service name")
+            .serve_at(HARDWARE_PATH, fake_hw)
+            .expect("register fake hardware service")
+            .build()
+            .await
+            .expect("connect fake hardware service");
+
+        let _perf_conn = zbus::connection::Builder::address(daemon.address.as_str())
+            .expect("valid private bus address")
+            .name("org.zethropol.Performance")
+            .expect("valid performance service name")
+            .serve_at("/org/zethropol/Performance", PerformanceService)
+            .expect("register performance service")
+            .build()
+            .await
+            .expect("connect performance service");
+
+        let client_conn = zbus::connection::Builder::address(daemon.address.as_str())
+            .expect("valid private bus address")
+            .build()
+            .await
+            .expect("connect test client");
+
+        let proxy: zbus::Proxy<'_> = zbus::proxy::Builder::new(&client_conn)
+            .destination("org.zethropol.Performance")
+            .expect("valid destination")
+            .path("/org/zethropol/Performance")
+            .expect("valid path")
+            .interface("org.zethropol.Performance.v1")
+            .expect("valid interface")
+            .cache_properties(CacheProperties::No)
+            .build()
+            .await
+            .expect("build performance client proxy");
+
+        let reply: HashMap<String, OwnedValue> = proxy
+            .call("GetState", &())
+            .await
+            .expect("Performance.v1.GetState should succeed via Hardware.v1.GetTelemetry");
+
+        assert_eq!(get_telemetry_calls.load(Ordering::SeqCst), 1);
+        assert_eq!(get_state_calls.load(Ordering::SeqCst), 0);
+        assert_eq!(bool::try_from(&reply["success"]).unwrap(), true);
+        assert_eq!(
+            String::try_from(reply["code"].try_clone().unwrap()).unwrap(),
+            "ok"
+        );
+
+        let data: HashMap<String, OwnedValue> =
+            HashMap::try_from(reply["data"].try_clone().unwrap()).unwrap();
+        assert_eq!(f64::try_from(&data["cpu_usage_percent"]).unwrap(), 18.5);
+        assert_eq!(f64::try_from(&data["memory_total_gb"]).unwrap(), 32.0);
+        assert_eq!(f64::try_from(&data["storage_used_gb"]).unwrap(), 120.0);
+        assert_eq!(f64::try_from(&data["storage_capacity_gb"]).unwrap(), 500.0);
+        assert_eq!(f64::try_from(&data["storage_available_gb"]).unwrap(), 380.0);
     }
 }
