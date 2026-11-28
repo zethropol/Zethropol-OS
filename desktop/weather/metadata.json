@@ -1,0 +1,19 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Zethropol"
+            }
+        ],
+        "Category": "Online Services",
+        "Description": "Zethropol OS için Türkiye il/ilçe uyumlu, 3/5/7 günlük tahmin ve ayarlanabilir opaklıklı cam kart hava durumu aracı",
+        "Icon": "weather-clear",
+        "Id": "org.zethropol.plasma.weather",
+        "License": "MIT",
+        "Name": "Zethropol Hava Durumu",
+        "Version": "0.1.0",
+        "Website": "https://github.com/zethropol/Zethropol-OS"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

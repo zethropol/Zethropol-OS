@@ -1,0 +1,20 @@
+pkgbase = zethropol-weather
+	pkgdesc = Zethropol OS Plasma 6 weather plasmoid with Turkish il/ilçe search, 3/5/7-day forecast, and adjustable glass opacity
+	pkgver = 0.1.0
+	pkgrel = 1
+	url = https://github.com/zethropol/Zethropol-OS
+	arch = x86_64
+	license = MIT
+	makedepends = cmake
+	makedepends = ninja
+	depends = glibc
+	depends = gcc-libs
+	depends = qt6-base
+	depends = qt6-declarative
+	depends = libplasma
+	depends = kirigami
+	depends = kpackage
+	source = zethropol-weather-0.1.0-1-src.tar.gz
+	sha256sums = 762a33837dd4fa617f1c37607111a9f2c2538bffae21aa112566a5d8a01febb0
+
+pkgname = zethropol-weather

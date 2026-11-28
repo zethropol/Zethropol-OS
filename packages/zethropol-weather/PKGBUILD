@@ -1,0 +1,48 @@
+pkgname=zethropol-weather
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Zethropol OS Plasma 6 weather plasmoid with Turkish il/ilçe search, 3/5/7-day forecast, and adjustable glass opacity"
+url="https://github.com/zethropol/Zethropol-OS"
+arch=("x86_64")
+license=("MIT")
+depends=(
+    "glibc"
+    "gcc-libs"
+    "qt6-base"
+    "qt6-declarative"
+    "libplasma"
+    "kirigami"
+    "kpackage"
+)
+makedepends=(
+    "cmake"
+    "ninja"
+)
+source=("${pkgname}-${pkgver}-${pkgrel}-src.tar.gz")
+sha256sums=("762a33837dd4fa617f1c37607111a9f2c2538bffae21aa112566a5d8a01febb0")
+
+build() {
+    export CXXFLAGS="${CXXFLAGS:-} -ffile-prefix-map=${srcdir}=/build -ffile-prefix-map=${HOME}=/home/build"
+    cmake -S "$srcdir/${pkgname}-${pkgver}/desktop/weather" \
+          -B "$srcdir/build" \
+          -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/usr \
+          -DCMAKE_SKIP_RPATH=ON \
+          -DBUILD_TESTING=ON
+    cmake --build "$srcdir/build" --parallel
+}
+
+check() {
+    QT_QPA_PLATFORM=offscreen \
+    QT_QUICK_BACKEND=software \
+    QT_QUICK_CONTROLS_STYLE=Basic \
+    QT_QPA_PLATFORMTHEME= \
+        ctest --test-dir "$srcdir/build" --output-on-failure
+}
+
+package() {
+    DESTDIR="$pkgdir" cmake --install "$srcdir/build"
+    install -Dm644 "$srcdir/${pkgname}-${pkgver}/LICENSE" \
+        "$pkgdir/usr/share/licenses/${pkgname}/LICENSE"
+}
