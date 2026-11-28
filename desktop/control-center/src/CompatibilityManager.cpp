@@ -92,6 +92,9 @@ QString CompatibilityManager::dxvkSource() const { return m_dxvkSource; }
 bool CompatibilityManager::vkd3dAvailable() const { return m_vkd3dAvailable; }
 bool CompatibilityManager::bwrapAvailable() const { return m_bwrapAvailable; }
 QString CompatibilityManager::bwrapPath() const { return m_bwrapPath; }
+QString CompatibilityManager::gpuTierLabel() const { return m_gpuTierLabel; }
+QStringList CompatibilityManager::gpuLimitations() const { return m_gpuLimitations; }
+QString CompatibilityManager::anticheatNotice() const { return m_anticheatNotice; }
 
 QVariantList CompatibilityManager::profiles() const { return m_profiles; }
 int CompatibilityManager::profileCount() const { return m_profiles.size(); }
@@ -375,6 +378,91 @@ void CompatibilityManager::syncShortcuts(const QString &profile)
     m_statusMessage = QStringLiteral("'%1' profilindeki .lnk kısayolları eşitleniyor...").arg(profile);
     startCommand(ActiveOp::SyncShortcuts, ctl,
                  {QStringLiteral("sync-shortcuts"), profile, QStringLiteral("--json")},
+                 m_commandTimeoutMs, profile);
+}
+
+void CompatibilityManager::installGamingLayers(const QString &profile,
+                                               bool includeVkd3d,
+                                               bool noticeAccepted)
+{
+    m_initialRefreshTimer.stop();
+    if (!noticeAccepted) {
+        m_lastError = QStringLiteral("Anti-cheat / EULA uyarısı açıkça onaylanmadan DXVK/VKD3D kurulamaz.");
+        m_statusMessage = m_lastError;
+        emit stateChanged();
+        emit operationFinished(QStringLiteral("install-dxvk"), false, m_lastError);
+        return;
+    }
+    if (m_busy) {
+        m_lastError = QStringLiteral("Başka bir uyumluluk işlemi devam ediyor.");
+        m_statusMessage = m_lastError;
+        emit stateChanged();
+        emit operationFinished(QStringLiteral("install-dxvk"), false, m_lastError);
+        return;
+    }
+    if (!isValidProfileName(profile)) {
+        m_lastError = QStringLiteral("Geçersiz profil adı.");
+        m_statusMessage = m_lastError;
+        emit stateChanged();
+        emit operationFinished(QStringLiteral("install-dxvk"), false, m_lastError);
+        return;
+    }
+    const QString ctl = resolvePrefixCtl();
+    if (ctl.isEmpty()) {
+        m_available = false;
+        m_lastError = QStringLiteral("zethropol-prefix-ctl bulunamadı.");
+        m_statusMessage = m_lastError;
+        emit stateChanged();
+        emit operationFinished(QStringLiteral("install-dxvk"), false, m_lastError);
+        return;
+    }
+
+    QStringList args = {
+        QStringLiteral("install-dxvk"),
+        profile,
+        QStringLiteral("--accept-notice"),
+        QStringLiteral("--json")
+    };
+    if (includeVkd3d)
+        args.append(QStringLiteral("--with-vkd3d"));
+
+    m_lastError.clear();
+    m_statusMessage = QStringLiteral("'%1' profiline izole DXVK%2 kuruluyor...")
+                          .arg(profile, includeVkd3d ? QStringLiteral("/VKD3D") : QString());
+    startCommand(ActiveOp::InstallGamingLayers, ctl, args, m_commandTimeoutMs, profile);
+}
+
+void CompatibilityManager::removeGamingLayers(const QString &profile)
+{
+    m_initialRefreshTimer.stop();
+    if (m_busy) {
+        m_lastError = QStringLiteral("Başka bir uyumluluk işlemi devam ediyor.");
+        m_statusMessage = m_lastError;
+        emit stateChanged();
+        emit operationFinished(QStringLiteral("remove-dxvk"), false, m_lastError);
+        return;
+    }
+    if (!isValidProfileName(profile)) {
+        m_lastError = QStringLiteral("Geçersiz profil adı.");
+        m_statusMessage = m_lastError;
+        emit stateChanged();
+        emit operationFinished(QStringLiteral("remove-dxvk"), false, m_lastError);
+        return;
+    }
+    const QString ctl = resolvePrefixCtl();
+    if (ctl.isEmpty()) {
+        m_available = false;
+        m_lastError = QStringLiteral("zethropol-prefix-ctl bulunamadı.");
+        m_statusMessage = m_lastError;
+        emit stateChanged();
+        emit operationFinished(QStringLiteral("remove-dxvk"), false, m_lastError);
+        return;
+    }
+
+    m_lastError.clear();
+    m_statusMessage = QStringLiteral("'%1' profilinden DXVK/VKD3D kaldırılıyor...").arg(profile);
+    startCommand(ActiveOp::RemoveGamingLayers, ctl,
+                 {QStringLiteral("remove-dxvk"), profile, QStringLiteral("--json")},
                  m_commandTimeoutMs, profile);
 }
 
@@ -767,6 +855,38 @@ void CompatibilityManager::handleActiveProcessFinished(int exitCode, QProcess::E
         return;
     }
 
+    case ActiveOp::InstallGamingLayers: {
+        QJsonParseError jerr;
+        const QJsonDocument doc = QJsonDocument::fromJson(stdoutBytes, &jerr);
+        if (!normalZero || jerr.error != QJsonParseError::NoError || !doc.isObject()) {
+            const QString err = extractErrorText(stderrBytes, stdoutBytes, exitCode);
+            finishActiveOp(false, QStringLiteral("install-dxvk"), err, err);
+            return;
+        }
+        const QJsonObject obj = doc.object();
+        const int dxvkCount = obj.value(QStringLiteral("dxvk_files")).toArray().size();
+        const int vkd3dCount = obj.value(QStringLiteral("vkd3d_files")).toArray().size();
+        const QString msg = QStringLiteral("'%1' profiline izole DXVK/VKD3D kuruldu (DXVK: %2, VKD3D: %3 dosya).")
+                                .arg(ctxProfile).arg(dxvkCount).arg(vkd3dCount);
+        finishActiveOp(true, QStringLiteral("install-dxvk"), msg);
+        return;
+    }
+
+    case ActiveOp::RemoveGamingLayers: {
+        QJsonParseError jerr;
+        const QJsonDocument doc = QJsonDocument::fromJson(stdoutBytes, &jerr);
+        if (!normalZero || jerr.error != QJsonParseError::NoError || !doc.isObject()) {
+            const QString err = extractErrorText(stderrBytes, stdoutBytes, exitCode);
+            finishActiveOp(false, QStringLiteral("remove-dxvk"), err, err);
+            return;
+        }
+        const int removedCount = doc.object().value(QStringLiteral("removed_files")).toArray().size();
+        const QString msg = QStringLiteral("'%1' profilinden %2 yönetilen DXVK/VKD3D dosyası kaldırıldı.")
+                                .arg(ctxProfile).arg(removedCount);
+        finishActiveOp(true, QStringLiteral("remove-dxvk"), msg);
+        return;
+    }
+
     case ActiveOp::RemoveProfile: {
         if (!normalZero) {
             const QString err = extractErrorText(stderrBytes, stdoutBytes, exitCode);
@@ -880,6 +1000,28 @@ bool CompatibilityManager::parseProbeJson(const QByteArray &stdoutBytes, QString
     const QString bwrap = root.value(QStringLiteral("bwrap")).toString(QStringLiteral("not-installed"));
     m_bwrapPath = bwrap;
     m_bwrapAvailable = (!bwrap.isEmpty() && bwrap != QStringLiteral("not-installed"));
+
+    const QJsonObject gpuCaps = root.value(QStringLiteral("gpu_capabilities")).toObject();
+    if (!gpuCaps.isEmpty()) {
+        m_gpuTierLabel = gpuCaps.value(QStringLiteral("tier_label")).toString(QStringLiteral("Bilinmiyor"));
+        m_gpuLimitations.clear();
+        for (const QJsonValue &lim : gpuCaps.value(QStringLiteral("limitations")).toArray()) {
+            const QString s = lim.toString().trimmed();
+            if (!s.isEmpty())
+                m_gpuLimitations.append(s);
+        }
+    } else {
+        m_gpuTierLabel = m_hardwareVulkan13
+            ? QStringLiteral("Donanım Vulkan 1.3+ Uygun")
+            : QStringLiteral("Eski/Yazılım -> WineD3D");
+        m_gpuLimitations.clear();
+    }
+
+    const QJsonObject gamingStack = root.value(QStringLiteral("gaming_stack")).toObject();
+    const QJsonObject ac = gamingStack.value(QStringLiteral("anticheat_eula")).toObject();
+    const QString notice = ac.value(QStringLiteral("notice")).toString().trimmed();
+    if (!notice.isEmpty())
+        m_anticheatNotice = notice;
     return true;
 }
 

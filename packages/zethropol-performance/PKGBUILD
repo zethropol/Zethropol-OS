@@ -1,14 +1,23 @@
 pkgname=zethropol-performance
 pkgver=0.1.0
-pkgrel=3
-pkgdesc="Zethropol Performance D-Bus service"
+pkgrel=4
+pkgdesc="Zethropol Performance D-Bus service (profiles, thermal guard, gaming readiness)"
 url="https://github.com/zethropol/Zethropol-OS"
 arch=("x86_64")
 license=("MIT")
-depends=("glibc" "gcc-libs" "dbus" "systemd" "zethropol-hardware>=0.1.0-4")
+depends=("glibc" "gcc-libs" "dbus" "systemd" "polkit" "zethropol-hardware>=0.1.0-4")
+optdepends=(
+    "vulkan-tools: Vulkan/Mesa GPU capability matrix probing"
+    "dxvk-mingw-git: Direct3D 9/10/11 Vulkan translation layer"
+    "vkd3d-proton-mingw-git: Direct3D 12 Vulkan translation layer"
+    "steam: optional Steam gaming client"
+    "gamescope: optional micro-compositor for gaming sessions"
+    "mangohud: optional Vulkan/OpenGL performance HUD"
+    "gamemode: optional gaming session scheduler helper"
+)
 makedepends=("cargo")
 source=("${pkgname}-${pkgver}-${pkgrel}-src.tar.gz")
-sha256sums=("77564f2258c53125ead36e1343e07fb98c54fd6a5496673f04e6f7fbf3d869e2")
+sha256sums=("d8df4fe8ae9e337d6ad0a7b2789325467b32275583bf213ae87ce6199e047033")
 
 build() {
     cd "$srcdir/${pkgname}-${pkgver}/services/performance"
@@ -28,6 +37,7 @@ package() {
     install -Dm755 target/release/performance "$pkgdir/usr/lib/zethropol/zethropol-performance"
     install -Dm644 deployment/dbus/org.zethropol.Performance.conf "$pkgdir/etc/dbus-1/system.d/org.zethropol.Performance.conf"
     install -Dm644 deployment/dbus/org.zethropol.Performance.service "$pkgdir/usr/share/dbus-1/system-services/org.zethropol.Performance.service"
+    install -Dm644 deployment/polkit/org.zethropol.performance.policy "$pkgdir/usr/share/polkit-1/actions/org.zethropol.performance.policy"
     install -Dm644 deployment/systemd/zethropol-performance.service "$pkgdir/usr/lib/systemd/system/zethropol-performance.service"
     install -Dm644 "$srcdir/${pkgname}-${pkgver}/LICENSE" "$pkgdir/usr/share/licenses/${pkgname}/LICENSE"
 }

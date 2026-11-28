@@ -1,7 +1,7 @@
 pkgbase = zethropol-control-center
 	pkgdesc = Zethropol OS desktop control center
 	pkgver = 0.1.0
-	pkgrel = 6
+	pkgrel = 7
 	url = https://github.com/zethropol/Zethropol-OS
 	arch = x86_64
 	license = MIT
@@ -31,10 +31,11 @@ pkgbase = zethropol-control-center
 	optdepends = snapper: Btrfs snapshot backend for Recovery
 	optdepends = fwupd: firmware metadata via zethropol-hardware
 	optdepends = smartmontools: SMART diagnostics via zethropol-hardware
-	optdepends = zethropol-compatibility: Windows compatibility prefix management and Wine runner
+	optdepends = zethropol-compatibility>=0.1.0-2: Windows compatibility prefix management and Stage 07 gaming layer
+	optdepends = zethropol-performance>=0.1.0-4: Performance profiles, thermal guard, and Vulkan/DXVK/VKD3D readiness
 	optdepends = zethropol-diagnostics: Zethropol Diagnostics D-Bus service
 	optdepends = zethropol-security: Zethropol Security D-Bus service
-	source = zethropol-control-center-0.1.0-6-src.tar.gz
-	sha256sums = bba9eb6210015c3e6aba3c3d2a493ba8de87764dbd9a96f08aa3d3ced5fd1a13
+	source = zethropol-control-center-0.1.0-7-src.tar.gz
+	sha256sums = 5d8d618178c4cad301c30d3b8236731908eccef71f6c334226541ef823efdc62
 
 pkgname = zethropol-control-center

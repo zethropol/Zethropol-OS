@@ -33,6 +33,9 @@ class CompatibilityManager : public QObject
     Q_PROPERTY(bool vkd3dAvailable READ vkd3dAvailable NOTIFY stateChanged)
     Q_PROPERTY(bool bwrapAvailable READ bwrapAvailable NOTIFY stateChanged)
     Q_PROPERTY(QString bwrapPath READ bwrapPath NOTIFY stateChanged)
+    Q_PROPERTY(QString gpuTierLabel READ gpuTierLabel NOTIFY stateChanged)
+    Q_PROPERTY(QStringList gpuLimitations READ gpuLimitations NOTIFY stateChanged)
+    Q_PROPERTY(QString anticheatNotice READ anticheatNotice NOTIFY stateChanged)
 
     Q_PROPERTY(QVariantList profiles READ profiles NOTIFY stateChanged)
     Q_PROPERTY(int profileCount READ profileCount NOTIFY stateChanged)
@@ -60,6 +63,9 @@ public:
     bool vkd3dAvailable() const;
     bool bwrapAvailable() const;
     QString bwrapPath() const;
+    QString gpuTierLabel() const;
+    QStringList gpuLimitations() const;
+    QString anticheatNotice() const;
 
     QVariantList profiles() const;
     int profileCount() const;
@@ -88,6 +94,10 @@ public slots:
                      bool force = false);
     void auditProfile(const QString &profile, bool fix = false);
     void syncShortcuts(const QString &profile);
+    void installGamingLayers(const QString &profile,
+                             bool includeVkd3d = false,
+                             bool noticeAccepted = false);
+    void removeGamingLayers(const QString &profile);
     void removeProfile(const QString &profile, bool userConfirmed = false);
     void previewLaunch(const QString &targetPathOrUrl,
                        const QString &profile = QStringLiteral("default-win64"),
@@ -114,6 +124,8 @@ private:
         InitProfile,
         AuditProfile,
         SyncShortcuts,
+        InstallGamingLayers,
+        RemoveGamingLayers,
         RemoveProfile,
         DryRun
     };
@@ -157,6 +169,10 @@ private:
     bool m_vkd3dAvailable = false;
     bool m_bwrapAvailable = false;
     QString m_bwrapPath = QStringLiteral("not-installed");
+    QString m_gpuTierLabel = QStringLiteral("Bilinmiyor");
+    QStringList m_gpuLimitations;
+    QString m_anticheatNotice = QStringLiteral(
+        "Uyarı: Çekirdek seviyesi anti-cheat atlatma veya oyun EULA / kullanım koşulları ihlali kesinlikle yasaktır.");
 
     QVariantList m_profiles;
     QVariantMap m_lastDryRunPlan;

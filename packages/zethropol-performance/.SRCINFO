@@ -1,7 +1,7 @@
 pkgbase = zethropol-performance
-	pkgdesc = Zethropol Performance D-Bus service
+	pkgdesc = Zethropol Performance D-Bus service (profiles, thermal guard, gaming readiness)
 	pkgver = 0.1.0
-	pkgrel = 3
+	pkgrel = 4
 	url = https://github.com/zethropol/Zethropol-OS
 	arch = x86_64
 	license = MIT
@@ -10,8 +10,16 @@ pkgbase = zethropol-performance
 	depends = gcc-libs
 	depends = dbus
 	depends = systemd
+	depends = polkit
 	depends = zethropol-hardware>=0.1.0-4
-	source = zethropol-performance-0.1.0-3-src.tar.gz
-	sha256sums = 77564f2258c53125ead36e1343e07fb98c54fd6a5496673f04e6f7fbf3d869e2
+	optdepends = vulkan-tools: Vulkan/Mesa GPU capability matrix probing
+	optdepends = dxvk-mingw-git: Direct3D 9/10/11 Vulkan translation layer
+	optdepends = vkd3d-proton-mingw-git: Direct3D 12 Vulkan translation layer
+	optdepends = steam: optional Steam gaming client
+	optdepends = gamescope: optional micro-compositor for gaming sessions
+	optdepends = mangohud: optional Vulkan/OpenGL performance HUD
+	optdepends = gamemode: optional gaming session scheduler helper
+	source = zethropol-performance-0.1.0-4-src.tar.gz
+	sha256sums = d8df4fe8ae9e337d6ad0a7b2789325467b32275583bf213ae87ce6199e047033
 
 pkgname = zethropol-performance

@@ -8,6 +8,7 @@
 #include "ProcessService.h"
 #include "NotificationService.h"
 #include "CompatibilityManager.h"
+#include "PerformanceClient.h"
 #include "core/zethropol_power_client.h"
 #include "core/zethropol_monitoring_client.h"
 #include <QDBusConnectionInterface>
@@ -426,6 +427,7 @@ private slots:
         ZethropolPowerClient power;
         ZethropolMonitoringClient monitoring;
         CompatibilityManager compatibility;
+        PerformanceClient performance;
         QQmlApplicationEngine engine;
         QSignalSpy warnings(&engine, &QQmlEngine::warnings);
         for (const auto &pair : QList<QPair<QString, QObject *>>{
@@ -434,7 +436,8 @@ private slots:
                  {"ApplicationBridge", &applications}, {"ProcessBridge", &processes},
                  {"NotificationBridge", &notifications},
                  {"PowerBridge", &power}, {"MonitoringBridge", &monitoring},
-                 {"CompatibilityBridge", &compatibility}})
+                 {"CompatibilityBridge", &compatibility},
+                 {"PerformanceBridge", &performance}})
             engine.rootContext()->setContextProperty(pair.first, pair.second);
         engine.load(QUrl(QStringLiteral("qrc:/Zethropol/ControlCenter/qml/Main.qml")));
         QVERIFY(!engine.rootObjects().isEmpty());
@@ -586,6 +589,7 @@ private:
         ZethropolPowerClient power;
         ZethropolMonitoringClient monitoring;
         CompatibilityManager compatibility;
+        PerformanceClient performance;
         QQmlApplicationEngine engine;
         QSignalSpy warnings(&engine, &QQmlEngine::warnings);
         for (const auto &pair : QList<QPair<QString, QObject *>>{
@@ -594,7 +598,8 @@ private:
                  {"ApplicationBridge", &applications}, {"ProcessBridge", &processes},
                  {"NotificationBridge", &notifications},
                  {"PowerBridge", &power}, {"MonitoringBridge", &monitoring},
-                 {"CompatibilityBridge", &compatibility}})
+                 {"CompatibilityBridge", &compatibility},
+                 {"PerformanceBridge", &performance}})
             engine.rootContext()->setContextProperty(pair.first, pair.second);
         engine.load(QUrl(QStringLiteral("qrc:/Zethropol/ControlCenter/qml/Main.qml")));
         QVERIFY(!engine.rootObjects().isEmpty());

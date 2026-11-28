@@ -10,8 +10,10 @@ import sys
 
 _THIS_DIR = Path(__file__).resolve().parent
 for _cand in (_THIS_DIR.parent, Path("/usr/lib/zethropol/compatibility")):
-    if (_cand / "zethropol_compat").is_dir() and str(_cand) not in sys.path:
-        sys.path.insert(0, str(_cand))
+    if (_cand / "zethropol_compat").is_dir():
+        if str(_cand) not in sys.path:
+            sys.path.insert(0, str(_cand))
+        break
 
 from zethropol_compat import __version__
 from zethropol_compat.config import CompatibilityError, VALID_RENDERERS

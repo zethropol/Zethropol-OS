@@ -160,6 +160,8 @@ private slots:
     void qmlFilesHaveZeroUnescapedRichTextInjection()
     {
         for (const QString &qmlPath : {QStringLiteral(PROCESSES_PAGE_QML),
+                                       QStringLiteral(PERFORMANCE_PAGE_QML),
+                                       QStringLiteral(COMPATIBILITY_PAGE_QML),
                                        QStringLiteral(MAIN_QML),
                                        QStringLiteral(UPDATE_REPORT_QML)}) {
             QFile f(qmlPath);

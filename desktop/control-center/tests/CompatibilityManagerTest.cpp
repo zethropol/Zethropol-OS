@@ -290,6 +290,58 @@ private slots:
         QVERIFY(!mgr2.busy());
         QVERIFY(mgr2.lastError().contains(QStringLiteral("zaman aşımına")));
     }
+
+    void gamingLayersRequireNoticeAcceptanceAndInvokeInstallAndRemove()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const QString argsLog = tmp.filePath(QStringLiteral("gaming-args.log"));
+        const QByteArray mockCtlBody =
+            QByteArray("echo \"$*\" >> \"") + argsLog.toUtf8() + QByteArray("\"\n")
+            + QByteArray(
+                "cmd=\"${1:-}\"\n"
+                "if [ \"$cmd\" = \"install-dxvk\" ]; then\n"
+                "  printf '%s\\n' '{\"profile\":\"default-win64\",\"dxvk_installed\":true,\"vkd3d_installed\":true,\"dxvk_files\":[{\"dll\":\"d3d11.dll\"}],\"vkd3d_files\":[{\"dll\":\"d3d12.dll\"}]}'\n"
+                "  exit 0\n"
+                "fi\n"
+                "if [ \"$cmd\" = \"remove-dxvk\" ]; then\n"
+                "  printf '%s\\n' '{\"profile\":\"default-win64\",\"removed_files\":[\"drive_c/windows/system32/d3d11.dll\"]}'\n"
+                "  exit 0\n"
+                "fi\n"
+                "exit 2\n");
+        const QString mockCtl = writeExecutable(QDir(tmp.path()), QStringLiteral("mock-gaming-ctl"), mockCtlBody);
+        QVERIFY(!mockCtl.isEmpty());
+
+        CompatibilityManager mgr;
+        mgr.setPrefixCtlPath(mockCtl);
+        QSignalSpy opSpy(&mgr, &CompatibilityManager::operationFinished);
+
+        // Must fail closed without anti-cheat/EULA notice acceptance
+        mgr.installGamingLayers(QStringLiteral("default-win64"), true, false);
+        QCOMPARE(opSpy.count(), 1);
+        QCOMPARE(opSpy.takeFirst().at(1).toBool(), false);
+        QVERIFY(!QFile::exists(argsLog));
+
+        // Confirmed install passes --accept-notice and --with-vkd3d
+        mgr.installGamingLayers(QStringLiteral("default-win64"), true, true);
+        QTRY_COMPARE_WITH_TIMEOUT(opSpy.count(), 1, 5000);
+        const QList<QVariant> instEv = opSpy.takeFirst();
+        QCOMPARE(instEv.at(0).toString(), QStringLiteral("install-dxvk"));
+        QCOMPARE(instEv.at(1).toBool(), true);
+
+        // Remove invokes remove-dxvk
+        mgr.removeGamingLayers(QStringLiteral("default-win64"));
+        QTRY_COMPARE_WITH_TIMEOUT(opSpy.count(), 1, 5000);
+        const QList<QVariant> rmEv = opSpy.takeFirst();
+        QCOMPARE(rmEv.at(0).toString(), QStringLiteral("remove-dxvk"));
+        QCOMPARE(rmEv.at(1).toBool(), true);
+
+        QFile logFile(argsLog);
+        QVERIFY(logFile.open(QIODevice::ReadOnly));
+        const QString logged = QString::fromUtf8(logFile.readAll());
+        QVERIFY(logged.contains(QStringLiteral("install-dxvk default-win64 --accept-notice --json --with-vkd3d")));
+        QVERIFY(logged.contains(QStringLiteral("remove-dxvk default-win64 --json")));
+    }
 };
 
 QTEST_MAIN(CompatibilityManagerTest)

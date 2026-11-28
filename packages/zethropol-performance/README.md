@@ -2,7 +2,7 @@
 
 Arch Linux package definition for the Zethropol Performance D-Bus service.
 
-> **Status:** Live installed version is `zethropol-performance 0.1.0-2` (verified 2026-11-27, quarantine removed, `systemd-analyze security`: `3.6 OK :-)`). Next release **`zethropol-performance 0.1.0-3`** (`P4C`: zero-fork `org.zethropol.Hardware.v1.GetTelemetry` client + `connection.closed().await` recovery) is **built and verified rootlessly** (`10/10` Rust tests including private D-Bus test, `0` `/home/Zevor` leaks, `.pkg.tar.zst` SHA-256 `85bed4d2c34dc33b46aa32fd700016b15c8edc03cb08a969d9d5107ed6410830`) and awaits explicit live `pacman -U` approval.
+> **Status:** Live installed version is `zethropol-performance 0.1.0-3`. Next Stage 07 release **`zethropol-performance 0.1.0-4`** (4 performance profiles `General`/`Gaming`/`Developer`/`Creator`, Polkit `org.zethropol.performance.modify`, thermal guard 85/82 °C, advisory gaming session detection with silent auto-switch disabled, and Vulkan/DXVK/VKD3D GPU capability matrix for Polaris11/Broadwell/Vega3) is **built and verified rootlessly** (`14/14` Rust tests including private D-Bus test, `0` `/home/Zevor` leaks, `.pkg.tar.zst` SHA-256 `e060a7afc261fda9c99a8da938c1e975eeb30a342ebee026d5508e995c2656cd`) and awaits live `sudo pacman -U` approval.
 
 ## D-Bus identity
 

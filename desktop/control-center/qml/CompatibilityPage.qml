@@ -8,6 +8,9 @@ Item {
     objectName: "compatibilityPage"
 
     property string pendingRemoveProfile: ""
+    property string pendingGamingProfile: ""
+    property bool gamingNoticeAccepted: false
+    property bool gamingIncludeVkd3d: false
     property string selectedTargetPath: ""
     property string selectedRunProfile: "default-win64"
     property string selectedRenderer: "auto"
@@ -154,6 +157,101 @@ Item {
             if (pendingRemoveProfile !== "") {
                 CompatibilityBridge.removeProfile(pendingRemoveProfile, true)
                 pendingRemoveProfile = ""
+            }
+        }
+    }
+
+    Dialog {
+        id: gamingLayersDialog
+        objectName: "gamingLayersDialog"
+        title: "İzole Prefix DXVK / VKD3D Yönetimi"
+        modal: true
+        standardButtons: Dialog.Close
+        width: 500
+        anchors.centerIn: Overlay.overlay
+
+        onOpened: {
+            gamingNoticeAccepted = false
+            gamingIncludeVkd3d = false
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 10
+
+            Label {
+                text: "Hedef Profil: " + pendingGamingProfile
+                textFormat: Text.PlainText
+                font.bold: true
+            }
+
+            Label {
+                text: "Donanım Sınıfı: " + CompatibilityBridge.gpuTierLabel
+                textFormat: Text.PlainText
+                font.pixelSize: 12
+                opacity: 0.8
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: anticheatDialogLabel.implicitHeight + 16
+                radius: 6
+                color: palette.window
+                border.width: 1
+                border.color: "#c0392b"
+
+                Label {
+                    id: anticheatDialogLabel
+                    anchors.fill: parent
+                    anchors.margins: 8
+                    text: CompatibilityBridge.anticheatNotice
+                    textFormat: Text.PlainText
+                    font.pixelSize: 12
+                    wrapMode: Text.WordWrap
+                }
+            }
+
+            CheckBox {
+                id: includeVkd3dCheck
+                checked: gamingIncludeVkd3d
+                text: "VKD3D-Proton (D3D12) katmanını da dahil et (isteğe bağlı)"
+                onCheckedChanged: gamingIncludeVkd3d = checked
+            }
+
+            CheckBox {
+                id: acceptAnticheatNoticeCheck
+                checked: gamingNoticeAccepted
+                text: "Anti-cheat atlatma yapmayacağımı ve oyun EULA / kullanım koşullarını kabul ettiğimi onaylıyorum."
+                onCheckedChanged: gamingNoticeAccepted = checked
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                Button {
+                    text: "İzole Prefix'e Kur"
+                    highlighted: true
+                    enabled: gamingNoticeAccepted && !CompatibilityBridge.busy && pendingGamingProfile !== ""
+                    onClicked: {
+                        CompatibilityBridge.installGamingLayers(
+                            pendingGamingProfile,
+                            gamingIncludeVkd3d,
+                            gamingNoticeAccepted
+                        )
+                        gamingLayersDialog.close()
+                    }
+                }
+
+                Button {
+                    text: "DXVK/VKD3D Kaldır"
+                    enabled: !CompatibilityBridge.busy && pendingGamingProfile !== ""
+                    onClicked: {
+                        CompatibilityBridge.removeGamingLayers(pendingGamingProfile)
+                        gamingLayersDialog.close()
+                    }
+                }
             }
         }
     }
@@ -324,7 +422,7 @@ Item {
                         }
                         Label {
                             text: "Vulkan " + CompatibilityBridge.vulkanApiVersion + " · "
-                                  + (CompatibilityBridge.hardwareVulkan13 ? "Donanım 1.3+ Uygun" : "Eski/Yazılım -> WineD3D")
+                                  + CompatibilityBridge.gpuTierLabel
                             textFormat: Text.PlainText
                             opacity: 0.65
                             font.pixelSize: 12
@@ -461,6 +559,15 @@ Item {
                                 text: "Denetle / Onar"
                                 enabled: !CompatibilityBridge.busy
                                 onClicked: CompatibilityBridge.auditProfile(modelData.profile, true)
+                            }
+
+                            Button {
+                                text: "DXVK / VKD3D"
+                                enabled: !CompatibilityBridge.busy
+                                onClicked: {
+                                    pendingGamingProfile = modelData.profile
+                                    gamingLayersDialog.open()
+                                }
                             }
 
                             Button {

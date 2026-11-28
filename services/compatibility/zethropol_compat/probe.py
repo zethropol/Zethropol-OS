@@ -49,6 +49,9 @@ class VulkanDeviceInfo:
     driver_name: str
     is_hardware: bool
     meets_dxvk_min_version: bool
+    driver_info: str = ""
+    vendor_id: str = ""
+    device_id: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -168,6 +171,9 @@ def parse_vulkaninfo_summary(summary_text: str) -> VulkanProbeResult:
         dev_type = current.get("deviceType", "").strip()
         api_ver = current.get("apiVersion", "").strip()
         driver_name = current.get("driverName", "").strip()
+        driver_info = current.get("driverInfo", "").strip()
+        vendor_id = current.get("vendorID", "").strip()
+        device_id = current.get("deviceID", "").strip()
         lower_combined = f"{name} {driver_name}".lower()
         is_software = (
             dev_type == "PHYSICAL_DEVICE_TYPE_CPU"
@@ -184,6 +190,9 @@ def parse_vulkaninfo_summary(summary_text: str) -> VulkanProbeResult:
                 driver_name=driver_name or "unknown",
                 is_hardware=is_hardware,
                 meets_dxvk_min_version=meets_min,
+                driver_info=driver_info,
+                vendor_id=vendor_id,
+                device_id=device_id,
             )
         )
 

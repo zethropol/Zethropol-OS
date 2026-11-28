@@ -1,5 +1,6 @@
 #include "ApplicationService.h"
 #include "CompatibilityManager.h"
+#include "PerformanceClient.h"
 #include "HardwareServiceClient.h"
 #include "NotificationService.h"
 #include "ProcessService.h"
@@ -104,6 +105,7 @@ private slots:
         ZethropolPowerClient power;
         ZethropolMonitoringClient monitoring;
         CompatibilityManager compatibility;
+        PerformanceClient performance;
 
         // Wait for isolated scanner to finish with missing tools (fail-closed)
         QTRY_VERIFY_WITH_TIMEOUT(!scanner.busy(), 5000);
@@ -130,7 +132,8 @@ private slots:
                  {"NotificationBridge", &notifications},
                  {"PowerBridge", &power},
                  {"MonitoringBridge", &monitoring},
-                 {"CompatibilityBridge", &compatibility}}) {
+                 {"CompatibilityBridge", &compatibility},
+                 {"PerformanceBridge", &performance}}) {
             engine.rootContext()->setContextProperty(pair.first, pair.second);
         }
 
@@ -273,6 +276,7 @@ private slots:
         ZethropolPowerClient power;
         MockMonitoringBridge monitoring;
         CompatibilityManager compatibility;
+        PerformanceClient performance;
 
         QTRY_VERIFY_WITH_TIMEOUT(!scanner.busy(), 5000);
         QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
@@ -291,7 +295,8 @@ private slots:
                  {"NotificationBridge", &notifications},
                  {"PowerBridge", &power},
                  {"MonitoringBridge", &monitoring},
-                 {"CompatibilityBridge", &compatibility}}) {
+                 {"CompatibilityBridge", &compatibility},
+                 {"PerformanceBridge", &performance}}) {
             engine.rootContext()->setContextProperty(pair.first, pair.second);
         }
 
@@ -385,6 +390,7 @@ private slots:
         ZethropolPowerClient power;
         ZethropolMonitoringClient monitoring;
         CompatibilityManager compatibility;
+        PerformanceClient performance;
 
         QTRY_VERIFY_WITH_TIMEOUT(!scanner.busy(), 5000);
         QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
@@ -409,7 +415,8 @@ private slots:
                  {"NotificationBridge", &notifications},
                  {"PowerBridge", &power},
                  {"MonitoringBridge", &monitoring},
-                 {"CompatibilityBridge", &compatibility}}) {
+                 {"CompatibilityBridge", &compatibility},
+                 {"PerformanceBridge", &performance}}) {
             engine.rootContext()->setContextProperty(pair.first, pair.second);
         }
 

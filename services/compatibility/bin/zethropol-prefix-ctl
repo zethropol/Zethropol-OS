@@ -13,8 +13,10 @@ import sys
 # Support both source-tree execution and system installation under /usr/lib/zethropol/compatibility
 _THIS_DIR = Path(__file__).resolve().parent
 for _cand in (_THIS_DIR.parent, Path("/usr/lib/zethropol/compatibility")):
-    if (_cand / "zethropol_compat").is_dir() and str(_cand) not in sys.path:
-        sys.path.insert(0, str(_cand))
+    if (_cand / "zethropol_compat").is_dir():
+        if str(_cand) not in sys.path:
+            sys.path.insert(0, str(_cand))
+        break
 
 from zethropol_compat import __version__
 from zethropol_compat.config import (
@@ -24,6 +26,13 @@ from zethropol_compat.config import (
     load_profile_metadata,
     prefix_dir,
     validate_profile_name,
+)
+from zethropol_compat.gaming import (
+    classify_gpu_capabilities,
+    get_prefix_gaming_status,
+    install_prefix_gaming_layers,
+    probe_gaming_stack,
+    remove_prefix_gaming_layers,
 )
 from zethropol_compat.prefix import (
     audit_prefix,
@@ -119,21 +128,94 @@ def _cmd_probe(args: argparse.Namespace) -> int:
     wine_info = probe_wine(args.wine_bin)
     vk = probe_vulkan()
     layers = probe_translation_layers()
+    gaming = probe_gaming_stack(vulkan_probe=vk)
     payload = {
         "version": __version__,
         "wine": wine_info.to_dict(),
         "vulkan": vk.to_dict(),
         "translation_layers": layers.to_dict(),
         "bwrap": probe_bwrap() or "not-installed",
+        "gpu_capabilities": gaming["gpu_capabilities"],
+        "gaming_stack": gaming,
     }
     if args.json:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
         print(f"Wine: {wine_info.version} ({wine_info.binary}, mode={wine_info.mode})")
         print(f"Vulkan: hardware_1.3+={vk.hardware_vulkan_13} ({vk.reason})")
+        print(f"GPU Matrix: {gaming['gpu_capabilities']['tier_label']}")
         print(f"DXVK: {layers.dxvk_available} ({layers.dxvk_source})")
         print(f"VKD3D-Proton: {layers.vkd3d_available} ({layers.vkd3d_source})")
         print(f"bubblewrap: {payload['bwrap']}")
+    return 0
+
+
+def _cmd_gaming_probe(args: argparse.Namespace) -> int:
+    pfx = prefix_dir(args.profile) if args.profile else None
+    report = probe_gaming_stack(prefix_path=pfx)
+    if args.json:
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+    else:
+        gpu = report["gpu_capabilities"]
+        tools = report["tools"]
+        print(f"GPU: {gpu['gpu_name']} ({gpu['driver_name']} / Vulkan {gpu['vulkan_api_version']})")
+        print(f"Tier: {gpu['tier_label']}")
+        print(
+            f"Layers: DXVK={report['translation_layers']['dxvk_available']} "
+            f"VKD3D={report['translation_layers']['vkd3d_available']}"
+        )
+        print(
+            f"Tools: Steam={tools['steam_available']} Proton={tools['proton_available']} "
+            f"Gamescope={tools['gamescope_available']} MangoHud={tools['mangohud_available']} "
+            f"GameMode={tools['gamemode_available']}"
+        )
+        for lim in gpu["limitations"]:
+            print(f"  [LIMIT] {lim}")
+        for miss in report["missing_components"]:
+            print(f"  [MISSING] {miss}")
+        print(f"Notice: {report['anticheat_eula']['notice']}")
+    return 0
+
+
+def _cmd_gaming_status(args: argparse.Namespace) -> int:
+    status = get_prefix_gaming_status(args.profile)
+    if args.json:
+        print(json.dumps(status, ensure_ascii=False, indent=2))
+    else:
+        print(
+            f"Profile '{status['profile']}': DXVK={status['dxvk_installed']} "
+            f"VKD3D={status['vkd3d_installed']} (system DXVK={status['system_dxvk_available']}, "
+            f"system VKD3D={status['system_vkd3d_available']})"
+        )
+        print(f"Notice: {status['anticheat_eula']['notice']}")
+    return 0
+
+
+def _cmd_install_dxvk(args: argparse.Namespace) -> int:
+    include_dxvk = not args.vkd3d_only
+    include_vkd3d = bool(args.with_vkd3d or args.vkd3d_only)
+    res = install_prefix_gaming_layers(
+        profile=args.profile,
+        include_dxvk=include_dxvk,
+        include_vkd3d=include_vkd3d,
+        accept_notice=bool(args.accept_notice),
+    )
+    if args.json:
+        print(json.dumps(res, ensure_ascii=False, indent=2))
+    else:
+        print(
+            f"Installed gaming layers into '{res['profile']}': "
+            f"DXVK={len(res['dxvk_files'])} files, VKD3D={len(res['vkd3d_files'])} files"
+        )
+    return 0
+
+
+def _cmd_remove_dxvk(args: argparse.Namespace) -> int:
+    res = remove_prefix_gaming_layers(args.profile)
+    if args.json:
+        print(json.dumps(res, ensure_ascii=False, indent=2))
+    else:
+        print(f"Removed {len(res['removed_files'])} managed DXVK/VKD3D files from '{res['profile']}'.")
     return 0
 
 
@@ -214,6 +296,29 @@ def build_parser() -> argparse.ArgumentParser:
     p_probe.add_argument("--wine-bin", default=None)
     p_probe.add_argument("--json", action="store_true")
     p_probe.set_defaults(func=_cmd_probe)
+
+    p_gprobe = sub.add_parser("gaming-probe", help="Inspect GPU Vulkan capability matrix, DXVK/VKD3D, Steam/Proton/Gamescope/MangoHud readiness")
+    p_gprobe.add_argument("--profile", default=None, help="Optional profile to include prefix DLL check")
+    p_gprobe.add_argument("--json", action="store_true")
+    p_gprobe.set_defaults(func=_cmd_gaming_probe)
+
+    p_gstatus = sub.add_parser("gaming-status", help="Show isolated prefix DXVK/VKD3D installation status")
+    p_gstatus.add_argument("profile")
+    p_gstatus.add_argument("--json", action="store_true")
+    p_gstatus.set_defaults(func=_cmd_gaming_status)
+
+    p_inst = sub.add_parser("install-dxvk", help="Install local system DXVK/VKD3D DLLs into an isolated Wine prefix")
+    p_inst.add_argument("profile")
+    p_inst.add_argument("--with-vkd3d", action="store_true", help="Also install VKD3D-Proton (D3D12) DLLs")
+    p_inst.add_argument("--vkd3d-only", action="store_true", help="Install only VKD3D-Proton DLLs")
+    p_inst.add_argument("--accept-notice", action="store_true", help="Acknowledge anti-cheat and EULA compliance notice")
+    p_inst.add_argument("--json", action="store_true")
+    p_inst.set_defaults(func=_cmd_install_dxvk)
+
+    p_rmdxvk = sub.add_parser("remove-dxvk", help="Remove Zethropol-managed DXVK/VKD3D DLLs from an isolated prefix")
+    p_rmdxvk.add_argument("profile")
+    p_rmdxvk.add_argument("--json", action="store_true")
+    p_rmdxvk.set_defaults(func=_cmd_remove_dxvk)
 
     p_sync = sub.add_parser("sync-shortcuts", help="Convert prefix .lnk shortcuts to sanitized .desktop files")
     p_sync.add_argument("profile")

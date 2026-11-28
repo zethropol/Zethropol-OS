@@ -1,11 +1,13 @@
 mod dbus;
+mod gaming;
+mod profiles;
 
 fn main() {
     let runtime = tokio::runtime::Runtime::new()
         .expect("failed to create Tokio runtime");
 
     runtime.block_on(async {
-        let service = dbus::PerformanceService;
+        let service = dbus::PerformanceService::from_env();
 
         let connection = zbus::connection::Builder::system()
             .expect("failed to connect to system D-Bus")

@@ -27,6 +27,7 @@ set(CONTROL_CENTER_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ProcessService.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/NotificationService.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/CompatibilityManager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/PerformanceClient.cpp
 )
 
 qt_add_executable(control_center
@@ -45,6 +46,7 @@ qt_add_qml_module(control_center
     QML_FILES
         qml/Main.qml
         qml/HardwarePage.qml
+        qml/PerformancePage.qml
         qml/ProcessesPage.qml
         qml/CompatibilityPage.qml
         qml/UpdateReport.qml
@@ -104,7 +106,7 @@ if(BUILD_TESTING)
         ${ZETHROPOL_DBUS_SRCS})
     qt_add_resources(control_center_hardware_test "hardware_test_qml"
         PREFIX "/Zethropol/ControlCenter"
-        FILES qml/Main.qml qml/SystemState.qml qml/HardwarePage.qml qml/ProcessesPage.qml qml/CompatibilityPage.qml qml/UpdateReport.qml)
+        FILES qml/Main.qml qml/SystemState.qml qml/HardwarePage.qml qml/PerformancePage.qml qml/ProcessesPage.qml qml/CompatibilityPage.qml qml/UpdateReport.qml)
     target_include_directories(control_center_hardware_test PRIVATE src)
     target_link_libraries(control_center_hardware_test PRIVATE
         Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::DBus Qt6::Test)
@@ -141,6 +143,8 @@ if(BUILD_TESTING)
     target_link_libraries(control_center_security_remediation_test PRIVATE Qt6::Core Qt6::DBus Qt6::Test)
     target_compile_definitions(control_center_security_remediation_test PRIVATE
         PROCESSES_PAGE_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/ProcessesPage.qml"
+        PERFORMANCE_PAGE_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/PerformancePage.qml"
+        COMPATIBILITY_PAGE_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/CompatibilityPage.qml"
         MAIN_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/Main.qml"
         UPDATE_REPORT_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/UpdateReport.qml")
     add_test(NAME control_center_security_remediation_test
@@ -152,7 +156,7 @@ if(BUILD_TESTING)
         ${ZETHROPOL_DBUS_SRCS})
     qt_add_resources(control_center_recovery_test "recovery_test_qml"
         PREFIX "/Zethropol/ControlCenter"
-        FILES qml/Main.qml qml/SystemState.qml qml/HardwarePage.qml qml/ProcessesPage.qml qml/CompatibilityPage.qml qml/UpdateReport.qml)
+        FILES qml/Main.qml qml/SystemState.qml qml/HardwarePage.qml qml/PerformancePage.qml qml/ProcessesPage.qml qml/CompatibilityPage.qml qml/UpdateReport.qml)
     target_include_directories(control_center_recovery_test PRIVATE src)
     target_link_libraries(control_center_recovery_test PRIVATE
         Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::DBus Qt6::Test)
@@ -174,7 +178,7 @@ if(BUILD_TESTING)
         ${ZETHROPOL_DBUS_SRCS})
     qt_add_resources(control_center_tabs_test "tabs_test_qml"
         PREFIX "/Zethropol/ControlCenter"
-        FILES qml/Main.qml qml/SystemState.qml qml/HardwarePage.qml qml/ProcessesPage.qml qml/CompatibilityPage.qml qml/UpdateReport.qml)
+        FILES qml/Main.qml qml/SystemState.qml qml/HardwarePage.qml qml/PerformancePage.qml qml/ProcessesPage.qml qml/CompatibilityPage.qml qml/UpdateReport.qml)
     target_include_directories(control_center_tabs_test PRIVATE src)
     target_link_libraries(control_center_tabs_test PRIVATE
         Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::DBus Qt6::Test)
@@ -193,6 +197,23 @@ if(BUILD_TESTING)
     target_link_libraries(control_center_compatibility_test PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME control_center_compatibility_test
              COMMAND control_center_compatibility_test)
+
+    qt_add_executable(control_center_performance_test
+        tests/PerformanceClientTest.cpp
+        src/PerformanceClient.cpp
+        src/PerformanceClient.h)
+    qt_add_resources(control_center_performance_test "performance_test_qml"
+        PREFIX "/Zethropol/ControlCenter"
+        FILES qml/PerformancePage.qml)
+    target_include_directories(control_center_performance_test PRIVATE src)
+    target_link_libraries(control_center_performance_test PRIVATE
+        Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::DBus Qt6::Test)
+    add_test(NAME control_center_performance_test
+        COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/tests/hardware-private-bus.sh
+            $<TARGET_FILE:control_center_performance_test>)
+    set_tests_properties(control_center_performance_test PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+        TIMEOUT 60)
 
     qt_add_executable(control_center_update_helper_test
         tests/UpdateHelperTest.cpp

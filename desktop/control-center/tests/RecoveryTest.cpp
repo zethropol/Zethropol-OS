@@ -8,6 +8,7 @@
 #include "ProcessService.h"
 #include "NotificationService.h"
 #include "CompatibilityManager.h"
+#include "PerformanceClient.h"
 #include "core/zethropol_power_client.h"
 #include "core/zethropol_monitoring_client.h"
 #include "core/zethropol_recovery_client.h"
@@ -752,6 +753,7 @@ echo '{"root":[{"number":0,"type":"single","description":"current"}]}'
         ZethropolPowerClient power;
         ZethropolMonitoringClient monitoring;
         CompatibilityManager compatibility;
+        PerformanceClient performance;
 
         QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
         QVERIFY(recovery.available());
@@ -770,7 +772,8 @@ echo '{"root":[{"number":0,"type":"single","description":"current"}]}'
                  {QStringLiteral("NotificationBridge"), &notifications},
                  {QStringLiteral("PowerBridge"), &power},
                  {QStringLiteral("MonitoringBridge"), &monitoring},
-                 {QStringLiteral("CompatibilityBridge"), &compatibility}}) {
+                 {QStringLiteral("CompatibilityBridge"), &compatibility},
+                 {QStringLiteral("PerformanceBridge"), &performance}}) {
             engine.rootContext()->setContextProperty(pair.first, pair.second);
         }
 
@@ -1076,6 +1079,7 @@ EOF
         ZethropolPowerClient power;
         ZethropolMonitoringClient monitoring;
         CompatibilityManager compatibility;
+        PerformanceClient performance;
 
         QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
         QVERIFY(recovery.available());
@@ -1094,7 +1098,8 @@ EOF
                  {QStringLiteral("NotificationBridge"), &notifications},
                  {QStringLiteral("PowerBridge"), &power},
                  {QStringLiteral("MonitoringBridge"), &monitoring},
-                 {QStringLiteral("CompatibilityBridge"), &compatibility}}) {
+                 {QStringLiteral("CompatibilityBridge"), &compatibility},
+                 {QStringLiteral("PerformanceBridge"), &performance}}) {
             engine.rootContext()->setContextProperty(pair.first, pair.second);
         }
 
@@ -1446,6 +1451,7 @@ EOF
         ZethropolPowerClient power;
         ZethropolMonitoringClient monitoring;
         CompatibilityManager compatibility;
+        PerformanceClient performance;
 
         QTRY_VERIFY_WITH_TIMEOUT(!recovery.checking(), 5000);
         QVERIFY(recovery.available());
@@ -1464,7 +1470,8 @@ EOF
                  {QStringLiteral("NotificationBridge"), &notifications},
                  {QStringLiteral("PowerBridge"), &power},
                  {QStringLiteral("MonitoringBridge"), &monitoring},
-                 {QStringLiteral("CompatibilityBridge"), &compatibility}}) {
+                 {QStringLiteral("CompatibilityBridge"), &compatibility},
+                 {QStringLiteral("PerformanceBridge"), &performance}}) {
             engine.rootContext()->setContextProperty(pair.first, pair.second);
         }
 

@@ -1,6 +1,6 @@
-# Zethropol Compatibility Arch Package (`0.1.0-1`)
+# Zethropol Compatibility Arch Package (`0.1.0-2`)
 
-Bu dizin, Zethropol OS Aşama 06 / Dilim 6A kullanıcı-alanı Windows uyumluluk katmanı (`zethropol-compatibility`) için Arch Linux paket tarifini içerir.
+Bu dizin, Zethropol OS Aşama 06 / Dilim 6A + Aşama 07 kullanıcı-alanı Windows uyumluluk ve gaming katmanı (`zethropol-compatibility`) için Arch Linux paket tarifini içerir. (`0.1.0-2`: `gaming.py` GPU yetenek matrisi, `gaming-probe`/`gaming-status`/`install-dxvk`/`remove-dxvk` alt komutları, zorunlu anti-cheat/EULA onay koruması; `17/17` unittest PASS, `0` `/home/Zevor` sızıntısı, `.pkg.tar.zst` SHA-256 `c6430b7d783e9018473d6e6078701ac34f404fdbe3b3ee4c708f1c5b3f63e403`.)
 
 ## Paket İçeriği ve Güvenlik Sınırları
 
