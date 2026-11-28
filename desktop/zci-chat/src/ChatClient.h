@@ -79,7 +79,7 @@ public:
     Q_INVOKABLE bool refreshSessions();
     Q_INVOKABLE QString createSession(const QString &title = QStringLiteral("Yeni ZCI Sohbeti"));
     Q_INVOKABLE bool selectSession(const QString &sessionId);
-    Q_INVOKABLE bool sendMessage(const QString &userMessage, int maxTokens = 256);
+    Q_INVOKABLE bool sendMessage(const QString &userMessage, int maxTokens = 2048);
     Q_INVOKABLE bool clearActiveSession();
     Q_INVOKABLE bool clearAllHistory();
 
@@ -119,7 +119,7 @@ private slots:
 
 private:
     static QVariant unwrapDbusVariant(const QVariant &value);
-    QVariantMap invokeEnvelope(const QString &method, const QVariantList &args = {});
+    QVariantMap invokeEnvelope(const QString &method, const QVariantList &args = {}, int timeoutMs = 15000);
     void setBusy(bool b);
     void setError(const QString &err);
 
@@ -139,7 +139,7 @@ private:
     bool m_storageEncrypted = true;
     bool m_storagePermissionsStrict = true;
     int m_maxContextTokens = 8192;
-    int m_maxOutputTokens = 768;
+    int m_maxOutputTokens = 2048;
     qulonglong m_blockedCommandAttempts = 0;
     qulonglong m_blockedInjectionAttempts = 0;
     QString m_statusBanner = QStringLiteral("ZCI Chatbot yerel servise bağlanıyor...");

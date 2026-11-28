@@ -63,7 +63,7 @@ int runCliMode(int argc, char *argv[])
     QCommandLineOption maxTokOpt(QStringLiteral("max-tokens"),
                                  QStringLiteral("Çıktı token üst sınırı"),
                                  QStringLiteral("tokens"),
-                                 QStringLiteral("256"));
+                                 QStringLiteral("2048"));
     QCommandLineOption busOpt(QStringLiteral("bus-address"),
                               QStringLiteral("Özel D-Bus adresi (test/yalıtılmış oturum)"),
                               QStringLiteral("address"));

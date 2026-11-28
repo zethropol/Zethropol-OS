@@ -315,9 +315,10 @@ fn hardware_profile_selects_dev_baseline_vs_ancha_production_deterministically()
     // Current Zethropol dev PC (Ryzen 5 3600 / 32 GB RAM / RX 560D 4 GB VRAM) -> dev-baseline
     let dev = build_hardware_snapshot(12, 32_011, 24_000, "AMD".to_string(), "0x67ef".to_string(), 4_096, 480);
     assert_eq!(dev.profile, HardwareProfile::DevBaseline);
-    assert_eq!(dev.limits.max_output_tokens, 768);
+    assert_eq!(dev.limits.max_output_tokens, 2_048);
     assert_eq!(dev.limits.max_concurrent_requests, 1);
     assert!(dev.limits.hybrid_cpu_ram_gpu);
+    assert_eq!(RuntimeConfig::default().request_timeout_ms, 120_000);
 
     // CPU-only host -> dev-baseline with 0 VRAM budget
     let cpu_only = build_hardware_snapshot(8, 16_384, 12_000, "none".to_string(), "none".to_string(), 0, 0);
@@ -492,7 +493,7 @@ fn passive_standby_lifecycle_auto_sleep_and_token_limits_work() {
         assert_eq!(g.active_vram_mb, 0);
     }
 
-    // Request exceeding dev-baseline max_output_tokens (768) is rejected fail-closed
+    // Request exceeding dev-baseline max_output_tokens (2048) is rejected fail-closed
     let err_tokens = RuntimeManager::try_acquire_inference_slot(&mgr, "gemma-4-E4B-it-Q4_K_M", "Merhaba", 4096);
     assert_eq!(err_tokens.err().map(|e| e.0), Some("token-limit-exceeded"));
 
@@ -630,6 +631,8 @@ async fn dbus_runtime_end_to_end_polkit_sealing_and_loopback_inference() {
     let port = listener.local_addr().unwrap().port();
     let engine_hits = Arc::new(AtomicUsize::new(0));
     let engine_hits_bg = Arc::clone(&engine_hits);
+    let last_req = Arc::new(std::sync::Mutex::new(String::new()));
+    let last_req_bg = Arc::clone(&last_req);
     let _engine_task = tokio::spawn(async move {
         loop {
             let Ok((mut sock, _)) = listener.accept().await else {
@@ -637,7 +640,10 @@ async fn dbus_runtime_end_to_end_polkit_sealing_and_loopback_inference() {
             };
             engine_hits_bg.fetch_add(1, Ordering::SeqCst);
             let mut req_buf = [0u8; 8192];
-            let _ = sock.read(&mut req_buf).await;
+            let n = sock.read(&mut req_buf).await.unwrap_or(0);
+            if let Ok(mut g) = last_req_bg.lock() {
+                *g = String::from_utf8_lossy(&req_buf[..n]).into_owned();
+            }
             let body = r#"{"choices":[{"message":{"content":"Merhaba! Zethropol yerel motor yanıtı."}}]}"#;
             let resp = format!(
                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
@@ -823,6 +829,14 @@ async fn dbus_runtime_end_to_end_polkit_sealing_and_loopback_inference() {
     assert!(get_str(&inf_data, "output_wrapped_payload").contains("Zethropol yerel motor yanıtı"));
     assert_eq!(engine_hits.load(Ordering::SeqCst), 1);
     assert_eq!(wrap_calls.load(Ordering::SeqCst), 2); // 1 input wrap + 1 output wrap!
+    {
+        let raw_http = last_req.lock().unwrap().clone();
+        let json_body = raw_http.split_once("\r\n\r\n").map(|(_, b)| b).unwrap_or("");
+        let parsed: serde_json::Value = serde_json::from_str(json_body).expect("valid completions json");
+        assert!((parsed["temperature"].as_f64().unwrap_or(0.0) - 0.7).abs() < 1e-6);
+        assert!((parsed["top_p"].as_f64().unwrap_or(0.0) - 0.9).abs() < 1e-6);
+        assert!((parsed["repeat_penalty"].as_f64().unwrap_or(0.0) - 1.08).abs() < 1e-6);
+    }
 
     // 9. EnterStandby releases VRAM cleanly; UnloadModel clears active model
     let stby: HashMap<String, OwnedValue> = proxy.call("EnterStandby", &("test-done",)).await.unwrap();

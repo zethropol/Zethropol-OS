@@ -40,9 +40,12 @@ def _find_binary(rel_candidates: tuple[str, ...]) -> Path | None:
 
 
 class _MockLoopbackChatHandler(BaseHTTPRequestHandler):
+    last_request_json: dict = {}
+
     def do_POST(self) -> None:
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length).decode("utf-8", errors="replace")
+        type(self).last_request_json = json.loads(body) if body.strip() else {}
         has_sys_ctx = "READONLY_SYSTEM_CONTEXT_UNTRUSTED" in body
         reply = (
             "Sistem bağlamı doğrulandı: Zethropol OS yerel AI sohbet yanıtı."
@@ -284,6 +287,13 @@ class ZciChatFourServiceIntegrationTests(unittest.TestCase):
         self.assertEqual(sd["policy_authority"], "none")
         self.assertTrue(sd["system_context_attached"])
         self.assertIn("Sistem bağlamı doğrulandı", sd["reply_text"])
+        self.assertGreaterEqual(d["max_output_tokens"], 2048)
+        req_json = _MockLoopbackChatHandler.last_request_json
+        self.assertGreaterEqual(req_json.get("max_tokens", 0), 2048)
+        self.assertAlmostEqual(req_json.get("temperature"), 0.7, places=2)
+        self.assertAlmostEqual(req_json.get("top_p"), 0.9, places=2)
+        self.assertAlmostEqual(req_json.get("repeat_penalty"), 1.08, places=2)
+        self.assertIn("yol arkadaşı", json.dumps(req_json, ensure_ascii=False))
 
         # 3. Verify encrypted 0700/0600 storage on disk (no plaintext leak!)
         self.assertEqual(stat.S_IMODE(self.chat_storage.stat().st_mode), 0o700)

@@ -1,13 +1,13 @@
-# Zethropol ZCI Chatbot Arch Package (`zethropol-zci-chat 0.1.0-1`)
+# Zethropol ZCI Chatbot Arch Package (`zethropol-zci-chat 0.1.0-2`)
 
 Aşama 12 (**ZCI Chatbot**, `org.zethropol.ZciChat.v1` + `zci-chat` Qt6/QML masaüstü ve CLI istemcisi) için root kullanmadan derlenen Arch Linux paketi.
 
-> **Durum (2026-11-28):** Root'suz `makepkg --clean --force` ile derlendi, `check()` (**4/4 Rust PASS** + **1/1 CTest / 5/5 QTest PASS**, `0` derleyici/QML uyarısı), 4 servisli çapraz D-Bus + gerçek CLI testi (**32/32 `services/local-inference` PASS**, **27/27 `services/zci-chat` PASS**), `desktop-file-validate`, `ELF_HOME_LEAKS=0`, `RPATH_HITS=0`, `QT_NETWORK_LINKS=0` ile doğrulandı ve yerel depoda (`16/16`) indekslendi. Canlı kurulum `sudo pacman -U` onay kapısındadır.
+> **Durum (2026-11-28 — `0.1.0-2` Sohbet Kalitesi, Akıcılık & Token Optimizasyonu):** Zenginleştirilmiş doğal Türkçe `BASE_SYSTEM_PROMPT`, `2048` çıktı token bütçesi ve `120_000` ms (`zci-chat` D-Bus `125_000` ms) hibrit yanıt zaman aşımıyla root'suz `makepkg --clean --force` ile derlendi, `check()` (**4/4 Rust PASS** + **1/1 CTest / 5/5 QTest PASS**, `0` derleyici/QML uyarısı), 4 servisli çapraz D-Bus + gerçek CLI testi (**33/33 `services/local-inference` PASS**), `ELF_HOME_LEAKS=0`, `RPATH_HITS=0`, `QT_NETWORK_LINKS=0` ile doğrulandı ve yerel depoda (`17/17`) indekslendi. Canlı kurulum `sudo pacman -U` onay kapısındadır.
 
 ## Doğrulanan Özetler (`SHA256SUMS`)
 
-- `zethropol-zci-chat-0.1.0-1-src.tar.gz`: `8ad04775f9c3cba4d2b9a08a34a768b038113a9061ed93e7cbf01acbae776617`
-- `zethropol-zci-chat-0.1.0-1-x86_64.pkg.tar.zst`: `a2a8e45b732b81a2ee312d20bc4512677e0faa26650ef4ab5a6f680cc255837f` (`1445,61 KiB`)
+- `zethropol-zci-chat-0.1.0-2-src.tar.gz`: `5b861341c9a018acaf4d0ebc6bf196b6ccb016e00357831f80cdde0fd83602d7`
+- `zethropol-zci-chat-0.1.0-2-x86_64.pkg.tar.zst`: `2e0856aa597df504268a0eeb3cc6999cfc9340f6533be0153aa92df2f697a93e`
 
 ## Paket İçeriği
 

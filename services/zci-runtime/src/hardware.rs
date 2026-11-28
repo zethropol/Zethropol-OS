@@ -115,7 +115,7 @@ pub fn select_hardware_profile(
             profile_id: HardwareProfile::DevBaseline.as_str().to_string(),
             passive_standby_mode: "passive-standby-hybrid-cpu-ram-gpu".to_string(),
             max_context_tokens: 8_192,
-            max_output_tokens: 768,
+            max_output_tokens: 2_048,
             max_concurrent_requests: 1,
             vram_budget_mb: vram_budget,
             default_active_vram_estimate_mb: if vram_budget > 0 {

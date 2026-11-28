@@ -181,7 +181,7 @@ impl MockRuntime {
         d.insert("hardware_profile".to_string(), OwnedValue::from(Str::from("dev-baseline")));
         d.insert("active_model_id".to_string(), OwnedValue::from(Str::from("gemma-4-E4B-it-Q4_K_M")));
         d.insert("max_context_tokens".to_string(), OwnedValue::from(8_192u32));
-        d.insert("max_output_tokens".to_string(), OwnedValue::from(768u32));
+        d.insert("max_output_tokens".to_string(), OwnedValue::from(2_048u32));
         d.insert("loopback_only".to_string(), OwnedValue::from(true));
         d.insert("cpu_cores".to_string(), OwnedValue::from(12u32));
         d.insert("ram_total_mb".to_string(), OwnedValue::from(32_011u64));
@@ -349,6 +349,12 @@ fn token_budget_trimmer_drops_oldest_turns_and_preserves_latest_user_turn() {
     assert_eq!(extract_display_text_from_envelope(raw_env), "Temiz yanıt");
     let real_env = "<<<ZCI_UNTRUSTED_DATA id=e1 source=user_text trust=untrusted-data-payload executable=false policy_authority=none sha256=abc>>>\nGerçek zarf yanıtı\n<<<END_ZCI_UNTRUSTED_DATA id=e1>>>";
     assert_eq!(extract_display_text_from_envelope(real_env), "Gerçek zarf yanıtı");
+
+    // Verify upgraded fluent Turkish prompt & hybrid token/timeout defaults
+    assert_eq!(crate::config::DEFAULT_FALLBACK_OUTPUT_TOKENS, 2_048);
+    assert_eq!(ChatConfig::default().inference_timeout_ms, 120_000);
+    assert!(crate::config::BASE_SYSTEM_PROMPT.contains("yol arkadaşı"));
+    assert!(crate::config::BASE_SYSTEM_PROMPT.contains("salt-okunur"));
 }
 
 #[tokio::test]

@@ -38,9 +38,12 @@ def _find_binary(rel_candidates: tuple[str, ...]) -> Path | None:
 
 
 class _MockLoopbackInferenceHandler(BaseHTTPRequestHandler):
+    last_request_json: dict = {}
+
     def do_POST(self) -> None:
         length = int(self.headers.get("Content-Length", "0"))
-        _ = self.rfile.read(length)
+        raw = self.rfile.read(length).decode("utf-8", errors="replace")
+        type(self).last_request_json = json.loads(raw) if raw.strip() else {}
         payload = json.dumps(
             {
                 "choices": [
@@ -321,6 +324,11 @@ class ZciRuntimeThreeServiceIntegrationTests(unittest.TestCase):
         self.assertFalse(inf.data["output_executable"])
         self.assertEqual(inf.data["output_policy_authority"], "none")
         self.assertIn("Zethropol Stage 11 loopback cevap", inf.data["output_wrapped_payload"])
+        self.assertGreaterEqual(st.data["max_output_tokens"], 2048)
+        req_json = _MockLoopbackInferenceHandler.last_request_json
+        self.assertAlmostEqual(req_json.get("temperature"), 0.7, places=2)
+        self.assertAlmostEqual(req_json.get("top_p"), 0.9, places=2)
+        self.assertAlmostEqual(req_json.get("repeat_penalty"), 1.08, places=2)
 
         # 6. Wait for 1s auto-sleep passive standby transition (background sweeper!)
         deadline = time.monotonic() + 4.0

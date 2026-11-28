@@ -1,6 +1,6 @@
 pkgname=zethropol-zci-chat
 pkgver=0.1.0
-pkgrel=1
+pkgrel=2
 pkgdesc="Zethropol ZCI Chatbot user D-Bus service (org.zethropol.ZciChat.v1) and Qt6/QML + CLI client"
 url="https://github.com/zethropol/Zethropol-OS"
 arch=("x86_64")
@@ -22,7 +22,7 @@ makedepends=(
     "ninja"
 )
 source=("${pkgname}-${pkgver}-${pkgrel}-src.tar.gz")
-sha256sums=("8ad04775f9c3cba4d2b9a08a34a768b038113a9061ed93e7cbf01acbae776617")
+sha256sums=("5b861341c9a018acaf4d0ebc6bf196b6ccb016e00357831f80cdde0fd83602d7")
 
 build() {
     cd "$srcdir/${pkgname}-${pkgver}/services/zci-chat-service"

@@ -478,7 +478,7 @@ impl ZciChatService {
 
         // 6. 12.01 Token-budget trimming aligned with active `zci-runtime` profile
         let effective_max_tokens = if max_tokens == 0 {
-            health.max_output_tokens.min(512)
+            health.max_output_tokens
         } else {
             max_tokens.min(health.max_output_tokens)
         };

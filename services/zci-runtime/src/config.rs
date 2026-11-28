@@ -119,7 +119,7 @@ impl Default for RuntimeConfig {
                 .parse()
                 .expect("static loopback engine endpoint"),
             idle_sleep_timeout_secs: 30,
-            request_timeout_ms: 30_000,
+            request_timeout_ms: 120_000,
             policy_timeout_ms: 4_000,
             max_prompt_bytes: 65_536,
             require_daemon_bridge: true,
@@ -132,7 +132,7 @@ impl RuntimeConfig {
     /// Compiled-in safety ceilings (cannot be relaxed by external config files).
     pub fn clamp_bounds(&mut self) {
         self.idle_sleep_timeout_secs = self.idle_sleep_timeout_secs.clamp(1, 600);
-        self.request_timeout_ms = self.request_timeout_ms.clamp(500, 120_000);
+        self.request_timeout_ms = self.request_timeout_ms.clamp(500, 300_000);
         self.policy_timeout_ms = self.policy_timeout_ms.clamp(500, 15_000);
         self.max_prompt_bytes = self.max_prompt_bytes.clamp(512, 131_072);
     }

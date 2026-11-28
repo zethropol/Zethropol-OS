@@ -484,7 +484,7 @@ Controls.ApplicationWindow {
                                 if (win.bridgeReady && text.trim().length > 0) {
                                     const msg = text
                                     text = ""
-                                    ChatBridge.sendMessage(msg, 256)
+                                    ChatBridge.sendMessage(msg, ChatBridge.maxOutputTokens > 0 ? ChatBridge.maxOutputTokens : 2048)
                                 }
                             }
                         }
@@ -499,7 +499,7 @@ Controls.ApplicationWindow {
                                 if (win.bridgeReady && promptInput.text.trim().length > 0) {
                                     const msg = promptInput.text
                                     promptInput.text = ""
-                                    ChatBridge.sendMessage(msg, 256)
+                                    ChatBridge.sendMessage(msg, ChatBridge.maxOutputTokens > 0 ? ChatBridge.maxOutputTokens : 2048)
                                 }
                             }
                             background: Rectangle {

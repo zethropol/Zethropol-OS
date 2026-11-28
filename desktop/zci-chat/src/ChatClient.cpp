@@ -116,7 +116,7 @@ QVariant ChatClient::unwrapDbusVariant(const QVariant &value)
     return value;
 }
 
-QVariantMap ChatClient::invokeEnvelope(const QString &method, const QVariantList &args)
+QVariantMap ChatClient::invokeEnvelope(const QString &method, const QVariantList &args, int timeoutMs)
 {
     QVariantMap fail;
     fail.insert(QStringLiteral("success"), false);
@@ -138,7 +138,7 @@ QVariantMap ChatClient::invokeEnvelope(const QString &method, const QVariantList
         method);
     call.setArguments(args);
 
-    const QDBusMessage reply = conn.call(call, QDBus::Block, 30000);
+    const QDBusMessage reply = conn.call(call, QDBus::Block, timeoutMs);
     if (reply.type() == QDBusMessage::ErrorMessage) {
         fail.insert(QStringLiteral("message"),
                     QStringLiteral("ZCI Chatbot servisi erişilemiyor: %1").arg(reply.errorMessage()));
@@ -196,7 +196,8 @@ QVariantMap ChatClient::callSendMessage(const QString &sessionId,
                                         quint32 maxTokens)
 {
     return invokeEnvelope(QStringLiteral("SendMessage"),
-                          {sessionId, userMessage, includeSystemContext, maxTokens});
+                          {sessionId, userMessage, includeSystemContext, maxTokens},
+                          125000);
 }
 
 QVariantMap ChatClient::callGetSessionHistory(const QString &sessionId)
@@ -243,7 +244,7 @@ bool ChatClient::refreshStatus()
     m_storagePermissionsStrict =
         d.value(QStringLiteral("storage_permissions_strict"), true).toBool();
     m_maxContextTokens = d.value(QStringLiteral("max_context_tokens"), 8192).toInt();
-    m_maxOutputTokens = d.value(QStringLiteral("max_output_tokens"), 768).toInt();
+    m_maxOutputTokens = d.value(QStringLiteral("max_output_tokens"), 2048).toInt();
     m_blockedCommandAttempts = d.value(QStringLiteral("blocked_command_attempts"), 0).toULongLong();
     m_blockedInjectionAttempts =
         d.value(QStringLiteral("blocked_injection_attempts"), 0).toULongLong();
