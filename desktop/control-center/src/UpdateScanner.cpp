@@ -4,8 +4,103 @@
 #include <QFile>
 #include <QProcessEnvironment>
 #include <QRegularExpression>
+#include <QSet>
 #include <QStandardPaths>
 #include <QTimer>
+
+namespace {
+
+const QSet<QString> &protectedOrphanExactPackages()
+{
+    static const QSet<QString> kExact = {
+        QStringLiteral("zethropol"),
+        QStringLiteral("base"),
+        QStringLiteral("base-devel"),
+        QStringLiteral("glibc"),
+        QStringLiteral("gcc-libs"),
+        QStringLiteral("libgcc"),
+        QStringLiteral("dbus"),
+        QStringLiteral("dbus-broker"),
+        QStringLiteral("dbus-broker-units"),
+        QStringLiteral("polkit"),
+        QStringLiteral("polkit-kde-agent"),
+        QStringLiteral("pacman"),
+        QStringLiteral("pacman-contrib"),
+        QStringLiteral("arch-update"),
+        QStringLiteral("cachy-update"),
+        QStringLiteral("snapper"),
+        QStringLiteral("snap-pac"),
+        QStringLiteral("limine-snapper-sync"),
+        QStringLiteral("btrfs-progs"),
+        QStringLiteral("mkinitcpio"),
+        QStringLiteral("dracut"),
+        QStringLiteral("sudo"),
+        QStringLiteral("sudo-rs"),
+        QStringLiteral("networkmanager"),
+        QStringLiteral("ufw"),
+        QStringLiteral("firewalld"),
+        QStringLiteral("pipewire"),
+        QStringLiteral("wireplumber"),
+        QStringLiteral("mesa"),
+        QStringLiteral("konsole"),
+        QStringLiteral("dolphin"),
+        QStringLiteral("systemsettings"),
+        QStringLiteral("sddm"),
+        QStringLiteral("power-profiles-daemon"),
+        QStringLiteral("smartmontools"),
+        QStringLiteral("fwupd"),
+        QStringLiteral("util-linux"),
+        QStringLiteral("efibootmgr"),
+        QStringLiteral("cryptsetup"),
+        QStringLiteral("lvm2"),
+        QStringLiteral("amd-ucode"),
+        QStringLiteral("intel-ucode"),
+        QStringLiteral("shim"),
+        QStringLiteral("sbctl"),
+    };
+    return kExact;
+}
+
+const QStringList &protectedOrphanPrefixes()
+{
+    static const QStringList kPrefixes = {
+        QStringLiteral("zethropol-"),
+        QStringLiteral("linux"),
+        QStringLiteral("systemd"),
+        QStringLiteral("plasma-"),
+        QStringLiteral("kwin"),
+        QStringLiteral("qt6-"),
+        QStringLiteral("limine"),
+        QStringLiteral("grub"),
+    };
+    return kPrefixes;
+}
+
+} // namespace
+
+bool UpdateScanner::isValidPackageName(const QString &package)
+{
+    if (package.isEmpty() || package.size() > 128)
+        return false;
+    if (package.startsWith(QLatin1Char('-')) || package.startsWith(QLatin1Char('.')))
+        return false;
+    static const QRegularExpression pkgRe(QStringLiteral("^[a-z0-9@._+-]+$"));
+    return pkgRe.match(package).hasMatch();
+}
+
+bool UpdateScanner::isProtectedOrphanPackage(const QString &package)
+{
+    const QString lower = package.trimmed().toLower();
+    if (lower.isEmpty())
+        return true;
+    if (protectedOrphanExactPackages().contains(lower))
+        return true;
+    for (const QString &prefix : protectedOrphanPrefixes()) {
+        if (lower.startsWith(prefix))
+            return true;
+    }
+    return false;
+}
 
 UpdateScanner::UpdateScanner(QObject *parent)
     : QObject(parent),
@@ -65,6 +160,8 @@ void UpdateScanner::scan()
     m_starting = true;
     m_completedAt.clear();
     m_orphanPackages.clear();
+    m_removableOrphanPackages.clear();
+    m_protectedOrphanPackages.clear();
     for (int i = 0; i < m_reports.size(); ++i)
         update(i, "pending", "Tarama bekleniyor.");
 
@@ -163,12 +260,24 @@ void UpdateScanner::startOrphanScan(int timeout)
             && code == 0) {
             const QString out = QString::fromUtf8(process->readAllStandardOutput());
             QStringList orphans;
+            QStringList removable;
+            QStringList protectedOrphans;
+            QSet<QString> seen;
             for (const QString &line : out.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
                 const QString trimmed = line.trimmed();
-                if (!trimmed.isEmpty())
-                    orphans.append(trimmed);
+                if (trimmed.isEmpty() || seen.contains(trimmed))
+                    continue;
+                seen.insert(trimmed);
+                orphans.append(trimmed);
+                if (isProtectedOrphanPackage(trimmed)) {
+                    protectedOrphans.append(trimmed);
+                } else if (isValidPackageName(trimmed)) {
+                    removable.append(trimmed);
+                }
             }
             m_orphanPackages = orphans;
+            m_removableOrphanPackages = removable;
+            m_protectedOrphanPackages = protectedOrphans;
             emit changed();
         }
         process->deleteLater();

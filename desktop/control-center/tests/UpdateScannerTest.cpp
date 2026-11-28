@@ -223,10 +223,42 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
         QCOMPARE(scanner.orphanCount(), 2);
         QCOMPARE(scanner.orphanPackages(), QStringList({"orphan-a", "orphan-b"}));
+        QCOMPARE(scanner.removableOrphanCount(), 2);
+        QCOMPARE(scanner.removableOrphanPackages(), QStringList({"orphan-a", "orphan-b"}));
+        QVERIFY(scanner.protectedOrphanPackages().isEmpty());
         QFile f(QString::fromUtf8(log));
         QVERIFY(f.open(QIODevice::ReadOnly));
         const QString args = QString::fromUtf8(f.readAll()).trimmed();
         QCOMPARE(args, QStringLiteral("-Qtdq"));
+    }
+
+    void orphanDetectionSeparatesRemovableAndProtectedPackages()
+    {
+        script("pacman",
+               "printf 'orphan-a\\nzethropol-control-center\\npacman\\nlinux-cachyos\\norphan-b\\norphan-a\\n'\n");
+        UpdateScanner scanner;
+        configure(scanner);
+        QSignalSpy finished(&scanner, &UpdateScanner::scanFinished);
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+
+        QCOMPARE(scanner.orphanCount(), 5);
+        QCOMPARE(scanner.orphanPackages(),
+                 QStringList({"orphan-a", "zethropol-control-center", "pacman", "linux-cachyos", "orphan-b"}));
+        QCOMPARE(scanner.removableOrphanCount(), 2);
+        QCOMPARE(scanner.removableOrphanPackages(), QStringList({"orphan-a", "orphan-b"}));
+        QCOMPARE(scanner.protectedOrphanPackages(),
+                 QStringList({"zethropol-control-center", "pacman", "linux-cachyos"}));
+
+        QVERIFY(UpdateScanner::isProtectedOrphanPackage(QStringLiteral("zethropol-recovery")));
+        QVERIFY(UpdateScanner::isProtectedOrphanPackage(QStringLiteral("snapper")));
+        QVERIFY(!UpdateScanner::isProtectedOrphanPackage(QStringLiteral("lua54")));
+
+        script("pacman", "exit 1\n");
+        scanner.scan();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 2, 5000);
+        QCOMPARE(scanner.orphanCount(), 0);
+        QCOMPARE(scanner.removableOrphanCount(), 0);
+        QVERIFY(scanner.protectedOrphanPackages().isEmpty());
     }
 };
 

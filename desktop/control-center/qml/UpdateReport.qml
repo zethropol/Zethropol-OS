@@ -15,11 +15,13 @@ Item {
         return ({
             "idle": "Hazır",
             "preflight": "Ön kontroller ve yönetici onayı (Polkit)",
-            "pre-snapshot": "Snapper güncelleme öncesi anlık görüntü",
+            "orphan-discovery": "Anlık yetim paket doğrulaması (pacman -Qdtq)",
+            "pre-snapshot": "Snapper işlem öncesi anlık görüntü",
             "upgrading": "Resmî paket yükseltmesi (pacman -Syu)",
-            "post-snapshot": "Snapper güncelleme sonrası anlık görüntü",
+            "orphan-cleanup": "Yetim paket temizliği (pacman -Rns)",
+            "post-snapshot": "Snapper işlem sonrası anlık görüntü",
             "limine-sync": "Limine önyükleyici eşitleme",
-            "verifying": "Güncelleme sonrası sağlık doğrulaması",
+            "verifying": "İşlem sonrası sağlık doğrulaması",
             "done": "Tamamlandı",
             "blocked": "Kilit nedeniyle güvenle ertelendi",
             "cancelled": "İptal edildi",
@@ -102,7 +104,7 @@ Item {
 
         Label {
             color: reportPage.reportText
-            text: "Resmî depolar (pacman/libalpm) · AUR (ayrı) · Flatpak (ayrı) · Yetim paket tespiti (salt-okunur)"
+            text: "Resmî depolar (pacman/libalpm) · AUR (ayrı) · Flatpak (ayrı) · Yetim paket tespiti ve onaylı temizlik"
             opacity: 0.65
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
@@ -493,18 +495,36 @@ Item {
                         anchors.margins: 16
                         spacing: 8
 
-                        Label {
-                            color: reportPage.reportText
-                            text: "Yetim paketler (" + scanner.orphanCount + " — Yalnızca tespit)"
-                            textFormat: Text.PlainText
-                            font.pixelSize: 18
-                            font.bold: true
+                        RowLayout {
                             Layout.fillWidth: true
+                            spacing: 8
+
+                            Label {
+                                objectName: "orphanPackagesHeaderLabel"
+                                color: reportPage.reportText
+                                text: scanner.removableOrphanCount > 0
+                                      ? "Yetim paketler (" + scanner.removableOrphanCount + " kaldırılabilir / " + scanner.orphanCount + " tespit)"
+                                      : "Yetim paketler (" + scanner.orphanCount + " — Yalnızca korumalı)"
+                                textFormat: Text.PlainText
+                                font.pixelSize: 18
+                                font.bold: true
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                            }
+
+                            Button {
+                                objectName: "startOrphanCleanupButton"
+                                text: installer.busy && installer.activeScope === "orphans"
+                                      ? "Temizleniyor…"
+                                      : "Yetim Paketleri Temizle…"
+                                enabled: !scanner.busy && !installer.busy && installer.orphanCleanupAvailable
+                                onClicked: orphanCleanupConfirmation.open()
+                            }
                         }
 
                         Label {
                             color: reportPage.reportText
-                            text: "Yetim paketler otomatik kaldırılmaz. Kaldırma işlemi ayrı açık onay ve yönetici yetkisi gerektirir."
+                            text: "Yetim paketler otomatik kaldırılmaz. Kaldırma işlemi ayrı açık onay, yönetici yetkisi (Polkit) ve zorunlu Snapper geri dönüş noktası gerektirir."
                             textFormat: Text.PlainText
                             opacity: 0.75
                             Layout.fillWidth: true
@@ -512,13 +532,26 @@ Item {
                         }
 
                         Label {
+                            objectName: "orphanPackagesListLabel"
+                            visible: scanner.removableOrphanCount > 0
                             color: reportPage.reportText
-                            text: scanner.orphanPackages.join(", ")
+                            text: scanner.removableOrphanPackages.join(", ")
                             textFormat: Text.PlainText
                             font.family: "monospace"
                             Layout.fillWidth: true
                             wrapMode: Text.WrapAnywhere
                             opacity: 0.85
+                        }
+
+                        Label {
+                            objectName: "protectedOrphanPackagesNotice"
+                            visible: scanner.protectedOrphanPackages.length > 0
+                            color: reportPage.reportText
+                            text: "Korumalı olduğu için hariç tutulanlar (zethropol-* / çekirdek): " + scanner.protectedOrphanPackages.join(", ")
+                            textFormat: Text.PlainText
+                            Layout.fillWidth: true
+                            wrapMode: Text.WrapAnywhere
+                            opacity: 0.75
                         }
                     }
                 }
@@ -715,6 +748,103 @@ Item {
                         installer.start()
                     else
                         installer.startScoped(reportPage.pendingInstallScope)
+                }
+            }
+        }
+    }
+
+    Dialog {
+        id: orphanCleanupConfirmation
+        objectName: "orphanCleanupConfirmation"
+        anchors.centerIn: parent
+        width: Math.min(reportPage.width - 24, 680)
+        modal: true
+        background: Rectangle {
+            color: reportPalette.window
+            border.color: reportPalette.mid
+            radius: 8
+        }
+        header: Label {
+            color: reportPage.reportText
+            text: "Yetim Paketleri Temizle (pacman -Rns)"
+            textFormat: Text.PlainText
+            font.pixelSize: 22
+            padding: 16
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 12
+
+            Label {
+                color: reportPage.reportText
+                text: "Aşağıdaki " + scanner.removableOrphanCount + " yetim paket kaldırılmak üzere doğrulanacaktır:"
+                textFormat: Text.PlainText
+                font.bold: true
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+            }
+
+            ScrollView {
+                id: orphanDialogScroll
+                Layout.fillWidth: true
+                Layout.preferredHeight: 160
+                contentWidth: availableWidth
+                ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                clip: true
+
+                TextArea {
+                    objectName: "orphanCleanupDialogPackageList"
+                    text: scanner.removableOrphanPackages.join("\n")
+                    color: reportPage.reportText
+                    textFormat: TextEdit.PlainText
+                    readOnly: true
+                    selectByMouse: true
+                    wrapMode: TextEdit.WrapAnywhere
+                    font.family: "monospace"
+                    width: orphanDialogScroll.availableWidth
+                    background: Rectangle {
+                        color: reportPalette.base
+                        border.color: reportPalette.mid
+                        radius: 6
+                    }
+                }
+            }
+
+            Label {
+                objectName: "orphanCleanupDialogProtectedList"
+                visible: scanner.protectedOrphanPackages.length > 0
+                color: reportPage.reportText
+                text: "Hariç tutulan korumalı paketler (zethropol-* / çekirdek): " + scanner.protectedOrphanPackages.join(", ")
+                textFormat: Text.PlainText
+                Layout.fillWidth: true
+                wrapMode: Text.WrapAnywhere
+                opacity: 0.8
+            }
+
+            Label {
+                objectName: "orphanCleanupDialogSnapperNotice"
+                color: reportPage.reportText
+                text: "Tek yönetici onayı (Polkit) ile işlem öncesinde zorunlu Snapper geri dönüş noktası (pre-orphan-cleanup) oluşturulur. Yardımcı ikili anlık pacman -Qdtq listesini ve özyinelemeli bağımlılıkları yeniden doğrulayarak zethropol-* ile çekirdek sistem paketlerinin silinmesini engeller, ardından Snapper post-snapshot ve limine-snapper-sync çalıştırır."
+                textFormat: Text.PlainText
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+            }
+        }
+
+        footer: DialogButtonBox {
+            Button {
+                objectName: "cancelOrphanCleanupButton"
+                text: "Vazgeç"
+                onClicked: orphanCleanupConfirmation.close()
+            }
+            Button {
+                objectName: "confirmOrphanCleanupButton"
+                text: "Temizliği Başlat"
+                highlighted: true
+                enabled: !scanner.busy && !installer.busy && installer.orphanCleanupAvailable
+                onClicked: {
+                    orphanCleanupConfirmation.close()
+                    installer.startOrphanCleanup(true)
                 }
             }
         }

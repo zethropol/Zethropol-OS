@@ -32,6 +32,8 @@ struct CommandResult {
 };
 
 bool validateArgs(int argc, const char *const *argv, std::string *errorOut = nullptr);
+bool isValidPackageName(const std::string &name);
+bool isProtectedOrphanPackage(const std::string &name);
 bool parseSnapshotId(const std::string &raw, std::uint32_t *idOut);
 bool pathExists(const std::string &path);
 bool isExecutableFile(const std::string &path);

@@ -55,6 +55,7 @@ class UpdateInstaller : public QObject
     Q_PROPERTY(bool officialUpdatesAvailable READ officialUpdatesAvailable NOTIFY changed)
     Q_PROPERTY(bool aurUpdatesAvailable READ aurUpdatesAvailable NOTIFY changed)
     Q_PROPERTY(bool flatpakUpdatesAvailable READ flatpakUpdatesAvailable NOTIFY changed)
+    Q_PROPERTY(bool orphanCleanupAvailable READ orphanCleanupAvailable NOTIFY changed)
     Q_PROPERTY(QString activeScope READ activeScope NOTIFY changed)
     Q_PROPERTY(QString healthStatus READ healthStatus NOTIFY changed)
     Q_PROPERTY(QString healthSummary READ healthSummary NOTIFY changed)
@@ -84,6 +85,7 @@ public:
     bool officialUpdatesAvailable() const;
     bool aurUpdatesAvailable() const;
     bool flatpakUpdatesAvailable() const;
+    bool orphanCleanupAvailable() const;
     QString activeScope() const { return m_activeScope; }
     QString healthStatus() const { return m_healthStatus; }
     QString healthSummary() const { return m_healthSummary; }
@@ -105,6 +107,7 @@ public:
 
     Q_INVOKABLE void start();
     Q_INVOKABLE void startScoped(const QString &scope);
+    Q_INVOKABLE void startOrphanCleanup(bool userConfirmed);
     Q_INVOKABLE void cancel();
     Q_INVOKABLE void sendInput(const QString &text);
     Q_INVOKABLE void sendKey(const QString &text);
@@ -142,6 +145,7 @@ private:
     bool m_pacmanLockBlocked = false;
     bool m_interactiveSession = false;
     bool m_limineSyncWarning = false;
+    bool m_orphanCleanupNoop = false;
     QString m_updateOperationId;
     quint32 m_verifiedSnapshotId = 0;
     quint32 m_postSnapshotId = 0;

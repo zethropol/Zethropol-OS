@@ -19,6 +19,9 @@ class UpdateScanner : public QObject
     Q_PROPERTY(bool hasUpdates READ hasUpdates NOTIFY changed)
     Q_PROPERTY(QStringList orphanPackages READ orphanPackages NOTIFY changed)
     Q_PROPERTY(int orphanCount READ orphanCount NOTIFY changed)
+    Q_PROPERTY(QStringList removableOrphanPackages READ removableOrphanPackages NOTIFY changed)
+    Q_PROPERTY(int removableOrphanCount READ removableOrphanCount NOTIFY changed)
+    Q_PROPERTY(QStringList protectedOrphanPackages READ protectedOrphanPackages NOTIFY changed)
 
 public:
     explicit UpdateScanner(QObject *parent = nullptr);
@@ -31,6 +34,11 @@ public:
     bool hasUpdates() const;
     QStringList orphanPackages() const { return m_orphanPackages; }
     int orphanCount() const { return m_orphanPackages.size(); }
+    QStringList removableOrphanPackages() const { return m_removableOrphanPackages; }
+    int removableOrphanCount() const { return m_removableOrphanPackages.size(); }
+    QStringList protectedOrphanPackages() const { return m_protectedOrphanPackages; }
+    static bool isValidPackageName(const QString &package);
+    static bool isProtectedOrphanPackage(const QString &package);
     Q_INVOKABLE void scan();
 
 signals:
@@ -49,6 +57,8 @@ private:
 
     QVariantList m_reports;
     QStringList m_orphanPackages;
+    QStringList m_removableOrphanPackages;
+    QStringList m_protectedOrphanPackages;
     QList<QProcess *> m_processes;
     QTemporaryDir m_database;
     QString m_configurationPath;

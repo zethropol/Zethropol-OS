@@ -406,6 +406,11 @@ bool UpdateInstaller::flatpakUpdatesAvailable() const
     return !m_scanner->reports().at(2).toMap().value(QStringLiteral("packages")).toList().isEmpty();
 }
 
+bool UpdateInstaller::orphanCleanupAvailable() const
+{
+    return m_scanner && m_scanner->removableOrphanCount() > 0;
+}
+
 bool UpdateInstaller::isOfficialRepoScanComplete(const UpdateScanner *scanner, QString *reason)
 {
     if (!scanner) {
@@ -496,8 +501,12 @@ UpdateInstaller::UpdateInstaller(UpdateScanner *scanner, QObject *parent)
         readOutput();
         if (!m_busy)
             return;
+        const bool isOrphanScope = (m_activeScope == QStringLiteral("orphans"));
+        const bool isHelperScope = (m_activeScope == QStringLiteral("official") || isOrphanScope);
         if (state != QProcess::NormalExit) {
-            finish("unknown", "Kurulum işlemi beklenmedik biçimde sonlandı. Bazı paketler değişmiş olabilir; işlem çıktısını ve yenilenen raporu inceleyin.");
+            finish("unknown", isOrphanScope
+                ? QStringLiteral("Yetim paket temizliği beklenmedik biçimde sonlandı. Bazı paketler değişmiş olabilir; işlem çıktısını ve yenilenen raporu inceleyin.")
+                : QStringLiteral("Kurulum işlemi beklenmedik biçimde sonlandı. Bazı paketler değişmiş olabilir; işlem çıktısını ve yenilenen raporu inceleyin."));
         } else if (code == 0) {
             static const QRegularExpression verifiedErrorRe(
                 QStringLiteral("(?:an error has occurred during the update process"
@@ -515,7 +524,20 @@ UpdateInstaller::UpdateInstaller(UpdateScanner *scanner, QObject *parent)
                                "|bağımlılıklar karşılanamadı"
                                "|veritabanı kilitlenemedi)"),
                 QRegularExpression::CaseInsensitiveOption);
-            if (verifiedErrorRe.match(m_output).hasMatch()) {
+            if (isOrphanScope) {
+                if (m_orphanCleanupNoop) {
+                    finish("finished", QStringLiteral("Kaldırılabilir yetim paket bulunmadı; değişiklik yapılmadı."));
+                } else if (verifiedErrorRe.match(m_output).hasMatch()) {
+                    finish("error", QStringLiteral("Yetim paket temizliği çıktısında işlem hatası tespit edildi. Bazı paketler değişmiş olabilir; işlem çıktısını ve yenilenen raporu inceleyin."));
+                } else if (m_verifiedSnapshotId > 0 && m_postSnapshotId > 0) {
+                    finish("finished",
+                           QStringLiteral("Yetim paket temizliği başarıyla tamamlandı (Pre-Snapshot #%1 → Post-Snapshot #%2).")
+                               .arg(m_verifiedSnapshotId)
+                               .arg(m_postSnapshotId));
+                } else {
+                    finish("finished", QStringLiteral("Yetim paket temizliği tamamlandı. Paket durumu yenilenen rapordan kontrol edilebilir."));
+                }
+            } else if (verifiedErrorRe.match(m_output).hasMatch()) {
                 finish("error", "Kurulum çıktısında işlem hatası tespit edildi. Bazı paketler değişmiş veya güncellenmemiş olabilir; işlem çıktısını ve yenilenen raporu inceleyin.");
             } else if (m_output.contains(QRegularExpression(QStringLiteral("(?:reboot required|yeniden başlatma gerekiyor|rebooting to finalize|yeniden başlatmayı düşünün)"), QRegularExpression::CaseInsensitiveOption))) {
                 finish("finished", "Güncellemeler uygulandı. Çekirdek güncellemesinin tamamlanması için sistemi yeniden başlatmanız gerekir.");
@@ -529,21 +551,29 @@ UpdateInstaller::UpdateInstaller(UpdateScanner *scanner, QObject *parent)
             } else {
                 finish("finished", "Kurulum oturumu sona erdi. Paket durumunu yenilenen rapordan ve işlem çıktısından kontrol edin.");
             }
-        } else if ((m_activeScope == QStringLiteral("official") && code == 17) || m_pacmanLockBlocked) {
+        } else if ((isHelperScope && code == 17) || m_pacmanLockBlocked) {
             m_pacmanLockBlocked = true;
             finish("blocked",
-                   QStringLiteral("Aktif pacman kilidi (%1) tespit edildi; başka bir paket işlemi sürerken yükseltme güvenle ertelendi.")
+                   (isOrphanScope
+                        ? QStringLiteral("Aktif pacman kilidi (%1) tespit edildi; başka bir paket işlemi sürerken yetim paket temizliği güvenle ertelendi.")
+                        : QStringLiteral("Aktif pacman kilidi (%1) tespit edildi; başka bir paket işlemi sürerken yükseltme güvenle ertelendi."))
                        .arg(m_pacmanLockPath));
-        } else if (m_activeScope == QStringLiteral("official") && code == 11) {
-            finish("error", "Güncelleme öncesi zorunlu Snapper anlık görüntüsü alınamadı; paket yükseltmesi güvenlik nedeniyle başlatılmadı.");
-        } else if (m_activeScope == QStringLiteral("official") && code == 12) {
-            finish("error", "Paket yükseltmesi tamamlandı ancak güncelleme sonrası Snapper anlık görüntüsü doğrulanamadı; çıktıyı ve Recovery sekmesini inceleyin.");
+        } else if (isHelperScope && code == 11) {
+            finish("error", isOrphanScope
+                ? QStringLiteral("Yetim paket temizliği öncesi zorunlu Snapper anlık görüntüsü alınamadı; kaldırma işlemi güvenlik nedeniyle başlatılmadı.")
+                : QStringLiteral("Güncelleme öncesi zorunlu Snapper anlık görüntüsü alınamadı; paket yükseltmesi güvenlik nedeniyle başlatılmadı."));
+        } else if (isHelperScope && code == 12) {
+            finish("error", isOrphanScope
+                ? QStringLiteral("Yetim paket temizliği tamamlandı ancak işlem sonrası Snapper anlık görüntüsü doğrulanamadı; çıktıyı ve Recovery sekmesini inceleyin.")
+                : QStringLiteral("Paket yükseltmesi tamamlandı ancak güncelleme sonrası Snapper anlık görüntüsü doğrulanamadı; çıktıyı ve Recovery sekmesini inceleyin."));
         } else if (code == 4 || code == 17) {
             finish("cancelled", "Güncelleme işlemi kullanıcı tarafından iptal edildi veya başka bir oturum nedeniyle durduruldu. Rapor yeniden taramayla güncellenir.");
         } else if (code == 2 || code == 3 || code == 126 || code == 127) {
             finish("error", "Yönetici yetkisi alınamadı (yetkilendirme başarısız oldu veya reddedildi).");
         } else if (code == 5) {
-            finish("error", "Resmî paket yükseltmesi sırasında hata oluştu. Bazı paketler değişmiş olabilir; işlem çıktısını ve Recovery sekmesini inceleyin.");
+            finish("error", isOrphanScope
+                ? QStringLiteral("Yetim paket kaldırma (pacman -Rns) sırasında hata oluştu. Bazı paketler değişmiş olabilir; işlem çıktısını ve Recovery sekmesini inceleyin.")
+                : QStringLiteral("Resmî paket yükseltmesi sırasında hata oluştu. Bazı paketler değişmiş olabilir; işlem çıktısını ve Recovery sekmesini inceleyin."));
         } else if (code == 6) {
             finish("error", "Yeniden başlatma işlemi başlatılamadı. Sistemi elle yeniden başlatabilirsiniz.");
         } else {
@@ -731,6 +761,7 @@ void UpdateInstaller::startScoped(const QString &scope)
     m_postSnapshotId = 0;
     m_pacmanLockBlocked = false;
     m_limineSyncWarning = false;
+    m_orphanCleanupNoop = false;
     m_usedRecoveryGate = false;
     m_progressStage = QStringLiteral("preflight");
     m_progressPercent = 5;
@@ -835,6 +866,126 @@ void UpdateInstaller::startScoped(const QString &scope)
     m_process.start();
 }
 
+void UpdateInstaller::startOrphanCleanup(bool userConfirmed)
+{
+    if (m_busy)
+        return;
+
+    if (!userConfirmed) {
+        m_status = QStringLiteral("error");
+        m_progressStage = QStringLiteral("error");
+        m_progressPercent = 0;
+        m_message = QStringLiteral("Yetim paket temizliği için açık kullanıcı onayı gereklidir.");
+        emit changed();
+        emit sessionFinished();
+        return;
+    }
+
+    if (!m_scanner || m_scanner->busy())
+        return;
+
+    if (!orphanCleanupAvailable()) {
+        m_status = QStringLiteral("error");
+        m_progressStage = QStringLiteral("error");
+        m_progressPercent = 0;
+        m_message = QStringLiteral("Kaldırılabilir yetim paket bulunamadı.");
+        emit changed();
+        emit sessionFinished();
+        return;
+    }
+
+    if (!m_pacmanLockPath.isEmpty() && QFile::exists(m_pacmanLockPath)) {
+        m_activeScope = QStringLiteral("orphans");
+        m_pacmanLockBlocked = true;
+        m_status = QStringLiteral("blocked");
+        m_progressStage = QStringLiteral("blocked");
+        m_progressPercent = 0;
+        m_cleanupStatus = QStringLiteral("blocked");
+        m_cleanupSummary = QStringLiteral("Aktif pacman kilidi (%1) nedeniyle yetim paket temizliği güvenle ertelendi.")
+                               .arg(m_pacmanLockPath);
+        m_message = QStringLiteral("Aktif pacman kilidi (%1) tespit edildi; başka bir paket işlemi sürerken yetim paket temizliği güvenle ertelendi.")
+                        .arg(m_pacmanLockPath);
+        emit changed();
+        emit sessionFinished();
+        return;
+    }
+
+    const QString pkexecBin = QStandardPaths::findExecutable(QStringLiteral("pkexec"));
+    const QFileInfo helperInfo(m_updateHelperPath);
+    if (pkexecBin.isEmpty()) {
+        m_status = QStringLiteral("error");
+        m_progressStage = QStringLiteral("error");
+        m_message = QStringLiteral("Yetim paket temizliği için pkexec bulunamadı.");
+        emit changed();
+        emit sessionFinished();
+        return;
+    }
+    if (!helperInfo.exists() || !helperInfo.isExecutable()) {
+        m_status = QStringLiteral("error");
+        m_progressStage = QStringLiteral("error");
+        m_message = QStringLiteral("Yetkili güncelleme yardımcısı (%1) bulunamadı veya çalıştırılabilir değil.")
+                        .arg(m_updateHelperPath);
+        emit changed();
+        emit sessionFinished();
+        return;
+    }
+
+    m_activeScope = QStringLiteral("orphans");
+    m_updateOperationId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    m_verifiedSnapshotId = 0;
+    m_postSnapshotId = 0;
+    m_pacmanLockBlocked = false;
+    m_limineSyncWarning = false;
+    m_orphanCleanupNoop = false;
+    m_usedRecoveryGate = false;
+    m_progressStage = QStringLiteral("preflight");
+    m_progressPercent = 5;
+    m_recoveryGuidance.clear();
+    m_healthStatus.clear();
+    m_healthSummary.clear();
+    m_cleanupStatus.clear();
+    m_cleanupSummary.clear();
+    m_rebootStatus.clear();
+    m_rebootRequired = false;
+    m_rebootSafetyNotice.clear();
+
+    if (!m_liveExecutionEnabled) {
+        m_status = QStringLiteral("blocked");
+        m_progressStage = QStringLiteral("blocked");
+        m_progressPercent = 0;
+        m_message = QStringLiteral("Canlı yetim paket temizliği yürütmesi şu anda kapalıdır.");
+        emit changed();
+        emit sessionFinished();
+        return;
+    }
+
+    m_rawOutput.clear();
+    m_output.clear();
+    m_decoder = QStringDecoder(QStringDecoder::Utf8);
+    emit outputChanged();
+
+    auto environment = QProcessEnvironment::systemEnvironment();
+    environment.remove(QStringLiteral("SKIP_AUTOSNAP"));
+    environment.remove(QStringLiteral("SNAP_PAC_SKIP"));
+    environment.insert(QStringLiteral("TERM"), QStringLiteral("dumb"));
+    environment.insert(QStringLiteral("NO_COLOR"), QStringLiteral("1"));
+    m_process.setProcessEnvironment(environment);
+
+    m_interactiveSession = false;
+    m_process.setProgram(pkexecBin);
+    // Never pass package names on the command line: the privileged helper discovers and validates live orphans itself.
+    m_process.setArguments({m_updateHelperPath, QStringLiteral("remove-orphans")});
+    m_progressStage = QStringLiteral("preflight");
+    m_progressPercent = 10;
+    m_message = QStringLiteral("Yönetici onayı (Polkit) ve yetim paket temizliği ön kontrolleri bekleniyor…");
+
+    m_busy = true;
+    m_scanner->m_installationRunning = true;
+    m_status = QStringLiteral("running");
+    emit changed();
+    m_process.start();
+}
+
 void UpdateInstaller::sendInput(const QString &text)
 {
     if (!m_busy || m_process.state() != QProcess::Running
@@ -870,11 +1021,13 @@ void UpdateInstaller::readOutput()
     m_output = text;
     emit outputChanged();
 
-    if (m_activeScope == QStringLiteral("official")) {
+    const bool isHelperScope = (m_activeScope == QStringLiteral("official")
+                                || m_activeScope == QStringLiteral("orphans"));
+    if (isHelperScope) {
         parseHelperMarkers(text);
     }
 
-    if (m_busy && m_activeScope != QStringLiteral("official")) {
+    if (m_busy && !isHelperScope) {
         const QString tail = text.right(4096);
         QString stage;
         if (tail.contains(QRegularExpression(QStringLiteral("(?:reboot now|yeniden başlatmak ister misiniz|rebooting in|saniye içinde yeniden başlıyor)"), QRegularExpression::CaseInsensitiveOption))) {
@@ -934,6 +1087,7 @@ void UpdateInstaller::parseHelperMarkers(const QString &text)
     static const QRegularExpression preSnapIdRe(QStringLiteral("\\bPRE_SNAPSHOT_ID=([0-9]+)"));
     static const QRegularExpression postSnapIdRe(QStringLiteral("\\bPOST_SNAPSHOT_ID=([0-9]+)"));
 
+    const bool isOrphanScope = (m_activeScope == QStringLiteral("orphans"));
     const QStringList lines = text.split(QLatin1Char('\n'));
     for (const QString &rawLine : lines) {
         const QString line = rawLine.trimmed();
@@ -963,18 +1117,42 @@ void UpdateInstaller::parseHelperMarkers(const QString &text)
 
             if (stage == QStringLiteral("preflight") && status == QStringLiteral("ok")) {
                 updateStage(QStringLiteral("preflight"), 15,
-                            QStringLiteral("Ön kontroller tamamlandı; Snapper anlık görüntüsü hazırlanıyor…"));
+                            isOrphanScope
+                                ? QStringLiteral("Ön kontroller tamamlandı; yetim paketler anlık olarak doğrulanıyor…")
+                                : QStringLiteral("Ön kontroller tamamlandı; Snapper anlık görüntüsü hazırlanıyor…"));
             } else if (stage == QStringLiteral("blocked") && reason == QStringLiteral("pacman-lock")) {
                 if (!m_pacmanLockBlocked) {
                     m_pacmanLockBlocked = true;
                     stateChanged = true;
                 }
                 updateStage(QStringLiteral("blocked"), 0,
-                            QStringLiteral("Aktif pacman kilidi tespit edildi; yükseltme güvenle ertelendi."));
+                            isOrphanScope
+                                ? QStringLiteral("Aktif pacman kilidi tespit edildi; yetim paket temizliği güvenle ertelendi.")
+                                : QStringLiteral("Aktif pacman kilidi tespit edildi; yükseltme güvenle ertelendi."));
+            } else if (stage == QStringLiteral("orphan-discovery")) {
+                if (status == QStringLiteral("starting")) {
+                    updateStage(QStringLiteral("orphan-discovery"), 18,
+                                QStringLiteral("Anlık yetim paket listesi doğrulanıyor (pacman -Qdtq)…"));
+                } else if (status == QStringLiteral("empty")) {
+                    m_orphanCleanupNoop = true;
+                    updateStage(QStringLiteral("orphan-discovery"), 90,
+                                QStringLiteral("Kaldırılabilir yetim paket bulunmadı; değişiklik yapılmayacak."));
+                } else if (status == QStringLiteral("ok")) {
+                    updateStage(QStringLiteral("orphan-discovery"), 22,
+                                QStringLiteral("Kaldırılabilir yetim paketler doğrulandı; Snapper anlık görüntüsü hazırlanıyor…"));
+                } else if (status == QStringLiteral("failed")) {
+                    updateStage(QStringLiteral("error"), m_progressPercent,
+                                QStringLiteral("Yetim paket listesi doğrulanamadı."));
+                }
+            } else if (stage == QStringLiteral("orphan-filter") && status == QStringLiteral("protected-skipped")) {
+                updateStage(m_progressStage, m_progressPercent,
+                            QStringLiteral("Korumalı zethropol-* / çekirdek paketleri temizlik kapsamı dışında bırakıldı."));
             } else if (stage == QStringLiteral("pre-snapshot")) {
                 if (status == QStringLiteral("starting")) {
-                    updateStage(QStringLiteral("pre-snapshot"), 20,
-                                QStringLiteral("Zorunlu Snapper güncelleme öncesi anlık görüntüsü alınıyor…"));
+                    updateStage(QStringLiteral("pre-snapshot"), isOrphanScope ? 25 : 20,
+                                isOrphanScope
+                                    ? QStringLiteral("Zorunlu Snapper temizlik öncesi anlık görüntüsü alınıyor…")
+                                    : QStringLiteral("Zorunlu Snapper güncelleme öncesi anlık görüntüsü alınıyor…"));
                 } else if (status == QStringLiteral("ok")) {
                     const quint32 snapId = snapIdRe.match(rest).captured(1).toUInt();
                     if (snapId > 0 && m_verifiedSnapshotId != snapId) {
@@ -982,11 +1160,15 @@ void UpdateInstaller::parseHelperMarkers(const QString &text)
                         stateChanged = true;
                     }
                     updateStage(QStringLiteral("pre-snapshot"), 35,
-                                QStringLiteral("Güncelleme öncesi Snapper anlık görüntüsü (#%1) oluşturuldu.")
+                                (isOrphanScope
+                                     ? QStringLiteral("Temizlik öncesi Snapper anlık görüntüsü (#%1) oluşturuldu.")
+                                     : QStringLiteral("Güncelleme öncesi Snapper anlık görüntüsü (#%1) oluşturuldu."))
                                     .arg(m_verifiedSnapshotId));
                 } else if (status == QStringLiteral("failed")) {
                     updateStage(QStringLiteral("error"), m_progressPercent,
-                                QStringLiteral("Güncelleme öncesi Snapper anlık görüntüsü alınamadı."));
+                                isOrphanScope
+                                    ? QStringLiteral("Temizlik öncesi Snapper anlık görüntüsü alınamadı.")
+                                    : QStringLiteral("Güncelleme öncesi Snapper anlık görüntüsü alınamadı."));
                 }
             } else if (stage == QStringLiteral("pacman-upgrade")) {
                 if (status == QStringLiteral("starting")) {
@@ -999,10 +1181,23 @@ void UpdateInstaller::parseHelperMarkers(const QString &text)
                     updateStage(QStringLiteral("error"), m_progressPercent,
                                 QStringLiteral("Resmî paket yükseltmesi sırasında hata oluştu."));
                 }
+            } else if (stage == QStringLiteral("orphan-cleanup")) {
+                if (status == QStringLiteral("starting")) {
+                    updateStage(QStringLiteral("orphan-cleanup"), 50,
+                                QStringLiteral("Yetim paketler kaldırılıyor (pacman -Rns --noconfirm)…"));
+                } else if (status == QStringLiteral("ok")) {
+                    updateStage(QStringLiteral("orphan-cleanup"), 75,
+                                QStringLiteral("Yetim paketler kaldırıldı; işlem sonrası Snapper anlık görüntüsü hazırlanıyor…"));
+                } else if (status == QStringLiteral("failed")) {
+                    updateStage(QStringLiteral("error"), m_progressPercent,
+                                QStringLiteral("Yetim paket kaldırma (pacman -Rns) sırasında hata oluştu."));
+                }
             } else if (stage == QStringLiteral("post-snapshot")) {
                 if (status == QStringLiteral("starting")) {
                     updateStage(QStringLiteral("post-snapshot"), 80,
-                                QStringLiteral("Güncelleme sonrası Snapper anlık görüntüsü alınıyor…"));
+                                isOrphanScope
+                                    ? QStringLiteral("Temizlik sonrası Snapper anlık görüntüsü alınıyor…")
+                                    : QStringLiteral("Güncelleme sonrası Snapper anlık görüntüsü alınıyor…"));
                 } else if (status == QStringLiteral("ok")) {
                     const quint32 snapId = snapIdRe.match(rest).captured(1).toUInt();
                     if (snapId > 0 && m_postSnapshotId != snapId) {
@@ -1010,7 +1205,9 @@ void UpdateInstaller::parseHelperMarkers(const QString &text)
                         stateChanged = true;
                     }
                     updateStage(QStringLiteral("post-snapshot"), 90,
-                                QStringLiteral("Güncelleme sonrası Snapper anlık görüntüsü (#%1) oluşturuldu.")
+                                (isOrphanScope
+                                     ? QStringLiteral("Temizlik sonrası Snapper anlık görüntüsü (#%1) oluşturuldu.")
+                                     : QStringLiteral("Güncelleme sonrası Snapper anlık görüntüsü (#%1) oluşturuldu."))
                                     .arg(m_postSnapshotId));
                 }
             } else if (stage == QStringLiteral("limine-sync")) {
@@ -1024,9 +1221,15 @@ void UpdateInstaller::parseHelperMarkers(const QString &text)
                     updateStage(QStringLiteral("limine-sync"), 96,
                                 QStringLiteral("Limine önyükleyici eşitlemesi uyarıyla tamamlandı."));
                 }
+            } else if (stage == QStringLiteral("complete") && status == QStringLiteral("noop")) {
+                m_orphanCleanupNoop = true;
+                updateStage(QStringLiteral("done"), 100,
+                            QStringLiteral("Kaldırılabilir yetim paket bulunmadı; değişiklik yapılmadı."));
             } else if (stage == QStringLiteral("complete") && status == QStringLiteral("ok")) {
                 updateStage(QStringLiteral("verifying"), 98,
-                            QStringLiteral("Güncelleme sonrası sistem sağlığı doğrulanıyor…"));
+                            isOrphanScope
+                                ? QStringLiteral("Yetim paket temizliği sonrası sistem sağlığı doğrulanıyor…")
+                                : QStringLiteral("Güncelleme sonrası sistem sağlığı doğrulanıyor…"));
             }
             continue;
         }
@@ -1049,6 +1252,17 @@ void UpdateInstaller::parseHelperMarkers(const QString &text)
                 stateChanged = true;
             } else if (line.contains(QStringLiteral("Processing package changes"), Qt::CaseInsensitive) && m_progressPercent < 70) {
                 m_progressPercent = 70;
+                stateChanged = true;
+            } else if (line.contains(QStringLiteral("Running post-transaction hooks"), Qt::CaseInsensitive) && m_progressPercent < 74) {
+                m_progressPercent = 74;
+                stateChanged = true;
+            }
+        } else if (m_progressStage == QStringLiteral("orphan-cleanup")) {
+            if (line.contains(QStringLiteral("checking dependencies"), Qt::CaseInsensitive) && m_progressPercent < 55) {
+                m_progressPercent = 55;
+                stateChanged = true;
+            } else if (line.contains(QStringLiteral("Processing package changes"), Qt::CaseInsensitive) && m_progressPercent < 65) {
+                m_progressPercent = 65;
                 stateChanged = true;
             } else if (line.contains(QStringLiteral("Running post-transaction hooks"), Qt::CaseInsensitive) && m_progressPercent < 74) {
                 m_progressPercent = 74;
@@ -1086,19 +1300,29 @@ void UpdateInstaller::finish(const QString &status, const QString &message)
             : (status == QStringLiteral("unknown") ? QStringLiteral("unknown") : QStringLiteral("failed"));
         m_recoveryComplete(m_updateOperationId, outcome);
     }
+    const bool isOrphanScope = (m_activeScope == QStringLiteral("orphans"));
     if (status != QStringLiteral("finished") && m_verifiedSnapshotId > 0) {
-        m_recoveryGuidance = QStringLiteral(
-            "Güncelleme öncesi snapshot #%1 korundu. Kullanıcı verileri (/home) root geri yüklemesinden ayrı korunur, ancak sistem paketi geri alınırsa uygulama verilerinde (~/.config, ~/.local/share) sürüm uyumsuzluğu oluşabilir. Otomatik rollback veya onarım başlatılmadı; kurtarma için Recovery sekmesindeki ön kontrolü veya gerekirse haricî kurtarma/arch-chroot kullanın.")
+        m_recoveryGuidance = (isOrphanScope
+            ? QStringLiteral(
+                "Yetim paket temizliği öncesi snapshot #%1 korundu. Kullanıcı verileri (/home) root geri yüklemesinden ayrı korunur, ancak sistem paketi geri alınırsa uygulama verilerinde (~/.config, ~/.local/share) sürüm uyumsuzluğu oluşabilir. Otomatik rollback veya onarım başlatılmadı; kurtarma için Recovery sekmesindeki ön kontrolü veya gerekirse haricî kurtarma/arch-chroot kullanın.")
+            : QStringLiteral(
+                "Güncelleme öncesi snapshot #%1 korundu. Kullanıcı verileri (/home) root geri yüklemesinden ayrı korunur, ancak sistem paketi geri alınırsa uygulama verilerinde (~/.config, ~/.local/share) sürüm uyumsuzluğu oluşabilir. Otomatik rollback veya onarım başlatılmadı; kurtarma için Recovery sekmesindeki ön kontrolü veya gerekirse haricî kurtarma/arch-chroot kullanın."))
                                  .arg(m_verifiedSnapshotId);
     } else if (status == QStringLiteral("finished") && m_verifiedSnapshotId > 0) {
         if (m_postSnapshotId > 0) {
-            m_recoveryGuidance = QStringLiteral(
-                "Güncelleme öncesi snapshot #%1 ve sonrası snapshot #%2 korundu; sistem sağlığı bağımsız olarak doğrulanana kadar otomatik silinmez.")
+            m_recoveryGuidance = (isOrphanScope
+                ? QStringLiteral(
+                    "Yetim paket temizliği öncesi snapshot #%1 ve sonrası snapshot #%2 korundu; sistem sağlığı bağımsız olarak doğrulanana kadar otomatik silinmez.")
+                : QStringLiteral(
+                    "Güncelleme öncesi snapshot #%1 ve sonrası snapshot #%2 korundu; sistem sağlığı bağımsız olarak doğrulanana kadar otomatik silinmez."))
                                      .arg(m_verifiedSnapshotId)
                                      .arg(m_postSnapshotId);
         } else {
-            m_recoveryGuidance = QStringLiteral(
-                "Güncelleme öncesi snapshot #%1 korundu; sistem sağlığı bağımsız olarak doğrulanana kadar otomatik silinmez.")
+            m_recoveryGuidance = (isOrphanScope
+                ? QStringLiteral(
+                    "Yetim paket temizliği öncesi snapshot #%1 korundu; sistem sağlığı bağımsız olarak doğrulanana kadar otomatik silinmez.")
+                : QStringLiteral(
+                    "Güncelleme öncesi snapshot #%1 korundu; sistem sağlığı bağımsız olarak doğrulanana kadar otomatik silinmez."))
                                      .arg(m_verifiedSnapshotId);
         }
     }
@@ -1200,7 +1424,32 @@ void UpdateInstaller::evaluatePostUpdateState()
             : gaps.join(QStringLiteral(" "));
     }
 
-    if (m_status != QStringLiteral("finished")) {
+    if (m_activeScope == QStringLiteral("orphans")) {
+        if (m_status == QStringLiteral("blocked")) {
+            m_cleanupStatus = QStringLiteral("blocked");
+            m_cleanupSummary = QStringLiteral(
+                "Aktif pacman kilidi veya güvenlik engeli nedeniyle yetim paket temizliği güvenle ertelendi.");
+        } else if (m_status != QStringLiteral("finished")) {
+            m_cleanupStatus = QStringLiteral("failed");
+            m_cleanupSummary = QStringLiteral(
+                "Yetim paket temizliği hatayla veya kesintiyle sonlandı; alınan Snapper anlık görüntüleri ve günlükler korundu.");
+        } else if (m_orphanCleanupNoop) {
+            m_cleanupStatus = QStringLiteral("noop");
+            m_cleanupSummary = QStringLiteral(
+                "Kaldırılabilir yetim paket bulunmadı (veya yalnızca korumalı zethropol-*/çekirdek paketleri mevcuttu); snapshot ve paket değişikliği yapılmadı.");
+        } else {
+            m_cleanupStatus = QStringLiteral("completed");
+            if (m_verifiedSnapshotId > 0 && m_postSnapshotId > 0) {
+                m_cleanupSummary = QStringLiteral(
+                    "Açık kullanıcı onayıyla yetim paket temizliği tamamlandı (Pre-Snapshot #%1 → Post-Snapshot #%2). Korumalı zethropol-* ve çekirdek paketleri hariç tutuldu.")
+                                       .arg(m_verifiedSnapshotId)
+                                       .arg(m_postSnapshotId);
+            } else {
+                m_cleanupSummary = QStringLiteral(
+                    "Açık kullanıcı onayıyla yetim paket temizliği tamamlandı. Korumalı zethropol-* ve çekirdek paketleri hariç tutuldu.");
+            }
+        }
+    } else if (m_status != QStringLiteral("finished")) {
         m_cleanupStatus = QStringLiteral("blocked");
         m_cleanupSummary = QStringLiteral(
             "Güncelleme başarılı veya doğrulanmış olmadığı için otomatik temizlik yapılmadı. "

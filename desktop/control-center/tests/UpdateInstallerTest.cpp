@@ -1014,6 +1014,200 @@ exit 5
         QCOMPARE(installer.preSnapshotId(), 205u);
         QVERIFY(installer.recoveryGuidance().contains("#205"));
     }
+
+    void orphanCleanupRequiresExplicitConfirmationHonorsLockAndRefreshesScanner()
+    {
+        const QString orphanStateFile = directory.filePath("orphans-state.txt");
+        {
+            QFile sf(orphanStateFile);
+            QVERIFY(sf.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            sf.write("orphan-a\nzethropol-recovery\norphan-b\n");
+        }
+        script("pacman",
+               QString("if [ \"$1\" = \"-Qtdq\" ]; then\n"
+                       "  if [ -s '%1' ]; then\n"
+                       "    cat '%1'\n"
+                       "    exit 0\n"
+                       "  fi\n"
+                       "  exit 1\n"
+                       "fi\n"
+                       "exit 0\n")
+                   .arg(orphanStateFile)
+                   .toUtf8());
+
+        const QString pkexecLog = directory.filePath("pkexec-orphan.log");
+        QFile::remove(pkexecLog);
+        script("pkexec", QString("printf '%s\\n' \"$*\" > '%1'\nexec \"$@\"\n").arg(pkexecLog).toUtf8());
+        script("mock-orphan-helper",
+               QString("if [ -n \"${2:-}\" ] || [ \"${1:-}\" != \"remove-orphans\" ]; then\n"
+                       "  echo \"UNEXPECTED_ARGS:$*\" >&2\n"
+                       "  exit 2\n"
+                       "fi\n"
+                       ": > '%1'\n"
+                       "printf '[ZETHROPOL-UPDATE] STAGE=preflight STATUS=ok\\n'\n"
+                       "printf '[ZETHROPOL-UPDATE] STAGE=orphan-discovery STATUS=starting\\n'\n"
+                       "printf '[ZETHROPOL-UPDATE] STAGE=orphan-filter STATUS=protected-skipped PACKAGES=zethropol-recovery\\n'\n"
+                       "printf '[ZETHROPOL-UPDATE] STAGE=orphan-discovery STATUS=ok COUNT=2 PACKAGES=orphan-a,orphan-b\\n'\n"
+                       "printf '[ZETHROPOL-UPDATE] STAGE=pre-snapshot STATUS=starting\\n'\n"
+                       "printf '[ZETHROPOL-UPDATE] STAGE=pre-snapshot STATUS=ok SNAPSHOT_ID=301\\n'\n"
+                       "printf '[ZETHROPOL-UPDATE] STAGE=orphan-cleanup STATUS=starting COUNT=2\\n'\n"
+                       "printf 'checking dependencies...\\n'\n"
+                       "printf ':: Processing package changes...\\n'\n"
+                       "printf 'removing orphan-a...\\n'\n"
+                       "printf 'removing orphan-b...\\n'\n"
+                       "printf '[ZETHROPOL-UPDATE] STAGE=orphan-cleanup STATUS=ok\\n'\n"
+                       "printf '[ZETHROPOL-UPDATE] STAGE=post-snapshot STATUS=starting PRE_SNAPSHOT_ID=301\\n'\n"
+                       "printf '[ZETHROPOL-UPDATE] STAGE=post-snapshot STATUS=ok SNAPSHOT_ID=302 PRE_SNAPSHOT_ID=301\\n'\n"
+                       "printf '[ZETHROPOL-UPDATE] STAGE=limine-sync STATUS=ok\\n'\n"
+                       "printf '[ZETHROPOL-UPDATE] STAGE=complete STATUS=ok PRE_SNAPSHOT_ID=301 POST_SNAPSHOT_ID=302\\n'\n"
+                       "exit 0\n")
+                   .arg(orphanStateFile)
+                   .toUtf8());
+
+        UpdateScanner scanner;
+        QSignalSpy scanned(&scanner, &UpdateScanner::scanFinished);
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 1, 5000);
+        QCOMPARE(scanner.orphanCount(), 3);
+        QCOMPARE(scanner.removableOrphanCount(), 2);
+        QCOMPARE(scanner.removableOrphanPackages(), QStringList({"orphan-a", "orphan-b"}));
+        QCOMPARE(scanner.protectedOrphanPackages(), QStringList({"zethropol-recovery"}));
+
+        UpdateInstaller installer(&scanner);
+        installer.m_updateHelperPath = directory.filePath("mock-orphan-helper");
+        installer.m_healthProbe = [](const QString &, quint32, const QString &) {
+            PostUpdateHealthEvidence ev;
+            ev.systemdChecked = true;
+            ev.failedSystemdUnits = 0;
+            ev.pacmanDbChecked = true;
+            ev.pacmanDbOk = true;
+            ev.activeKernelCheckDone = true;
+            ev.activeKernelImagePresent = true;
+            ev.bootVerified = true;
+            ev.recoverySnapshotVerified = true;
+            ev.recoveryRecommendedLevel = QStringLiteral("none");
+            ev.recoveryAssessmentStatus = QStringLiteral("healthy");
+            return ev;
+        };
+        QVERIFY(installer.orphanCleanupAvailable());
+
+        // 1. Unconfirmed call must be rejected without touching pkexec/helper
+        QSignalSpy finished(&installer, &UpdateInstaller::sessionFinished);
+        installer.startOrphanCleanup(false);
+        QCOMPARE(finished.count(), 1);
+        QCOMPARE(installer.status(), QStringLiteral("error"));
+        QVERIFY(installer.message().contains(QStringLiteral("onay"), Qt::CaseInsensitive));
+        QVERIFY(!QFile::exists(pkexecLog));
+
+        // 2. Active db.lck blocks orphan cleanup safely
+        const QString fakeLock = directory.filePath("orphan-db.lck");
+        {
+            QFile lf(fakeLock);
+            QVERIFY(lf.open(QIODevice::WriteOnly));
+        }
+        installer.m_pacmanLockPath = fakeLock;
+        installer.startOrphanCleanup(true);
+        QCOMPARE(finished.count(), 2);
+        QCOMPARE(installer.status(), QStringLiteral("blocked"));
+        QVERIFY(installer.pacmanLockBlocked());
+        QCOMPARE(installer.cleanupStatus(), QStringLiteral("blocked"));
+        QVERIFY(!QFile::exists(pkexecLog));
+        QFile::remove(fakeLock);
+
+        // 3. QML modal confirmation flow: open -> cancel -> open -> confirm -> live output + auto rescan
+        QQmlEngine engine;
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(UPDATE_REPORT_QML)));
+        std::unique_ptr<QObject> root(component.createWithInitialProperties({
+            {"scanner", QVariant::fromValue<QObject *>(&scanner)},
+            {"installer", QVariant::fromValue<QObject *>(&installer)}}));
+        QVERIFY2(root, qPrintable(component.errorString()));
+        QQuickWindow window;
+        auto *item = qobject_cast<QQuickItem *>(root.get());
+        QVERIFY(item);
+        item->setParentItem(window.contentItem());
+        item->setSize(QSizeF(1000, 760));
+        window.resize(1000, 760);
+        window.show();
+
+        auto *orphanPanel = root->findChild<QObject *>("orphanPackagesPanel");
+        auto *orphanList = root->findChild<QObject *>("orphanPackagesListLabel");
+        auto *protectedNotice = root->findChild<QObject *>("protectedOrphanPackagesNotice");
+        auto *startOrphanBtn = root->findChild<QObject *>("startOrphanCleanupButton");
+        auto *orphanDialog = root->findChild<QObject *>("orphanCleanupConfirmation");
+        auto *dialogPkgList = root->findChild<QObject *>("orphanCleanupDialogPackageList");
+        auto *dialogProtList = root->findChild<QObject *>("orphanCleanupDialogProtectedList");
+        auto *dialogSnapperNotice = root->findChild<QObject *>("orphanCleanupDialogSnapperNotice");
+        auto *cancelOrphanBtn = root->findChild<QObject *>("cancelOrphanCleanupButton");
+        auto *confirmOrphanBtn = root->findChild<QObject *>("confirmOrphanCleanupButton");
+        QVERIFY(orphanPanel && orphanList && protectedNotice && startOrphanBtn && orphanDialog
+                && dialogPkgList && dialogProtList && dialogSnapperNotice
+                && cancelOrphanBtn && confirmOrphanBtn);
+
+        QVERIFY(orphanPanel->property("visible").toBool());
+        QVERIFY(startOrphanBtn->property("enabled").toBool());
+        QCOMPARE(orphanList->property("text").toString(), QStringLiteral("orphan-a, orphan-b"));
+        QVERIFY(protectedNotice->property("visible").toBool());
+        QVERIFY(protectedNotice->property("text").toString().contains(QStringLiteral("zethropol-recovery")));
+
+        // Open dialog and cancel -> helper must NOT run
+        QVERIFY(!orphanDialog->property("visible").toBool());
+        QVERIFY(QMetaObject::invokeMethod(startOrphanBtn, "clicked"));
+        QTRY_VERIFY(orphanDialog->property("visible").toBool());
+        QVERIFY(dialogPkgList->property("text").toString().contains(QStringLiteral("orphan-a")));
+        QVERIFY(dialogPkgList->property("text").toString().contains(QStringLiteral("orphan-b")));
+        QVERIFY(dialogProtList->property("text").toString().contains(QStringLiteral("zethropol-recovery")));
+        QVERIFY(dialogSnapperNotice->property("text").toString().contains(QStringLiteral("pre-orphan-cleanup")));
+        QVERIFY(QMetaObject::invokeMethod(cancelOrphanBtn, "clicked"));
+        QTRY_VERIFY(!orphanDialog->property("visible").toBool());
+        QCOMPARE(finished.count(), 2);
+        QVERIFY(!QFile::exists(pkexecLog));
+
+        // Open dialog and confirm -> pkexec <helper> remove-orphans (zero package args) + rescan clears orphans
+        QVERIFY(QMetaObject::invokeMethod(startOrphanBtn, "clicked"));
+        QTRY_VERIFY(orphanDialog->property("visible").toBool());
+        QVERIFY(QMetaObject::invokeMethod(confirmOrphanBtn, "clicked"));
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 3, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 2, 5000);
+
+        QCOMPARE(installer.status(), QStringLiteral("finished"));
+        QCOMPARE(installer.activeScope(), QStringLiteral("orphans"));
+        QCOMPARE(installer.progressStage(), QStringLiteral("done"));
+        QCOMPARE(installer.progressPercent(), 100);
+        QCOMPARE(installer.preSnapshotId(), 301u);
+        QCOMPARE(installer.postSnapshotId(), 302u);
+        QCOMPARE(installer.cleanupStatus(), QStringLiteral("completed"));
+        QVERIFY(installer.cleanupSummary().contains(QStringLiteral("#301")));
+        QVERIFY(installer.cleanupSummary().contains(QStringLiteral("#302")));
+        QVERIFY(installer.output().contains(QStringLiteral("removing orphan-a...")));
+        QVERIFY(installer.recoveryGuidance().contains(QStringLiteral("#301")));
+        QVERIFY(installer.recoveryGuidance().contains(QStringLiteral("#302")));
+
+        QFile pkLog(pkexecLog);
+        QVERIFY(pkLog.open(QIODevice::ReadOnly));
+        const QString pkCmd = QString::fromUtf8(pkLog.readAll()).trimmed();
+        QCOMPARE(pkCmd, directory.filePath("mock-orphan-helper") + QStringLiteral(" remove-orphans"));
+        QVERIFY(!pkCmd.contains(QStringLiteral("orphan-a")));
+        QVERIFY(!pkCmd.contains(QStringLiteral("orphan-b")));
+        QVERIFY(!pkCmd.contains(QStringLiteral("--nodeps")));
+
+        QCOMPARE(scanner.orphanCount(), 0);
+        QCOMPARE(scanner.removableOrphanCount(), 0);
+        QVERIFY(!installer.orphanCleanupAvailable());
+        QVERIFY(!orphanPanel->property("visible").toBool());
+
+        // 4. Protected-only orphans keep cleanup button disabled
+        {
+            QFile sf(orphanStateFile);
+            QVERIFY(sf.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            sf.write("zethropol-recovery\n");
+        }
+        scanner.scan();
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 3, 5000);
+        QCOMPARE(scanner.orphanCount(), 1);
+        QCOMPARE(scanner.removableOrphanCount(), 0);
+        QVERIFY(!installer.orphanCleanupAvailable());
+        QVERIFY(orphanPanel->property("visible").toBool());
+        QVERIFY(!startOrphanBtn->property("enabled").toBool());
+    }
 };
 
 QTEST_MAIN(UpdateInstallerTest)

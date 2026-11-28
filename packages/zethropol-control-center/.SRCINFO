@@ -1,7 +1,7 @@
 pkgbase = zethropol-control-center
 	pkgdesc = Zethropol OS desktop control center
 	pkgver = 0.1.0
-	pkgrel = 7
+	pkgrel = 8
 	url = https://github.com/zethropol/Zethropol-OS
 	arch = x86_64
 	license = MIT
@@ -35,7 +35,7 @@ pkgbase = zethropol-control-center
 	optdepends = zethropol-performance>=0.1.0-4: Performance profiles, thermal guard, and Vulkan/DXVK/VKD3D readiness
 	optdepends = zethropol-diagnostics: Zethropol Diagnostics D-Bus service
 	optdepends = zethropol-security: Zethropol Security D-Bus service
-	source = zethropol-control-center-0.1.0-7-src.tar.gz
-	sha256sums = 5d8d618178c4cad301c30d3b8236731908eccef71f6c334226541ef823efdc62
+	source = zethropol-control-center-0.1.0-8-src.tar.gz
+	sha256sums = c9973baf395c42752e406945b558860dd89a9a89bf6fda7032189ca8c81aed82
 
 pkgname = zethropol-control-center
