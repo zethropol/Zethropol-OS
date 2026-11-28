@@ -16,3 +16,4 @@ zethropol-weather-0.1.0-3-x86_64.pkg.tar.zst packages/zethropol-weather/zethropo
 zethropol-zci-daemon-0.1.0-1-x86_64.pkg.tar.zst packages/zethropol-zci-daemon/zethropol-zci-daemon-0.1.0-1-x86_64.pkg.tar.zst
 zethropol-zci-runtime-0.1.0-1-x86_64.pkg.tar.zst packages/zethropol-zci-runtime/zethropol-zci-runtime-0.1.0-1-x86_64.pkg.tar.zst
 zethropol-zci-chat-0.1.0-1-x86_64.pkg.tar.zst packages/zethropol-zci-chat/zethropol-zci-chat-0.1.0-1-x86_64.pkg.tar.zst
+zethropol-zci-agent-0.1.0-1-x86_64.pkg.tar.zst packages/zethropol-zci-agent/zethropol-zci-agent-0.1.0-1-x86_64.pkg.tar.zst

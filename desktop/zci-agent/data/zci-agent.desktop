@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Zethropol ZCI Komut Ajanı
+GenericName=Yerel AI Komut ve Planlama Ajanı
+Comment=Politika ve kullanıcı onay kapılı yerel ZCI Komut Ajanı ve ZEKANS arayüzü
+Exec=/usr/bin/zci-agent
+Icon=zethropol-zci-agent
+Terminal=false
+Categories=Utility;Qt;
+Keywords=zci;agent;zekans;zci-code;command;ai;zethropol;
+StartupNotify=true

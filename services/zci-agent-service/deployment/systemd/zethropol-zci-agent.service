@@ -1,0 +1,24 @@
+[Unit]
+Description=Zethropol ZCI Command Agent & ZEKANS Planner User Session Service (Local-Only, Policy-Gated)
+After=dbus.socket
+PartOf=graphical-session.target
+
+[Service]
+Type=dbus
+BusName=org.zethropol.ZciAgent
+ExecStart=/usr/lib/zethropol/zethropol-zci-agentd
+Restart=on-failure
+RestartSec=2s
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+MemoryDenyWriteExecute=yes
+LockPersonality=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_UNIX
+IPAddressDeny=any
+
+[Install]
+WantedBy=default.target

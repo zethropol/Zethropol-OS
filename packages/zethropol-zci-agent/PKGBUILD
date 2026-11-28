@@ -1,0 +1,63 @@
+pkgname=zethropol-zci-agent
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Zethropol ZCI Command Agent & ZEKANS planner service (org.zethropol.ZciAgent.v1) and Qt6/QML + CLI client"
+url="https://github.com/zethropol/Zethropol-OS"
+arch=("x86_64")
+license=("MIT")
+depends=(
+    "glibc"
+    "gcc-libs"
+    "dbus"
+    "systemd"
+    "qt6-base"
+    "qt6-declarative"
+    "zethropol-security>=0.1.0-3"
+    "zethropol-zci-daemon>=0.1.0-1"
+    "zethropol-zci-runtime>=0.1.0-1"
+)
+makedepends=(
+    "cargo"
+    "cmake"
+    "ninja"
+)
+source=("${pkgname}-${pkgver}-${pkgrel}-src.tar.gz")
+sha256sums=("f515adefb28405cbbd488c5a6ab0df745442a16a096e6981c6bfb021a18d7c3d")
+
+build() {
+    cd "$srcdir/${pkgname}-${pkgver}/services/zci-agent-service"
+    export RUSTFLAGS="--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo --remap-path-prefix=${HOME}=/home/build --remap-path-prefix=${srcdir}=/build ${RUSTFLAGS:-}"
+    cargo build --release --locked --offline
+
+    export CXXFLAGS="${CXXFLAGS:-} -ffile-prefix-map=${srcdir}=/build -ffile-prefix-map=${HOME}=/home/build"
+    cmake -S "$srcdir/${pkgname}-${pkgver}/desktop/zci-agent" \
+          -B "$srcdir/build-ui" \
+          -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/usr \
+          -DCMAKE_SKIP_RPATH=ON \
+          -DBUILD_TESTING=ON
+    cmake --build "$srcdir/build-ui" --parallel
+}
+
+check() {
+    cd "$srcdir/${pkgname}-${pkgver}/services/zci-agent-service"
+    export RUSTFLAGS="--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo --remap-path-prefix=${HOME}=/home/build --remap-path-prefix=${srcdir}=/build ${RUSTFLAGS:-}"
+    cargo test --locked --offline
+
+    QT_QPA_PLATFORM=offscreen \
+    QT_QUICK_BACKEND=software \
+    QT_QUICK_CONTROLS_STYLE=Basic \
+    QT_QPA_PLATFORMTHEME= \
+        ctest --test-dir "$srcdir/build-ui" --output-on-failure
+}
+
+package() {
+    cd "$srcdir/${pkgname}-${pkgver}/services/zci-agent-service"
+    install -Dm755 target/release/zci-agent-service "$pkgdir/usr/lib/zethropol/zethropol-zci-agentd"
+    install -Dm644 deployment/systemd/zethropol-zci-agent.service "$pkgdir/usr/lib/systemd/user/zethropol-zci-agent.service"
+    install -Dm644 deployment/dbus/org.zethropol.ZciAgent.service "$pkgdir/usr/share/dbus-1/services/org.zethropol.ZciAgent.service"
+
+    DESTDIR="$pkgdir" cmake --install "$srcdir/build-ui"
+    install -Dm644 "$srcdir/${pkgname}-${pkgver}/LICENSE" "$pkgdir/usr/share/licenses/${pkgname}/LICENSE"
+}

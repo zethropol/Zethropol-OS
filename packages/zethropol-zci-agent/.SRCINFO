@@ -1,0 +1,23 @@
+pkgbase = zethropol-zci-agent
+	pkgdesc = Zethropol ZCI Command Agent & ZEKANS planner service (org.zethropol.ZciAgent.v1) and Qt6/QML + CLI client
+	pkgver = 0.1.0
+	pkgrel = 1
+	url = https://github.com/zethropol/Zethropol-OS
+	arch = x86_64
+	license = MIT
+	makedepends = cargo
+	makedepends = cmake
+	makedepends = ninja
+	depends = glibc
+	depends = gcc-libs
+	depends = dbus
+	depends = systemd
+	depends = qt6-base
+	depends = qt6-declarative
+	depends = zethropol-security>=0.1.0-3
+	depends = zethropol-zci-daemon>=0.1.0-1
+	depends = zethropol-zci-runtime>=0.1.0-1
+	source = zethropol-zci-agent-0.1.0-1-src.tar.gz
+	sha256sums = f515adefb28405cbbd488c5a6ab0df745442a16a096e6981c6bfb021a18d7c3d
+
+pkgname = zethropol-zci-agent

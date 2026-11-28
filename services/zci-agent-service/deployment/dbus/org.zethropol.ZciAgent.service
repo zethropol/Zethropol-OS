@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=org.zethropol.ZciAgent
+Exec=/usr/lib/zethropol/zethropol-zci-agentd
+SystemdService=zethropol-zci-agent.service

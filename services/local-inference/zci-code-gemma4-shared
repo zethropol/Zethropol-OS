@@ -1,7 +1,20 @@
 #!/bin/sh
 # ZEKANS Ortak Gemma 4 E4B Kodlama İstemcisi (Port 29016 üzerinden)
 # TaskGuard, ProjectIO, Bubblewrap, agent_bridge ve reflection=1 sınırlarını korur.
+# Aşama 13 (`zci-agent`) hizalaması: `zci-code agent ...` çağrılarını doğrudan
+# `zci-agent` (org.zethropol.ZciAgent.v1) istemcisine yönlendirir.
 
 set -eu
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+if [ "${1:-}" = "agent" ]; then
+    shift
+    if [ -x /usr/bin/zci-agent ]; then
+        exec /usr/bin/zci-agent "$@"
+    elif [ -x "$HERE/../../desktop/zci-agent/build/zci-agent" ]; then
+        exec "$HERE/../../desktop/zci-agent/build/zci-agent" "$@"
+    else
+        echo "zci-agent kurulu değil (zethropol-zci-agent paketini kurun)." >&2
+        exit 127
+    fi
+fi
 exec /usr/bin/python3 -I -B "$HERE/shared_gemma.py" code "$@"

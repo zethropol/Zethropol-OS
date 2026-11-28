@@ -8,6 +8,7 @@ desktop/control-center/build/
 desktop/tv/build/
 desktop/weather/build/
 desktop/zci-chat/build/
+desktop/zci-agent/build/
 desktop/tv-win7/build*/
 desktop/tv-win7/third_party/
 dist/
