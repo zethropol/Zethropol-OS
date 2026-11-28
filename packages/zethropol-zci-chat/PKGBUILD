@@ -22,7 +22,7 @@ makedepends=(
     "ninja"
 )
 source=("${pkgname}-${pkgver}-${pkgrel}-src.tar.gz")
-sha256sums=("86d1b9cf167855878d201054f535311905b6e395c257eda8998ccbad3edca6ac")
+sha256sums=('db8f9a57e562e06b9566393c2439306ee170ba1490a9c24e773ed73d4065f2de')
 
 build() {
     cd "$srcdir/${pkgname}-${pkgver}/services/zci-chat-service"

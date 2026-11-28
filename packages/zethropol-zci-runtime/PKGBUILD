@@ -16,7 +16,7 @@ depends=(
 )
 makedepends=("cargo")
 source=("${pkgname}-${pkgver}-${pkgrel}-src.tar.gz")
-sha256sums=("e4b90ba67038bd2fe14dd3758f5cb448a979a50391ff641e87a80f68cf62a45d")
+sha256sums=('bbdfabec62c41b31ad0f51e202c478a21baea522972581708c45cda9035ee104')
 
 build() {
     cd "$srcdir/${pkgname}-${pkgver}/services/zci-runtime"

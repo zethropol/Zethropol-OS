@@ -1,0 +1,19 @@
+pkgbase = zethropol-zci-runtime
+	pkgdesc = Zethropol ZCI Local AI Runtime Engine D-Bus service (loopback-only, passive standby, SHA-256 manifest)
+	pkgver = 0.1.0
+	pkgrel = 4
+	url = https://github.com/zethropol/Zethropol-OS
+	arch = x86_64
+	license = MIT
+	makedepends = cargo
+	depends = glibc
+	depends = gcc-libs
+	depends = dbus
+	depends = systemd
+	depends = polkit
+	depends = zethropol-security>=0.1.0-3
+	depends = zethropol-zci-daemon>=0.1.0-1
+	source = zethropol-zci-runtime-0.1.0-4-src.tar.gz
+	sha256sums = bbdfabec62c41b31ad0f51e202c478a21baea522972581708c45cda9035ee104
+
+pkgname = zethropol-zci-runtime
