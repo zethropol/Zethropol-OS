@@ -1,7 +1,7 @@
 pkgbase = zethropol-tv
 	pkgdesc = Zethropol OS standalone live TV player powered by Qt6 and libmpv
 	pkgver = 0.1.0
-	pkgrel = 1
+	pkgrel = 2
 	url = https://github.com/zethropol/Zethropol-OS
 	arch = x86_64
 	license = MIT
@@ -11,8 +11,11 @@ pkgbase = zethropol-tv
 	depends = qt6-base
 	depends = qt6-declarative
 	depends = mpv
+	depends = yt-dlp
+	depends = deno
+	depends = ffmpeg
 	optdepends = plasma-integration: KDE Plasma platform theme integration
-	source = zethropol-tv-0.1.0-1-src.tar.gz
-	sha256sums = 961c7a45f707adc27356bae0590fabaa47f8f69d5617fdb0df54b34e415fffe4
+	source = zethropol-tv-0.1.0-2-src.tar.gz
+	sha256sums = b5e00dcd3a722a8759e93f779d99da000a0834bc515d2d61c5c9f775f0f2defa
 
 pkgname = zethropol-tv

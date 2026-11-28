@@ -1,6 +1,6 @@
 pkgname=zethropol-tv
 pkgver=0.1.0
-pkgrel=1
+pkgrel=2
 pkgdesc="Zethropol OS standalone live TV player powered by Qt6 and libmpv"
 arch=('x86_64')
 url="https://github.com/zethropol/Zethropol-OS"
@@ -9,6 +9,9 @@ depends=(
     'qt6-base'
     'qt6-declarative'
     'mpv'
+    'yt-dlp'
+    'deno'
+    'ffmpeg'
 )
 makedepends=(
     'cmake'
@@ -19,7 +22,7 @@ optdepends=(
     'plasma-integration: KDE Plasma platform theme integration'
 )
 source=("${pkgname}-${pkgver}-${pkgrel}-src.tar.gz")
-sha256sums=('961c7a45f707adc27356bae0590fabaa47f8f69d5617fdb0df54b34e415fffe4')
+sha256sums=('b5e00dcd3a722a8759e93f779d99da000a0834bc515d2d61c5c9f775f0f2defa')
 
 build() {
     export CXXFLAGS="${CXXFLAGS:-} -ffile-prefix-map=${srcdir}=/build -ffile-prefix-map=${HOME}=/home/build"

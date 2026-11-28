@@ -1,10 +1,17 @@
 #include "StreamResolver.h"
 #include "StreamSecurity.h"
 
+#include <QDir>
+#include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QProcessEnvironment>
 #include <QRegularExpression>
 #include <QSet>
+#include <QStandardPaths>
 #include <QVector>
 
 #include <algorithm>
@@ -22,8 +29,46 @@ bool isYoutubeHost(const QString &host)
 {
     const QString h = host.toLower();
     return h == QLatin1String("youtube.com") || h.endsWith(QStringLiteral(".youtube.com"))
+           || h == QLatin1String("youtu.be") || h.endsWith(QStringLiteral(".youtu.be"))
            || h == QLatin1String("youtube-nocookie.com")
            || h.endsWith(QStringLiteral(".youtube-nocookie.com"));
+}
+
+bool isYoutubeTabUrl(const QUrl &url)
+{
+    if (!isYoutubeHost(url.host())) {
+        return false;
+    }
+    const QString p = url.path().toLower();
+    return p.endsWith(QStringLiteral("/videos"))
+           || p.endsWith(QStringLiteral("/streams"))
+           || p.endsWith(QStringLiteral("/featured"));
+}
+
+QString findToolExecutable(const QString &toolName, const QStringList &searchDirsOverride)
+{
+    if (!searchDirsOverride.isEmpty()) {
+        for (const QString &dirPath : searchDirsOverride) {
+            if (dirPath.trimmed().isEmpty()) {
+                continue;
+            }
+            const QFileInfo fi(QDir(dirPath).filePath(toolName));
+            if (fi.exists() && fi.isFile() && fi.isExecutable()) {
+                return fi.canonicalFilePath();
+            }
+        }
+        return QString();
+    }
+
+    QString found = QStandardPaths::findExecutable(toolName);
+    if (!found.isEmpty()) {
+        return found;
+    }
+    const QFileInfo usrBin(QStringLiteral("/usr/bin/") + toolName);
+    if (usrBin.exists() && usrBin.isFile() && usrBin.isExecutable()) {
+        return usrBin.canonicalFilePath();
+    }
+    return QString();
 }
 
 QString extractSafeOriginReferer(const QString &pageUrl)
@@ -389,11 +434,146 @@ struct ScoredCandidate
 StreamResolver::StreamResolver(QObject *parent)
     : QObject(parent)
 {
+    m_ytDlpTimeoutTimer.setSingleShot(true);
 }
 
 StreamResolver::~StreamResolver()
 {
     cancel();
+}
+
+bool StreamResolver::isYoutubeUrl(const QString &url)
+{
+    if (!StreamSecurity::isAllowedMediaUrl(url)) {
+        return false;
+    }
+    const QUrl parsed(url.trimmed(), QUrl::StrictMode);
+    return parsed.isValid() && isYoutubeHost(parsed.host());
+}
+
+YoutubeDependencyStatus StreamResolver::checkYoutubeDependencies(const QStringList &searchDirsOverride)
+{
+    YoutubeDependencyStatus status;
+    status.ytDlpPath = findToolExecutable(QStringLiteral("yt-dlp"), searchDirsOverride);
+    status.denoPath = findToolExecutable(QStringLiteral("deno"), searchDirsOverride);
+    status.ffmpegPath = findToolExecutable(QStringLiteral("ffmpeg"), searchDirsOverride);
+    status.hasYtDlp = !status.ytDlpPath.isEmpty();
+    status.hasDeno = !status.denoPath.isEmpty();
+    status.hasFfmpeg = !status.ffmpegPath.isEmpty();
+    return status;
+}
+
+QString StreamResolver::youtubeFailureMessage(const YoutubeDependencyStatus &deps)
+{
+    if (!deps.allAvailable()) {
+        return QString::fromUtf8(kYoutubeMissingDepsMessage);
+    }
+    return QString::fromUtf8(kYoutubeResolverOutdatedMessage);
+}
+
+QString StreamResolver::youtubeDiagnosticMessage() const
+{
+    return youtubeFailureMessage(checkYoutubeDependencies(m_youtubeToolSearchDirsOverride));
+}
+
+void StreamResolver::setYoutubeToolSearchDirsOverride(const QStringList &dirs)
+{
+    m_youtubeToolSearchDirsOverride = dirs;
+}
+
+void StreamResolver::setYtDlpTimeoutMs(int timeoutMs)
+{
+    m_ytDlpTimeoutMs = std::clamp(timeoutMs, 1000, 60000);
+}
+
+StreamExtractResult StreamResolver::extractStreamFromYtDlpJson(const QByteArray &rawJson,
+                                                               QString *userAgentOut)
+{
+    StreamExtractResult res;
+    if (userAgentOut) {
+        userAgentOut->clear();
+    }
+    if (rawJson.isEmpty()) {
+        res.errorMessage = QString::fromUtf8(kYoutubeResolverOutdatedMessage);
+        return res;
+    }
+
+    const QJsonDocument doc = QJsonDocument::fromJson(rawJson);
+    if (!doc.isObject()) {
+        res.errorMessage = QString::fromUtf8(kYoutubeResolverOutdatedMessage);
+        return res;
+    }
+
+    QJsonObject entry = doc.object();
+    const QJsonArray entries = entry.value(QStringLiteral("entries")).toArray();
+    if (!entries.isEmpty()) {
+        for (const QJsonValue &val : entries) {
+            if (val.isObject()) {
+                entry = val.toObject();
+                break;
+            }
+        }
+    }
+
+    auto extractUa = [](const QJsonObject &obj) -> QString {
+        const QJsonObject hdrs = obj.value(QStringLiteral("http_headers")).toObject();
+        const QString ua = hdrs.value(QStringLiteral("User-Agent")).toString().trimmed();
+        return ua;
+    };
+
+    auto isHlsManifest = [](const QString &url) -> bool {
+        const QString lower = url.toLower();
+        return !url.isEmpty()
+               && (lower.contains(QStringLiteral("hls_variant"))
+                   || lower.contains(QStringLiteral(".m3u8"))
+                   || lower.contains(QStringLiteral("hls_playlist")))
+               && StreamSecurity::isAllowedMediaUrl(url);
+    };
+
+    // 1. Prefer a master HLS manifest_url (contains both video & audio tracks natively for libmpv).
+    const QString topManifest = entry.value(QStringLiteral("manifest_url")).toString().trimmed();
+    if (isHlsManifest(topManifest)) {
+        res.ok = true;
+        res.streamUrl = topManifest;
+        if (userAgentOut) {
+            *userAgentOut = extractUa(entry);
+        }
+        return res;
+    }
+
+    for (const QString &arrayKey : {QStringLiteral("requested_formats"), QStringLiteral("formats")}) {
+        const QJsonArray formats = entry.value(arrayKey).toArray();
+        for (const QJsonValue &fv : formats) {
+            if (!fv.isObject()) {
+                continue;
+            }
+            const QJsonObject fmt = fv.toObject();
+            const QString manifest = fmt.value(QStringLiteral("manifest_url")).toString().trimmed();
+            if (isHlsManifest(manifest)) {
+                res.ok = true;
+                res.streamUrl = manifest;
+                if (userAgentOut) {
+                    const QString ua = extractUa(fmt);
+                    *userAgentOut = ua.isEmpty() ? extractUa(entry) : ua;
+                }
+                return res;
+            }
+        }
+    }
+
+    // 2. Fallback to direct single-stream URL (muxed video+audio or HLS).
+    const QString directUrl = entry.value(QStringLiteral("url")).toString().trimmed();
+    if (!directUrl.isEmpty() && StreamSecurity::isAllowedMediaUrl(directUrl)) {
+        res.ok = true;
+        res.streamUrl = directUrl;
+        if (userAgentOut) {
+            *userAgentOut = extractUa(entry);
+        }
+        return res;
+    }
+
+    res.errorMessage = QString::fromUtf8(kYoutubeResolverOutdatedMessage);
+    return res;
 }
 
 bool StreamResolver::isDirectStreamUrl(const QString &url)
@@ -667,6 +847,9 @@ void StreamResolver::resolveChannel(const QString &streamUrl,
     m_activeChannelName = channelName;
     m_lastFailureReason.clear();
     m_lastFailureWasDrm = false;
+    m_sawYoutubeCandidate = false;
+    m_sawYoutubeMissingDeps = false;
+    m_sawYoutubeResolverFailure = false;
     m_channelOriginReferer = extractSafeOriginReferer(sourcePageUrl);
 
     const QString trimmedStream = streamUrl.trimmed();
@@ -733,9 +916,17 @@ bool StreamResolver::tryNextFallback(const QString &channelName)
 void StreamResolver::startNextFallback(bool bypassCache)
 {
     if (m_pendingFallbacks.isEmpty()) {
-        const QString reason = m_lastFailureReason.isEmpty()
-            ? QStringLiteral("Bu kanalın açık akışı alınamadı (tüm resmi yedekler başarısız).")
-            : m_lastFailureReason;
+        QString reason = m_lastFailureReason;
+        if (m_sawYoutubeCandidate) {
+            if (m_sawYoutubeMissingDeps) {
+                reason = QString::fromUtf8(kYoutubeMissingDepsMessage);
+            } else if (m_sawYoutubeResolverFailure || reason.isEmpty()) {
+                reason = youtubeDiagnosticMessage();
+            }
+        }
+        if (reason.isEmpty()) {
+            reason = QStringLiteral("Bu kanalın açık akışı alınamadı (tüm resmi yedekler başarısız).");
+        }
         finishFailure(reason, m_activeChannelName, m_lastFailureWasDrm);
         return;
     }
@@ -748,7 +939,7 @@ void StreamResolver::startNextFallback(bool bypassCache)
         if (it != m_cache.constEnd()) {
             if (it->expiresAtUtc > QDateTime::currentDateTimeUtc()
                 && StreamSecurity::isAllowedMediaUrl(it->streamUrl)) {
-                finishSuccess(it->streamUrl, m_activeChannelName, true, it->httpReferer, it->httpUserAgent);
+                finishSuccess(it->streamUrl, m_activeChannelName, true, it->httpReferer, it->httpUserAgent, it->fromYoutube);
                 return;
             }
             m_cache.erase(it);
@@ -762,6 +953,24 @@ void StreamResolver::startNextFallback(bool bypassCache)
     setStatusMessage(m_activeChannelName.isEmpty()
                          ? QStringLiteral("Resmi canlı akış çözümleniyor...")
                          : QStringLiteral("%1 için resmi canlı akış çözümleniyor...").arg(m_activeChannelName));
+
+    const QUrl parsedTarget(targetUrl, QUrl::StrictMode);
+    if (isYoutubeHost(parsedTarget.host())) {
+        m_sawYoutubeCandidate = true;
+        const YoutubeDependencyStatus deps = checkYoutubeDependencies(m_youtubeToolSearchDirsOverride);
+        if (!deps.allAvailable()) {
+            m_sawYoutubeMissingDeps = true;
+            handleCandidateFailure(QString::fromUtf8(kYoutubeMissingDepsMessage),
+                                   m_activeChannelName,
+                                   false,
+                                   reqId);
+            return;
+        }
+        if (isYoutubeTabUrl(parsedTarget)) {
+            startYtDlpResolve(targetUrl, targetUrl, m_activeChannelName, reqId);
+            return;
+        }
+    }
 
     const QString referer = m_channelOriginReferer.isEmpty()
         ? extractSafeOriginReferer(targetUrl)
@@ -788,7 +997,15 @@ void StreamResolver::handleCandidateFailure(const QString &errorMessage,
         startNextFallback(true);
         return;
     }
-    finishFailure(m_lastFailureReason.isEmpty() ? errorMessage : m_lastFailureReason,
+    QString finalError = m_lastFailureReason.isEmpty() ? errorMessage : m_lastFailureReason;
+    if (m_sawYoutubeCandidate && !m_lastFailureWasDrm && !drmDetected) {
+        if (m_sawYoutubeMissingDeps) {
+            finalError = QString::fromUtf8(kYoutubeMissingDepsMessage);
+        } else if (m_sawYoutubeResolverFailure) {
+            finalError = youtubeDiagnosticMessage();
+        }
+    }
+    finishFailure(finalError,
                   channelName,
                   m_lastFailureWasDrm || drmDetected);
 }
@@ -802,6 +1019,9 @@ void StreamResolver::resolveUrl(const QString &inputUrl,
     m_activeChannelName = channelName;
     m_lastFailureReason.clear();
     m_lastFailureWasDrm = false;
+    m_sawYoutubeCandidate = false;
+    m_sawYoutubeMissingDeps = false;
+    m_sawYoutubeResolverFailure = false;
 
     bool wasResolve = false;
     QString reason;
@@ -815,7 +1035,7 @@ void StreamResolver::resolveUrl(const QString &inputUrl,
 
     // Stage 1: Direct HLS/media stream URL passes immediately unless explicit resolve:// was requested.
     if (!wasResolve && isDirectStreamUrl(targetUrl)) {
-        finishSuccess(targetUrl, channelName, false, m_channelOriginReferer, QString());
+        finishSuccess(targetUrl, channelName, false, m_channelOriginReferer, QString(), false);
         return;
     }
 
@@ -825,14 +1045,14 @@ void StreamResolver::resolveUrl(const QString &inputUrl,
         if (it != m_cache.constEnd()) {
             if (it->expiresAtUtc > QDateTime::currentDateTimeUtc()
                 && StreamSecurity::isAllowedMediaUrl(it->streamUrl)) {
-                finishSuccess(it->streamUrl, channelName, true, it->httpReferer, it->httpUserAgent);
+                finishSuccess(it->streamUrl, channelName, true, it->httpReferer, it->httpUserAgent, it->fromYoutube);
                 return;
             }
             m_cache.erase(it);
         }
     }
 
-    // Stage 2: Fetch broadcaster live web page purely via Qt6::Network.
+    // Stage 2: Fetch broadcaster live web page via Qt6::Network (with yt-dlp fallback for YouTube).
     const quint64 reqId = ++m_requestSeq;
     m_visitedUrls.clear();
     setLastError(QString());
@@ -840,6 +1060,22 @@ void StreamResolver::resolveUrl(const QString &inputUrl,
     setStatusMessage(channelName.isEmpty()
                          ? QStringLiteral("Resmi canlı akış çözümleniyor...")
                          : QStringLiteral("%1 için resmi canlı akış çözümleniyor...").arg(channelName));
+
+    const QUrl parsedTarget(targetUrl, QUrl::StrictMode);
+    if (isYoutubeHost(parsedTarget.host())) {
+        m_sawYoutubeCandidate = true;
+        const YoutubeDependencyStatus deps = checkYoutubeDependencies(m_youtubeToolSearchDirsOverride);
+        if (!deps.allAvailable()) {
+            m_sawYoutubeMissingDeps = true;
+            finishFailure(QString::fromUtf8(kYoutubeMissingDepsMessage), channelName, false);
+            return;
+        }
+        if (isYoutubeTabUrl(parsedTarget)) {
+            startYtDlpResolve(targetUrl, targetUrl, channelName, reqId);
+            return;
+        }
+    }
+
     startPageFetch(targetUrl, targetUrl, channelName, 0, 0, false, m_channelOriginReferer, reqId);
 }
 
@@ -864,6 +1100,22 @@ void StreamResolver::startPageFetch(const QString &pageUrl,
 
     QUrl requestUrl(pageUrl, QUrl::StrictMode);
     const bool youtubeTarget = isYoutubeHost(requestUrl.host());
+    if (youtubeTarget) {
+        m_sawYoutubeCandidate = true;
+        const YoutubeDependencyStatus deps = checkYoutubeDependencies(m_youtubeToolSearchDirsOverride);
+        if (!deps.allAvailable()) {
+            m_sawYoutubeMissingDeps = true;
+            handleCandidateFailure(QString::fromUtf8(kYoutubeMissingDepsMessage),
+                                   channelName,
+                                   false,
+                                   requestId);
+            return;
+        }
+        if (isYoutubeTabUrl(requestUrl)) {
+            startYtDlpResolve(pageUrl, cacheKey, channelName, requestId);
+            return;
+        }
+    }
     if (youtubeTarget && (requestUrl.host().compare(QStringLiteral("www.youtube.com"), Qt::CaseInsensitive) == 0
                           || requestUrl.host().compare(QStringLiteral("youtube.com"), Qt::CaseInsensitive) == 0)) {
         // Mobile Safari HTML endpoint exposes hlsManifestUrl directly in ytInitialPlayerResponse.
@@ -920,7 +1172,7 @@ void StreamResolver::startPageFetch(const QString &pageUrl,
     });
 
     connect(reply, &QNetworkReply::finished, this,
-            [this, reply, cacheKey, channelName, redirectDepth, hopDepth, sawDrmHint, refererUrl, youtubeTarget, requestId]() {
+            [this, reply, pageUrl, cacheKey, channelName, redirectDepth, hopDepth, sawDrmHint, refererUrl, youtubeTarget, requestId]() {
                 reply->deleteLater();
                 if (m_activeReply != reply || m_requestSeq != requestId) {
                     return;
@@ -954,6 +1206,10 @@ void StreamResolver::startPageFetch(const QString &pageUrl,
 
                 const int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
                 if (reply->error() != QNetworkReply::NoError) {
+                    if (youtubeTarget) {
+                        startYtDlpResolve(pageUrl, cacheKey, channelName, requestId);
+                        return;
+                    }
                     if (httpStatus == 401 || httpStatus == 403 || httpStatus == 451) {
                         handleCandidateFailure(
                             QStringLiteral("Yayıncı akışı erişime kapalı / DRM korumalı (HTTP %1).").arg(httpStatus),
@@ -1001,6 +1257,17 @@ void StreamResolver::startPageFetch(const QString &pageUrl,
                                                channelName, false, requestId);
                         return;
                     }
+                    if (youtubeTarget) {
+                        // If m.youtube.com did not expose an inline hlsManifestUrl (e.g. JS challenge
+                        // or non-inline live format), delegate safely to yt-dlp (--js-runtimes deno).
+                        const QString bodyLower = QString::fromUtf8(m_buffer).toLower();
+                        if (bodyLower.contains(QStringLiteral("live_stream_offline")) && !m_pendingFallbacks.isEmpty()) {
+                            handleCandidateFailure(extracted.errorMessage, channelName, false, requestId);
+                            return;
+                        }
+                        startYtDlpResolve(pageUrl, cacheKey, channelName, requestId);
+                        return;
+                    }
                     if (combinedDrm) {
                         handleCandidateFailure(QStringLiteral("Bu kanalın açık akışı alınamadı / DRM korumalı"),
                                                channelName, true, requestId);
@@ -1027,9 +1294,192 @@ void StreamResolver::startPageFetch(const QString &pageUrl,
                                {extracted.streamUrl,
                                 outReferer,
                                 outUa,
+                                youtubeTarget,
                                 QDateTime::currentDateTimeUtc().addSecs(kCacheTtlSecs)});
-                finishSuccess(extracted.streamUrl, channelName, true, outReferer, outUa);
+                finishSuccess(extracted.streamUrl, channelName, true, outReferer, outUa, youtubeTarget);
             });
+}
+
+void StreamResolver::startYtDlpResolve(const QString &youtubeUrl,
+                                       const QString &cacheKey,
+                                       const QString &channelName,
+                                       quint64 requestId)
+{
+    if (m_requestSeq != requestId) {
+        return;
+    }
+    stopActiveYtDlpProcess();
+
+    QString secReason;
+    if (!StreamSecurity::isAllowedMediaUrl(youtubeUrl, &secReason) || !isYoutubeUrl(youtubeUrl)) {
+        handleCandidateFailure(QStringLiteral("Güvenlik engeli: Geçersiz YouTube adresi."),
+                               channelName, false, requestId);
+        return;
+    }
+
+    const YoutubeDependencyStatus deps = checkYoutubeDependencies(m_youtubeToolSearchDirsOverride);
+    if (!deps.allAvailable()) {
+        m_sawYoutubeMissingDeps = true;
+        handleCandidateFailure(QString::fromUtf8(kYoutubeMissingDepsMessage),
+                               channelName, false, requestId);
+        return;
+    }
+
+    setStatusMessage(channelName.isEmpty()
+                         ? QStringLiteral("YouTube canlı/yayın akışı çözümleniyor...")
+                         : QStringLiteral("%1 için YouTube yayın akışı çözümleniyor...").arg(channelName));
+
+    auto *proc = new QProcess(this);
+    m_activeYtDlpProcess = proc;
+    m_ytDlpStdout.clear();
+    m_ytDlpStderr.clear();
+    m_ytDlpOverflow = false;
+
+    // Ensure yt-dlp locates deno and ffmpeg cleanly without shell invocation.
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    QStringList pathDirs;
+    const QString denoDir = QFileInfo(deps.denoPath).absolutePath();
+    const QString ffmpegDir = QFileInfo(deps.ffmpegPath).absolutePath();
+    const QString ytDir = QFileInfo(deps.ytDlpPath).absolutePath();
+    for (const QString &d : {denoDir, ffmpegDir, ytDir}) {
+        if (!d.isEmpty() && !pathDirs.contains(d)) {
+            pathDirs.append(d);
+        }
+    }
+    const QString existingPath = env.value(QStringLiteral("PATH"));
+    if (!existingPath.isEmpty()) {
+        pathDirs.append(existingPath);
+    }
+    env.insert(QStringLiteral("PATH"), pathDirs.join(QLatin1Char(':')));
+    env.insert(QStringLiteral("LC_ALL"), QStringLiteral("C"));
+    proc->setProcessEnvironment(env);
+
+    const QUrl parsedYt(youtubeUrl, QUrl::StrictMode);
+    QStringList args;
+    args << QStringLiteral("--no-config")
+         << QStringLiteral("--js-runtimes") << QStringLiteral("deno")
+         << QStringLiteral("--socket-timeout") << QStringLiteral("10");
+    if (isYoutubeTabUrl(parsedYt)) {
+        args << QStringLiteral("--playlist-items") << QStringLiteral("1");
+    } else {
+        args << QStringLiteral("--no-playlist");
+    }
+    args << QStringLiteral("-f")
+         << QStringLiteral("bv*[height<=1080][protocol*=m3u8]+ba[protocol*=m3u8]/b[height<=1080][protocol*=m3u8]/b[height<=1080]/bv*[height<=1080]+ba/b/best")
+         << QStringLiteral("-J")
+         << QStringLiteral("--")
+         << youtubeUrl;
+
+    connect(proc, &QProcess::readyReadStandardOutput, this, [this, proc, requestId]() {
+        if (m_activeYtDlpProcess != proc || m_requestSeq != requestId) {
+            return;
+        }
+        const QByteArray chunk = proc->readAllStandardOutput();
+        if (m_ytDlpStdout.size() + chunk.size() > kMaxYtDlpOutputBytes) {
+            m_ytDlpOverflow = true;
+            proc->kill();
+            return;
+        }
+        m_ytDlpStdout.append(chunk);
+    });
+
+    connect(proc, &QProcess::readyReadStandardError, this, [this, proc, requestId]() {
+        if (m_activeYtDlpProcess != proc || m_requestSeq != requestId) {
+            return;
+        }
+        const QByteArray chunk = proc->readAllStandardError();
+        if (m_ytDlpStderr.size() < 65536) {
+            m_ytDlpStderr.append(chunk.left(65536 - m_ytDlpStderr.size()));
+        }
+    });
+
+    m_ytDlpTimeoutTimer.disconnect(this);
+    connect(&m_ytDlpTimeoutTimer, &QTimer::timeout, this, [this, proc, channelName, requestId]() {
+        if (m_activeYtDlpProcess != proc || m_requestSeq != requestId) {
+            return;
+        }
+        m_sawYoutubeResolverFailure = true;
+        stopActiveYtDlpProcess();
+        handleCandidateFailure(QString::fromUtf8(kYoutubeResolverOutdatedMessage),
+                               channelName, false, requestId);
+    });
+
+    connect(proc, &QProcess::errorOccurred, this, [this, proc, channelName, requestId](QProcess::ProcessError) {
+        if (m_activeYtDlpProcess != proc || m_requestSeq != requestId) {
+            return;
+        }
+        m_sawYoutubeResolverFailure = true;
+        stopActiveYtDlpProcess();
+        handleCandidateFailure(youtubeDiagnosticMessage(), channelName, false, requestId);
+    });
+
+    connect(proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
+            [this, proc, cacheKey, channelName, requestId](int exitCode, QProcess::ExitStatus exitStatus) {
+                if (m_activeYtDlpProcess != proc || m_requestSeq != requestId) {
+                    proc->deleteLater();
+                    return;
+                }
+                m_ytDlpTimeoutTimer.stop();
+                m_ytDlpStdout.append(proc->readAllStandardOutput());
+                m_ytDlpStderr.append(proc->readAllStandardError());
+                m_activeYtDlpProcess = nullptr;
+                proc->deleteLater();
+
+                if (m_ytDlpOverflow || exitStatus != QProcess::NormalExit || exitCode != 0) {
+                    const QString stderrLower = QString::fromUtf8(m_ytDlpStderr).toLower();
+                    const bool channelNotLive = stderrLower.contains(QStringLiteral("not currently live"))
+                                                || stderrLower.contains(QStringLiteral("live event will begin"));
+                    if (channelNotLive && !m_pendingFallbacks.isEmpty()) {
+                        handleCandidateFailure(
+                            QStringLiteral("Yayıncı canlı akışı şu anda kapalı; yedek kaynak deneniyor..."),
+                            channelName, false, requestId);
+                        return;
+                    }
+                    m_sawYoutubeResolverFailure = true;
+                    handleCandidateFailure(youtubeDiagnosticMessage(), channelName, false, requestId);
+                    return;
+                }
+
+                QString extractedUa;
+                const StreamExtractResult extracted = extractStreamFromYtDlpJson(m_ytDlpStdout, &extractedUa);
+                if (!extracted.ok || !StreamSecurity::isAllowedMediaUrl(extracted.streamUrl)) {
+                    m_sawYoutubeResolverFailure = true;
+                    handleCandidateFailure(youtubeDiagnosticMessage(), channelName, false, requestId);
+                    return;
+                }
+
+                m_cache.insert(cacheKey,
+                               {extracted.streamUrl,
+                                QString(),
+                                extractedUa,
+                                true,
+                                QDateTime::currentDateTimeUtc().addSecs(kCacheTtlSecs)});
+                finishSuccess(extracted.streamUrl, channelName, true, QString(), extractedUa, true);
+            });
+
+    m_ytDlpTimeoutTimer.start(m_ytDlpTimeoutMs);
+    proc->start(deps.ytDlpPath, args);
+}
+
+void StreamResolver::stopActiveYtDlpProcess()
+{
+    m_ytDlpTimeoutTimer.stop();
+    if (m_activeYtDlpProcess) {
+        QProcess *proc = m_activeYtDlpProcess;
+        m_activeYtDlpProcess = nullptr;
+        proc->disconnect(this);
+        if (proc->state() != QProcess::NotRunning) {
+            proc->terminate();
+            if (!proc->waitForFinished(300)) {
+                proc->kill();
+                proc->waitForFinished(300);
+            }
+        }
+        proc->deleteLater();
+    }
+    m_ytDlpStdout.clear();
+    m_ytDlpStderr.clear();
+    m_ytDlpOverflow = false;
 }
 
 void StreamResolver::cancel()
@@ -1040,6 +1490,7 @@ void StreamResolver::cancel()
         m_activeReply->deleteLater();
         m_activeReply = nullptr;
     }
+    stopActiveYtDlpProcess();
     m_buffer.clear();
     m_overflow = false;
     m_visitedUrls.clear();
@@ -1059,11 +1510,14 @@ void StreamResolver::finishSuccess(const QString &resolvedUrl,
                                    const QString &channelName,
                                    bool fromWebPage,
                                    const QString &httpReferer,
-                                   const QString &httpUserAgent)
+                                   const QString &httpUserAgent,
+                                   bool fromYoutube)
 {
     setResolving(false);
     setLastError(QString());
-    if (m_lastResolvedUrl != resolvedUrl) {
+    const bool ytChanged = (m_lastResolvedWasYoutube != fromYoutube);
+    m_lastResolvedWasYoutube = fromYoutube;
+    if (m_lastResolvedUrl != resolvedUrl || ytChanged) {
         m_lastResolvedUrl = resolvedUrl;
         emit lastResolvedUrlChanged();
     }

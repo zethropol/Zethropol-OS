@@ -44,7 +44,7 @@ QString extractM3uAttribute(const QString &extinfHeader, const QString &attrName
     return match.hasMatch() ? match.captured(1) : QString();
 }
 
-constexpr int kStateSchemaVersion = 5;
+constexpr int kStateSchemaVersion = 6;
 
 bool isLegacyPhase1Default(const ChannelEntry &ch)
 {
@@ -175,10 +175,63 @@ bool isLegacyPhase4Default(const ChannelEntry &ch)
     return false;
 }
 
+bool isLegacyPhase5Default(const ChannelEntry &ch)
+{
+    struct LegacyV5Seed {
+        const char *tvgId;
+        const char *streamUrl;
+        const char *sourcePageUrl;
+    };
+    static const LegacyV5Seed kPhase5Seeds[] = {
+        {"TRT1.tr", "https://tv-trt1.medya.trt.com.tr/master.m3u8", "https://www.trtizle.com/canli/tv/trt-1"},
+        {"ATV.tr", "", "https://www.atv.com.tr/canli-yayin"},
+        {"ShowTV.tr", "https://ciner.daioncdn.net/showtv/showtv.m3u8?ce=3&app=4bc856ef-4c68-4a94-bc87-37dfaaa66558", "https://www.showtv.com.tr/canli-yayin"},
+        {"StarTV.tr", "https://dogus.daioncdn.net/startv/startv.m3u8?app=startv_web&ce=3", "https://www.startv.com.tr/canli-yayin"},
+        {"KanalD.tr", "https://demiroren.daioncdn.net/kanald/kanald.m3u8?app=kanald_web&ce=3", "https://www.kanald.com.tr/canli-yayin"},
+        {"NOW.tr", "", "https://www.nowtv.com.tr/canli-yayin"},
+        {"TV8.tr", "https://tv8.daioncdn.net/tv8/tv8.m3u8?app=7ddc255a-ef47-4e81-ab14-c0e5f2949788&ce=3", "https://www.tv8.com.tr/canli-yayin"},
+        {"Kanal7.tr", "https://kanal7-live.daioncdn.net/kanal7/kanal7.m3u8", "https://www.kanal7.com/canli-izle"},
+        {"BeyazTV.tr", "https://beyaztv-live.daioncdn.net/beyaztv/beyaztv.m3u8", "https://www.beyaztv.com.tr/canli-yayin/"},
+        {"TV85.tr", "https://tv8.daioncdn.net/tv8bucuk/tv8bucuk.m3u8?app=tv8bucuk_web&ce=3", "https://www.tv8bucuk.com/tv8-5-canli-yayin"},
+        {"TRTHaber.tr", "https://tv-trthaber.medya.trt.com.tr/master.m3u8", "https://www.tabii.com/tr/watch/live/trthaber"},
+        {"NTV.tr", "https://dogus.daioncdn.net/ntv/ntv.m3u8?app=ntv_web&ce=3", "https://www.ntv.com.tr/canli-yayin/ntv"},
+        {"CNNTurk.tr", "", "https://www.cnnturk.com/action/media/62d6814670380e2cdc7c124c"},
+        {"Haberturk.tr", "https://ciner.daioncdn.net/haberturktv/haberturktv.m3u8?app=c98ab0b0-50cc-495b-bb37-778e91f5ff5b&ce=3", "https://www.haberturk.com/canliyayin"},
+        {"HalkTV.tr", "https://halktv-live.daioncdn.net/halktv/halktv.m3u8", "https://halktv.com.tr/canli-yayin"},
+        {"SozcuTV.tr", "", "https://www.youtube.com/@Sozcutelevizyonu/live"},
+        {"AHaber.tr", "https://trkvz-live.ercdn.net/ahaberhd/ahaberhd.m3u8", "https://www.ahaber.com.tr/video/canli-yayin"},
+        {"Tele1.tr", "", "https://www.tele1.com.tr/canli-yayin/"},
+        {"HaberGlobal.tr", "https://tv.ensonhaber.com/haberglobal/haberglobal.m3u8", "https://haberglobal.com/canli-yayin"},
+        {"TGRTHaber.tr", "https://tgrthaber-live.daioncdn.net/tgrthaber/tgrthaber.m3u8", "https://www.tgrthaber.com/canli-yayin"},
+        {"UlkeTV.tr", "https://livetv.radyotvonline.net/kanal7live/ulketv/playlist.m3u8", "https://www.ulketv.com/"},
+        {"24TV.tr", "https://kanal24-live.lg.mncdn.com/kanal24_turkmedya/live.m3u8", "https://www.yirmidort.tv/canli-yayin"},
+        {"TRTSpor.tr", "https://tv-trtspor1.medya.trt.com.tr/master.m3u8", "https://www.trtspor.com.tr/canli-yayin-izle/trt-spor"},
+        {"TRTSpor2.tr", "https://tv-trtspor2.medya.trt.com.tr/master.m3u8", "https://www.trtizle.com/canli/tv/trt-spor-yildiz"},
+        {"TRTBelgesel.tr", "https://tv-trtbelgesel.medya.trt.com.tr/master.m3u8", "https://www.trtizle.com/canli/tv/trt-belgesel"},
+        {"DMAX.tr", "https://dogus.daioncdn.net/dmax/dmax.m3u8?app=dmax_web&ce=3", "https://www.dmax.com.tr/canli-izle"},
+        {"TRTCocuk.tr", "https://tv-trtcocuk.medya.trt.com.tr/master.m3u8", "https://www.trtizle.com/canli/tv/trt-cocuk"},
+        {"CartoonNetwork.tr", "", "https://www.cartoonnetwork.com.tr/canli-yayin"},
+        {"MinikaGO.tr", "", "https://www.minikago.com.tr/webtv/canli-yayin"},
+        {"MinikaCocuk.tr", "", "https://www.minikacocuk.com.tr/webtv/canli-yayin"},
+        {"TRT2.tr", "https://tv-trt2.medya.trt.com.tr/master.m3u8", "https://www.trtizle.com/canli/tv/trt-2"},
+    };
+    for (const LegacyV5Seed &seed : kPhase5Seeds) {
+        if (ch.tvgId == QLatin1String(seed.tvgId)) {
+            const bool streamMatches = (seed.streamUrl[0] != '\0' && ch.streamUrl == QLatin1String(seed.streamUrl));
+            const bool pageMatches = (ch.sourcePageUrl == QLatin1String(seed.sourcePageUrl));
+            if (streamMatches || pageMatches) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 QVector<ChannelEntry> buildLegalDefaultChannels()
 {
-    // Strictly Turkish-language default broadcast lineup (v5 — 31 channels, live-verified official HTTPS endpoints):
-    // 1-10 Ulusal, 11-22 Haber, 23-24 Spor, 25-26 Belgesel, 27-30 Çocuk, 31 Kültür.
+    // Curated official open-access broadcast lineup (v6 — 41 channels, live-verified HTTPS endpoints):
+    // 1-10 Ulusal, 11-20 Haber, 21-25 Spor, 26-30 Bilim ve Teknoloji,
+    // 31-32 Belgesel, 33-35 Çocuk, 36-40 Müzik, 41 Kültür.
     // Every streamUrl, sourcePageUrl, and fallbackUrl passes StreamSecurity::isAllowedMediaUrl().
     struct Seed {
         const char *tvgId;
@@ -344,16 +397,6 @@ QVector<ChannelEntry> buildLegalDefaultChannels()
             "",
         },
         {
-            "SozcuTV.tr",
-            "Sözcü TV",
-            "Haber",
-            "",
-            "https://www.youtube.com/@Sozcutelevizyonu/live",
-            "https://www.sozcu.com.tr/",
-            "",
-            "",
-        },
-        {
             "AHaber.tr",
             "A Haber",
             "Haber",
@@ -362,16 +405,6 @@ QVector<ChannelEntry> buildLegalDefaultChannels()
             "https://securevideotoken.tmgrup.com.tr/webtv/secure?url=https%3A%2F%2Ftrkvz-live.ercdn.net%2Fahaberhd%2Fahaberhd.m3u8",
             "https://rnttwmjcin.turknet.ercdn.net/lcpmvefbyo/ahaber/ahaber.m3u8",
             "https://www.youtube.com/@Ahaber/live",
-        },
-        {
-            "Tele1.tr",
-            "Tele1",
-            "Haber",
-            "",
-            "https://www.tele1.com.tr/canli-yayin/",
-            "https://tele1-live.ercdn.net/tele1/tele1.m3u8",
-            "https://www.youtube.com/@tele1comtr/live",
-            "",
         },
         {
             "HaberGlobal.tr",
@@ -413,7 +446,7 @@ QVector<ChannelEntry> buildLegalDefaultChannels()
             "https://www.youtube.com/channel/UCN7VYCsI4Lx1-J4_BtjoWUA/live",
             "",
         },
-        // --- Spor (23-24) ---
+        // --- Spor (21-25) ---
         {
             "TRTSpor.tr",
             "TRT Spor",
@@ -434,7 +467,88 @@ QVector<ChannelEntry> buildLegalDefaultChannels()
             "",
             "",
         },
-        // --- Belgesel (25-26) ---
+        {
+            "RedBullTV.int",
+            "Red Bull TV",
+            "Spor",
+            "https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master.m3u8",
+            "https://www.redbull.com/int-en/live",
+            "https://3ea22335.wurl.com/master/f36d25e7e52f1ba8d7e56eb859c636563214f541/UmFrdXRlblRWLWdiX1JlZEJ1bGxUVl9ITFM/playlist.m3u8",
+            "https://shls-live-enc.edgenextcdn.net/out/v1/ad35123d4ad041068bce26ae67ee3180/index.m3u8",
+            "",
+        },
+        {
+            "FIFAPlus.int",
+            "FIFA+",
+            "Spor",
+            "https://95cedebd.wurl.com/master/f36d25e7e52f1ba8d7e56eb859c636563214f541/Vml6aW9fRklGQVBsdXNFbmdsaXNoX0hMUw/playlist.m3u8",
+            "https://www.plus.fifa.com/",
+            "https://a62dad94.wurl.com/master/f36d25e7e52f1ba8d7e56eb859c636563214f541/UmFrdXRlblRWLWV1X0ZJRkFQbHVzRW5nbGlzaF9ITFM/playlist.m3u8",
+            "https://d2w9q46ikgrcwx.cloudfront.net/v1/master/3722c60a815c199d9c0ef36c5b73da68a62b09d1/cc-of5cbk3sav3w5/v1/sysdata_s_p_a_fifa_7/samsungheadend_us/latest/main/hls/playlist.m3u8",
+            "",
+        },
+        {
+            "beINSPORTSTurkiye.tr",
+            "beIN SPORTS Türkiye",
+            "Spor",
+            "",
+            "https://www.youtube.com/@beINSPORTSTurkiye/live",
+            "https://www.youtube.com/@beINSPORTSTurkiye/videos",
+            "",
+            "",
+        },
+        // --- Bilim ve Teknoloji (26-30) ---
+        {
+            "NASATV.us",
+            "NASA TV",
+            "Bilim ve Teknoloji",
+            "https://ntv1.akamaized.net/hls/live/2014075/NASA-NTV1-HLS/master.m3u8",
+            "https://www.youtube.com/@NASA/live",
+            "https://ntv2.akamaized.net/hls/live/2013923/NASA-NTV2-HLS/master.m3u8",
+            "https://plus.nasa.gov/",
+            "",
+        },
+        {
+            "DWPlanetA.de",
+            "DW Planet A",
+            "Bilim ve Teknoloji",
+            "",
+            "https://www.youtube.com/@DWPlanetA/live",
+            "https://www.youtube.com/@DWPlanetA/videos",
+            "https://dwamdstream102.akamaized.net/hls/live/2015525/dwstream102/index.m3u8",
+            "",
+        },
+        {
+            "TeknoSeyir.tr",
+            "TeknoSeyir",
+            "Bilim ve Teknoloji",
+            "",
+            "https://www.youtube.com/@teknoseyir/live",
+            "https://www.youtube.com/@teknoseyir/streams",
+            "https://www.youtube.com/@teknoseyir/videos",
+            "",
+        },
+        {
+            "HardwarePlus.tr",
+            "Hardware Plus (HWP)",
+            "Bilim ve Teknoloji",
+            "",
+            "https://www.youtube.com/@EnYeniTeknoloji/live",
+            "https://www.youtube.com/@EnYeniTeknoloji/videos",
+            "",
+            "",
+        },
+        {
+            "DonanimHaber.tr",
+            "DonanımHaber",
+            "Bilim ve Teknoloji",
+            "",
+            "https://www.youtube.com/@donanimhabertv/live",
+            "https://www.youtube.com/@donanimhabertv/videos",
+            "",
+            "",
+        },
+        // --- Belgesel (31-32) ---
         {
             "TRTBelgesel.tr",
             "TRT Belgesel",
@@ -455,7 +569,7 @@ QVector<ChannelEntry> buildLegalDefaultChannels()
             "",
             "",
         },
-        // --- Çocuk (27-30) ---
+        // --- Çocuk (33-35) ---
         {
             "TRTCocuk.tr",
             "TRT Çocuk",
@@ -463,16 +577,6 @@ QVector<ChannelEntry> buildLegalDefaultChannels()
             "https://tv-trtcocuk.medya.trt.com.tr/master.m3u8",
             "https://www.trtizle.com/canli/tv/trt-cocuk",
             "",
-            "",
-            "",
-        },
-        {
-            "CartoonNetwork.tr",
-            "Cartoon Network Türkiye",
-            "Çocuk",
-            "",
-            "https://www.cartoonnetwork.com.tr/canli-yayin",
-            "https://www.youtube.com/@cartoonnetworkturkiye/live",
             "",
             "",
         },
@@ -496,7 +600,58 @@ QVector<ChannelEntry> buildLegalDefaultChannels()
             "https://rnttwmjcin.turknet.ercdn.net/lcpmvefbyo/minikago_cocuk/minikago_cocuk.m3u8",
             "",
         },
-        // --- Kültür (31) ---
+        // --- Müzik (36-40) ---
+        {
+            "PowerTurkTV.tr",
+            "PowerTürk TV",
+            "Müzik",
+            "https://livetv.powerapp.com.tr/powerturkTV/powerturkhd.smil/playlist.m3u8",
+            "https://www.powerapp.com.tr/",
+            "https://livetv.powerapp.com.tr/powerturkTV/powerturkhd.smil/master.m3u8",
+            "https://live.artidijitalmedya.com/artidijital_powerturktv/powerturktv/playlist.m3u8",
+            "",
+        },
+        {
+            "PowerTV.tr",
+            "Power TV",
+            "Müzik",
+            "https://livetv.powerapp.com.tr/powerTV/powerhd.smil/playlist.m3u8",
+            "https://www.powerapp.com.tr/",
+            "https://livetv.powerapp.com.tr/powerTV/powerhd.smil/master.m3u8",
+            "",
+            "",
+        },
+        {
+            "KralPopTV.tr",
+            "Kral Pop TV",
+            "Müzik",
+            "https://dogus.daioncdn.net/kralpoptv/kralpoptv.m3u8?app=kralpoptv_web&ce=3",
+            "https://www.kralmuzik.com.tr/tv/kral-pop-tv",
+            "https://dogus-live.daioncdn.net/kralpoptv/playlist.m3u8",
+            "https://dygedge.radyotvonline.net/kralpop/playlist.m3u8",
+            "https://www.youtube.com/@KralMuzik/live",
+        },
+        {
+            "Number1TurkTV.tr",
+            "Number1 Türk TV",
+            "Müzik",
+            "https://number1.radyotvonline.net/hls/play/number1_turk_tv.m3u8",
+            "https://www.numberone.com.tr/tv/number1-turk-tv",
+            "https://b01c02nl.mediatriple.net/videoonlylive/mtkgeuihrlfwlive/broadcast_5c9e187770143.smil/playlist.m3u8",
+            "",
+            "",
+        },
+        {
+            "Number1TV.tr",
+            "Number1 TV",
+            "Müzik",
+            "https://b01c02nl.mediatriple.net/videoonlylive/mtkgeuihrlfwlive/broadcast_5c9e17cd59e8b.smil/playlist.m3u8",
+            "https://www.numberone.com.tr/tv/number1-tv",
+            "",
+            "",
+            "",
+        },
+        // --- Kültür (41) ---
         {
             "TRT2.tr",
             "TRT 2",
@@ -1173,7 +1328,7 @@ void ChannelManager::loadDefaultChannels()
     emit totalChannelCountChanged();
     rebuildCategories();
     rebuildFilter();
-    setStatusMessage(QStringLiteral("Türkçe 31 kanallı resmi açık yayın listesi yüklendi."));
+    setStatusMessage(QStringLiteral("41 kanallı resmi açık yayın listesi yüklendi."));
 }
 
 void ChannelManager::resetToDefaultChannels()
@@ -1295,7 +1450,8 @@ void ChannelManager::loadPersistedState()
         const bool isLegacy = isLegacyPhase1Default(ch)
                               || isLegacyPhase2Default(ch)
                               || isLegacyPhase3Default(ch)
-                              || isLegacyPhase4Default(ch);
+                              || isLegacyPhase4Default(ch)
+                              || isLegacyPhase5Default(ch);
         if (isLegacy) {
             hasLegacyDefaults = true;
             legacyIdsToDrop.insert(ch.id);
@@ -1376,7 +1532,7 @@ void ChannelManager::loadPersistedState()
                     }
                 }
             }
-            setStatusMessage(QStringLiteral("Türkçe 31 kanallı varsayılan yayın listesine yükseltildi."));
+            setStatusMessage(QStringLiteral("41 kanallı varsayılan yayın listesine yükseltildi."));
             savePersistedState();
             return;
         }

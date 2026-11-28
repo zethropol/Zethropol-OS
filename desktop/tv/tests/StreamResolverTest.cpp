@@ -2,10 +2,12 @@
 #include "StreamResolver.h"
 #include "StreamSecurity.h"
 
+#include <QFile>
 #include <QHostAddress>
 #include <QSignalSpy>
 #include <QTcpServer>
 #include <QTcpSocket>
+#include <QTemporaryDir>
 #include <QtTest>
 
 #include <clocale>
@@ -551,6 +553,159 @@ private slots:
         QCOMPARE(player.mpvPropertyString(QStringLiteral("ytdl")), QStringLiteral("no"));
         QCOMPARE(player.mpvPropertyString(QStringLiteral("load-unsafe-playlists")), QStringLiteral("no"));
         player.stop();
+    }
+
+    void youtubeUrlDetectionDependencyChecksAndYtDlpJsonParsing()
+    {
+        QVERIFY(StreamResolver::isYoutubeUrl(QStringLiteral("https://www.youtube.com/@beINSPORTSTurkiye/live")));
+        QVERIFY(StreamResolver::isYoutubeUrl(QStringLiteral("https://m.youtube.com/watch?v=AbCdEfGhIjK")));
+        QVERIFY(StreamResolver::isYoutubeUrl(QStringLiteral("https://youtu.be/AbCdEfGhIjK")));
+        QVERIFY(StreamResolver::isYoutubeUrl(QStringLiteral("https://www.youtube-nocookie.com/embed/AbCdEfGhIjK")));
+        QVERIFY(!StreamResolver::isYoutubeUrl(QStringLiteral("https://tv-trt1.medya.trt.com.tr/master.m3u8")));
+        QVERIFY(!StreamResolver::isYoutubeUrl(QStringLiteral("https://notyoutube.com/@test/live")));
+        QVERIFY(!StreamResolver::isYoutubeUrl(QStringLiteral("file:///youtube.com/watch")));
+
+        auto writeMockExe = [](const QTemporaryDir &dir, const QString &name, const QByteArray &body) {
+            QFile f(dir.filePath(name));
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write(body);
+            f.close();
+            QVERIFY(f.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner
+                                     | QFileDevice::ReadGroup | QFileDevice::ExeGroup
+                                     | QFileDevice::ReadOther | QFileDevice::ExeOther));
+        };
+
+        // 1. Empty override directory -> missing all 3 tools -> exact Turkish missing dependency warning
+        QTemporaryDir emptyDir;
+        QVERIFY(emptyDir.isValid());
+        const YoutubeDependencyStatus noneDeps = StreamResolver::checkYoutubeDependencies({emptyDir.path()});
+        QVERIFY(!noneDeps.hasYtDlp);
+        QVERIFY(!noneDeps.hasDeno);
+        QVERIFY(!noneDeps.hasFfmpeg);
+        QVERIFY(!noneDeps.allAvailable());
+        QCOMPARE(StreamResolver::youtubeFailureMessage(noneDeps),
+                 QStringLiteral("YouTube tabanlı kanalların oynatılması için sistemde yt-dlp, deno ve ffmpeg paketlerinin kurulu olması gerekir."));
+
+        // 2. Missing only deno -> still reports exact missing dependency warning
+        QTemporaryDir partialDir;
+        QVERIFY(partialDir.isValid());
+        writeMockExe(partialDir, QStringLiteral("yt-dlp"), QByteArrayLiteral("#!/bin/sh\nexit 0\n"));
+        writeMockExe(partialDir, QStringLiteral("ffmpeg"), QByteArrayLiteral("#!/bin/sh\nexit 0\n"));
+        const YoutubeDependencyStatus partialDeps = StreamResolver::checkYoutubeDependencies({partialDir.path()});
+        QVERIFY(partialDeps.hasYtDlp);
+        QVERIFY(!partialDeps.hasDeno);
+        QVERIFY(partialDeps.hasFfmpeg);
+        QVERIFY(!partialDeps.allAvailable());
+        QCOMPARE(StreamResolver::youtubeFailureMessage(partialDeps),
+                 QStringLiteral("YouTube tabanlı kanalların oynatılması için sistemde yt-dlp, deno ve ffmpeg paketlerinin kurulu olması gerekir."));
+
+        // 3. All 3 tools present -> failure message advises checking yt-dlp system updates
+        writeMockExe(partialDir, QStringLiteral("deno"), QByteArrayLiteral("#!/bin/sh\nexit 0\n"));
+        const YoutubeDependencyStatus fullDeps = StreamResolver::checkYoutubeDependencies({partialDir.path()});
+        QVERIFY(fullDeps.allAvailable());
+        QCOMPARE(StreamResolver::youtubeFailureMessage(fullDeps),
+                 QStringLiteral("YouTube yayın çözücüsü güncelliğini yitirmiş olabilir; sistem güncellemelerini (yt-dlp) denetleyin."));
+
+        // 4. yt-dlp -J JSON parsing: master HLS manifest_url from playlist entries[0] + unsafe URL rejection
+        const QByteArray tabJson = QByteArrayLiteral(
+            "{\"_type\":\"playlist\",\"entries\":[{"
+            "\"id\":\"mockVid12345\","
+            "\"formats\":[{"
+            "\"format_id\":\"270\","
+            "\"manifest_url\":\"https://manifest.googlevideo.com/api/manifest/hls_variant/mock/index.m3u8\","
+            "\"http_headers\":{\"User-Agent\":\"Mozilla/5.0 Mock\"}"
+            "}]}]}");
+        QString uaOut;
+        const StreamExtractResult parsed = StreamResolver::extractStreamFromYtDlpJson(tabJson, &uaOut);
+        QVERIFY2(parsed.ok, qPrintable(parsed.errorMessage));
+        QCOMPARE(parsed.streamUrl,
+                 QStringLiteral("https://manifest.googlevideo.com/api/manifest/hls_variant/mock/index.m3u8"));
+        QCOMPARE(uaOut, QStringLiteral("Mozilla/5.0 Mock"));
+
+        const QByteArray evilJson = QByteArrayLiteral(
+            "{\"formats\":[{\"manifest_url\":\"file:///etc/passwd.m3u8\"}],\"url\":\"exec://id\"}");
+        const StreamExtractResult evilParsed = StreamResolver::extractStreamFromYtDlpJson(evilJson);
+        QVERIFY(!evilParsed.ok);
+        QCOMPARE(evilParsed.errorMessage,
+                 QStringLiteral("YouTube yayın çözücüsü güncelliğini yitirmiş olabilir; sistem güncellemelerini (yt-dlp) denetleyin."));
+    }
+
+    void asyncYoutubeResolveMissingDepsSuccessAndOutdatedFallbackWarnings()
+    {
+        auto writeMockExe = [](const QTemporaryDir &dir, const QString &name, const QByteArray &body) {
+            QFile f(dir.filePath(name));
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write(body);
+            f.close();
+            QVERIFY(f.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner
+                                     | QFileDevice::ReadGroup | QFileDevice::ExeGroup
+                                     | QFileDevice::ReadOther | QFileDevice::ExeOther));
+        };
+
+        // 1. Missing deno when opening a YouTube channel -> immediate exact Turkish missing dependency warning
+        QTemporaryDir missingDir;
+        QVERIFY(missingDir.isValid());
+        writeMockExe(missingDir, QStringLiteral("yt-dlp"), QByteArrayLiteral("#!/bin/sh\nexit 0\n"));
+        writeMockExe(missingDir, QStringLiteral("ffmpeg"), QByteArrayLiteral("#!/bin/sh\nexit 0\n"));
+
+        StreamResolver resolver;
+        resolver.setYoutubeToolSearchDirsOverride({missingDir.path()});
+        QSignalSpy failedSpy(&resolver, &StreamResolver::resolveFailed);
+        QSignalSpy resolvedSpy(&resolver, &StreamResolver::streamResolvedWithHeaders);
+
+        resolver.resolveChannel(QString(),
+                                QStringLiteral("https://www.youtube.com/@teknoseyir/live"),
+                                QStringLiteral("TeknoSeyir"),
+                                false,
+                                {QStringLiteral("https://www.youtube.com/@teknoseyir/videos")});
+        QCOMPARE(failedSpy.count(), 1);
+        QCOMPARE(resolvedSpy.count(), 0);
+        QCOMPARE(failedSpy.first().at(0).toString(),
+                 QStringLiteral("YouTube tabanlı kanalların oynatılması için sistemde yt-dlp, deno ve ffmpeg paketlerinin kurulu olması gerekir."));
+        QCOMPARE(failedSpy.first().at(2).toBool(), false);
+
+        // 2. All 3 tools present & mock yt-dlp succeeds -> resolves master HLS manifest and marks lastResolvedWasYoutube
+        QTemporaryDir okDir;
+        QVERIFY(okDir.isValid());
+        writeMockExe(okDir, QStringLiteral("deno"), QByteArrayLiteral("#!/bin/sh\nexit 0\n"));
+        writeMockExe(okDir, QStringLiteral("ffmpeg"), QByteArrayLiteral("#!/bin/sh\nexit 0\n"));
+        writeMockExe(okDir, QStringLiteral("yt-dlp"),
+                     QByteArrayLiteral(
+                         "#!/bin/sh\n"
+                         "printf '%s\\n' '{\"entries\":[{\"formats\":[{\"manifest_url\":\"https://manifest.googlevideo.com/api/manifest/hls_variant/ok/index.m3u8\",\"http_headers\":{\"User-Agent\":\"ZethropolTestUA\"}}]}]}'\n"));
+
+        resolver.setYoutubeToolSearchDirsOverride({okDir.path()});
+        failedSpy.clear();
+        resolvedSpy.clear();
+        resolver.resolveUrl(QStringLiteral("https://www.youtube.com/@teknoseyir/videos"),
+                            QStringLiteral("TeknoSeyir"),
+                            true);
+        QTRY_COMPARE_WITH_TIMEOUT(resolvedSpy.count(), 1, 5000);
+        QCOMPARE(failedSpy.count(), 0);
+        QCOMPARE(resolvedSpy.first().at(0).toString(),
+                 QStringLiteral("https://manifest.googlevideo.com/api/manifest/hls_variant/ok/index.m3u8"));
+        QCOMPARE(resolvedSpy.first().at(2).toBool(), true);
+        QCOMPARE(resolvedSpy.first().at(4).toString(), QStringLiteral("ZethropolTestUA"));
+        QCOMPARE(resolver.lastResolvedWasYoutube(), true);
+
+        // 3. All 3 tools present & mock yt-dlp fails -> exact Turkish update/outdated resolver warning
+        QTemporaryDir failDir;
+        QVERIFY(failDir.isValid());
+        writeMockExe(failDir, QStringLiteral("deno"), QByteArrayLiteral("#!/bin/sh\nexit 0\n"));
+        writeMockExe(failDir, QStringLiteral("ffmpeg"), QByteArrayLiteral("#!/bin/sh\nexit 0\n"));
+        writeMockExe(failDir, QStringLiteral("yt-dlp"),
+                     QByteArrayLiteral("#!/bin/sh\necho 'ERROR: Unable to extract player JS' >&2\nexit 1\n"));
+
+        resolver.setYoutubeToolSearchDirsOverride({failDir.path()});
+        failedSpy.clear();
+        resolvedSpy.clear();
+        resolver.resolveUrl(QStringLiteral("https://www.youtube.com/@donanimhabertv/videos"),
+                            QStringLiteral("DonanımHaber"),
+                            true);
+        QTRY_COMPARE_WITH_TIMEOUT(failedSpy.count(), 1, 5000);
+        QCOMPARE(resolvedSpy.count(), 0);
+        QCOMPARE(failedSpy.first().at(0).toString(),
+                 QStringLiteral("YouTube yayın çözücüsü güncelliğini yitirmiş olabilir; sistem güncellemelerini (yt-dlp) denetleyin."));
     }
 };
 

@@ -137,11 +137,11 @@ private slots:
     {
         EpgManager epg(true);
 
-        struct TurkishChannelRef {
+        struct DefaultChannelRef {
             const char *tvgId;
             const char *name;
         };
-        static const TurkishChannelRef kChannels[31] = {
+        static const DefaultChannelRef kChannels[41] = {
             {"TRT1.tr", "TRT 1"},
             {"ATV.tr", "ATV"},
             {"ShowTV.tr", "Show TV"},
@@ -157,25 +157,35 @@ private slots:
             {"CNNTurk.tr", "CNN Türk"},
             {"Haberturk.tr", "Habertürk"},
             {"HalkTV.tr", "Halk TV"},
-            {"SozcuTV.tr", "Sözcü TV"},
             {"AHaber.tr", "A Haber"},
-            {"Tele1.tr", "Tele1"},
             {"HaberGlobal.tr", "Haber Global"},
             {"TGRTHaber.tr", "TGRT Haber"},
             {"UlkeTV.tr", "Ülke TV"},
             {"24TV.tr", "Kanal 24"},
             {"TRTSpor.tr", "TRT Spor"},
             {"TRTSpor2.tr", "TRT Spor Yıldız"},
+            {"RedBullTV.int", "Red Bull TV"},
+            {"FIFAPlus.int", "FIFA+"},
+            {"beINSPORTSTurkiye.tr", "beIN SPORTS Türkiye"},
+            {"NASATV.us", "NASA TV"},
+            {"DWPlanetA.de", "DW Planet A"},
+            {"TeknoSeyir.tr", "TeknoSeyir"},
+            {"HardwarePlus.tr", "Hardware Plus (HWP)"},
+            {"DonanimHaber.tr", "DonanımHaber"},
             {"TRTBelgesel.tr", "TRT Belgesel"},
             {"DMAX.tr", "DMAX"},
             {"TRTCocuk.tr", "TRT Çocuk"},
-            {"CartoonNetwork.tr", "Cartoon Network Türkiye"},
             {"MinikaGO.tr", "MinikaGO"},
             {"MinikaCocuk.tr", "MinikaÇOCUK"},
+            {"PowerTurkTV.tr", "PowerTürk TV"},
+            {"PowerTV.tr", "Power TV"},
+            {"KralPopTV.tr", "Kral Pop TV"},
+            {"Number1TurkTV.tr", "Number1 Türk TV"},
+            {"Number1TV.tr", "Number1 TV"},
             {"TRT2.tr", "TRT 2"},
         };
 
-        for (const TurkishChannelRef &ref : kChannels) {
+        for (const DefaultChannelRef &ref : kChannels) {
             const QString id = QString::fromUtf8(ref.tvgId);
             const QString name = QString::fromUtf8(ref.name);
             epg.setActiveChannel(id, name);
@@ -184,6 +194,14 @@ private slots:
             QVERIFY2(!epg.currentTitle().isEmpty(), qPrintable(QStringLiteral("Empty current title for %1").arg(id)));
             QVERIFY2(epg.upcomingPrograms().size() >= 1,
                      qPrintable(QStringLiteral("Missing 2-hour upcoming programs for %1").arg(id)));
+        }
+
+        // Removed channels must NOT have built-in demo EPG entries
+        for (const QString &removedId : {QStringLiteral("SozcuTV.tr"),
+                                         QStringLiteral("Tele1.tr"),
+                                         QStringLiteral("CartoonNetwork.tr")}) {
+            epg.setActiveChannel(removedId, removedId);
+            QVERIFY2(!epg.hasEpgData(), qPrintable(QStringLiteral("Unexpected EPG data for removed channel %1").arg(removedId)));
         }
 
         // Display-name and @SD suffix lookups also resolve cleanly

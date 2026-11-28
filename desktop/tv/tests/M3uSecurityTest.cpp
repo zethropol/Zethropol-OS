@@ -196,7 +196,7 @@ private slots:
             QCOMPARE(mgr.currentChannelSourcePageUrl(), QStringLiteral("https://yayinci.example.org/canli"));
         }
 
-        // Phase 1 demo-only state.json (version: 1) auto-migrates to v3 Turkish 25-channel lineup
+        // Phase 1 demo-only state.json (version: 1) auto-migrates to v6 41-channel lineup
         QTemporaryDir migrateDir;
         QVERIFY(migrateDir.isValid());
         {
@@ -210,7 +210,7 @@ private slots:
         }
         {
             ChannelManager migrated(migrateDir.path());
-            QCOMPARE(migrated.totalChannelCount(), 31);
+            QCOMPARE(migrated.totalChannelCount(), 41);
             QVERIFY(migrated.selectChannel(0));
             QCOMPARE(migrated.currentChannelName(), QStringLiteral("TRT 1"));
             QCOMPARE(migrated.currentChannelTvgId(), QStringLiteral("TRT1.tr"));
@@ -219,18 +219,18 @@ private slots:
             QFile upgradedFile(migrated.stateFilePath());
             QVERIFY(upgradedFile.open(QIODevice::ReadOnly));
             const QJsonObject upgradedObj = QJsonDocument::fromJson(upgradedFile.readAll()).object();
-            QCOMPARE(upgradedObj.value(QStringLiteral("version")).toInt(), 5);
+            QCOMPARE(upgradedObj.value(QStringLiteral("version")).toInt(), 6);
         }
     }
 
-    void turkishDefaultLineupOrderAndZeroForeignChannels()
+    void defaultLineupOrderCategoriesRemovedChannelsAndHttpsSecurity()
     {
         QTemporaryDir tempDir;
         QVERIFY(tempDir.isValid());
 
         ChannelManager mgr(tempDir.path());
-        QCOMPARE(mgr.totalChannelCount(), 31);
-        QCOMPARE(mgr.filteredChannelCount(), 31);
+        QCOMPARE(mgr.totalChannelCount(), 41);
+        QCOMPARE(mgr.filteredChannelCount(), 41);
 
         struct ExpectedChannel {
             int number;
@@ -238,7 +238,7 @@ private slots:
             const char *group;
             const char *tvgId;
         };
-        static const ExpectedChannel kExpected[31] = {
+        static const ExpectedChannel kExpected[41] = {
             {1, "TRT 1", "Ulusal", "TRT1.tr"},
             {2, "ATV", "Ulusal", "ATV.tr"},
             {3, "Show TV", "Ulusal", "ShowTV.tr"},
@@ -254,33 +254,51 @@ private slots:
             {13, "CNN Türk", "Haber", "CNNTurk.tr"},
             {14, "Habertürk", "Haber", "Haberturk.tr"},
             {15, "Halk TV", "Haber", "HalkTV.tr"},
-            {16, "Sözcü TV", "Haber", "SozcuTV.tr"},
-            {17, "A Haber", "Haber", "AHaber.tr"},
-            {18, "Tele1", "Haber", "Tele1.tr"},
-            {19, "Haber Global", "Haber", "HaberGlobal.tr"},
-            {20, "TGRT Haber", "Haber", "TGRTHaber.tr"},
-            {21, "Ülke TV", "Haber", "UlkeTV.tr"},
-            {22, "Kanal 24", "Haber", "24TV.tr"},
-            {23, "TRT Spor", "Spor", "TRTSpor.tr"},
-            {24, "TRT Spor Yıldız", "Spor", "TRTSpor2.tr"},
-            {25, "TRT Belgesel", "Belgesel", "TRTBelgesel.tr"},
-            {26, "DMAX", "Belgesel", "DMAX.tr"},
-            {27, "TRT Çocuk", "Çocuk", "TRTCocuk.tr"},
-            {28, "Cartoon Network Türkiye", "Çocuk", "CartoonNetwork.tr"},
-            {29, "MinikaGO", "Çocuk", "MinikaGO.tr"},
-            {30, "MinikaÇOCUK", "Çocuk", "MinikaCocuk.tr"},
-            {31, "TRT 2", "Kültür", "TRT2.tr"},
+            {16, "A Haber", "Haber", "AHaber.tr"},
+            {17, "Haber Global", "Haber", "HaberGlobal.tr"},
+            {18, "TGRT Haber", "Haber", "TGRTHaber.tr"},
+            {19, "Ülke TV", "Haber", "UlkeTV.tr"},
+            {20, "Kanal 24", "Haber", "24TV.tr"},
+            {21, "TRT Spor", "Spor", "TRTSpor.tr"},
+            {22, "TRT Spor Yıldız", "Spor", "TRTSpor2.tr"},
+            {23, "Red Bull TV", "Spor", "RedBullTV.int"},
+            {24, "FIFA+", "Spor", "FIFAPlus.int"},
+            {25, "beIN SPORTS Türkiye", "Spor", "beINSPORTSTurkiye.tr"},
+            {26, "NASA TV", "Bilim ve Teknoloji", "NASATV.us"},
+            {27, "DW Planet A", "Bilim ve Teknoloji", "DWPlanetA.de"},
+            {28, "TeknoSeyir", "Bilim ve Teknoloji", "TeknoSeyir.tr"},
+            {29, "Hardware Plus (HWP)", "Bilim ve Teknoloji", "HardwarePlus.tr"},
+            {30, "DonanımHaber", "Bilim ve Teknoloji", "DonanimHaber.tr"},
+            {31, "TRT Belgesel", "Belgesel", "TRTBelgesel.tr"},
+            {32, "DMAX", "Belgesel", "DMAX.tr"},
+            {33, "TRT Çocuk", "Çocuk", "TRTCocuk.tr"},
+            {34, "MinikaGO", "Çocuk", "MinikaGO.tr"},
+            {35, "MinikaÇOCUK", "Çocuk", "MinikaCocuk.tr"},
+            {36, "PowerTürk TV", "Müzik", "PowerTurkTV.tr"},
+            {37, "Power TV", "Müzik", "PowerTV.tr"},
+            {38, "Kral Pop TV", "Müzik", "KralPopTV.tr"},
+            {39, "Number1 Türk TV", "Müzik", "Number1TurkTV.tr"},
+            {40, "Number1 TV", "Müzik", "Number1TV.tr"},
+            {41, "TRT 2", "Kültür", "TRT2.tr"},
         };
 
-        const QStringList forbiddenForeign = {
+        const QStringList removedChannels = {
             QStringLiteral("TRT World"),
             QStringLiteral("Al Jazeera English"),
             QStringLiteral("France 24 English"),
             QStringLiteral("NHK World-Japan"),
+            QStringLiteral("Sözcü TV"),
+            QStringLiteral("Tele1"),
+            QStringLiteral("Cartoon Network Türkiye"),
+        };
+        const QStringList removedTvgIds = {
+            QStringLiteral("SozcuTV.tr"),
+            QStringLiteral("Tele1.tr"),
+            QStringLiteral("CartoonNetwork.tr"),
         };
 
         QHash<QString, int> categoryCounts;
-        for (int i = 0; i < 31; ++i) {
+        for (int i = 0; i < 41; ++i) {
             const QModelIndex idx = mgr.index(i, 0);
             const int num = mgr.data(idx, ChannelManager::NumberRole).toInt();
             const QString name = mgr.data(idx, ChannelManager::NameRole).toString();
@@ -293,7 +311,8 @@ private slots:
             QCOMPARE(name, QString::fromUtf8(kExpected[i].name));
             QCOMPARE(group, QString::fromUtf8(kExpected[i].group));
             QCOMPARE(tvgId, QString::fromUtf8(kExpected[i].tvgId));
-            QVERIFY2(!forbiddenForeign.contains(name), qPrintable(name));
+            QVERIFY2(!removedChannels.contains(name), qPrintable(name));
+            QVERIFY2(!removedTvgIds.contains(tvgId), qPrintable(tvgId));
             categoryCounts[group] += 1;
 
             // Strict security & official HTTPS check on every default channel URL & fallback URL (no raw-IP http://)
@@ -313,12 +332,14 @@ private slots:
             }
         }
 
-        // Exact category distribution across 31 channels
+        // Exact category distribution across 41 channels
         QCOMPARE(categoryCounts.value(QStringLiteral("Ulusal")), 10);
-        QCOMPARE(categoryCounts.value(QStringLiteral("Haber")), 12);
-        QCOMPARE(categoryCounts.value(QStringLiteral("Spor")), 2);
+        QCOMPARE(categoryCounts.value(QStringLiteral("Haber")), 10);
+        QCOMPARE(categoryCounts.value(QStringLiteral("Spor")), 5);
+        QCOMPARE(categoryCounts.value(QStringLiteral("Bilim ve Teknoloji")), 5);
         QCOMPARE(categoryCounts.value(QStringLiteral("Belgesel")), 2);
-        QCOMPARE(categoryCounts.value(QStringLiteral("Çocuk")), 4);
+        QCOMPARE(categoryCounts.value(QStringLiteral("Çocuk")), 3);
+        QCOMPARE(categoryCounts.value(QStringLiteral("Müzik")), 5);
         QCOMPARE(categoryCounts.value(QStringLiteral("Kültür")), 1);
 
         const QStringList expectedCategories = {
@@ -327,11 +348,33 @@ private slots:
             QStringLiteral("Ulusal"),
             QStringLiteral("Haber"),
             QStringLiteral("Spor"),
+            QStringLiteral("Bilim ve Teknoloji"),
             QStringLiteral("Belgesel"),
             QStringLiteral("Çocuk"),
+            QStringLiteral("Müzik"),
             QStringLiteral("Kültür"),
         };
         QCOMPARE(mgr.categories(), expectedCategories);
+
+        // Category filtering checks for the 3 newly added / expanded categories
+        mgr.setSelectedCategory(QStringLiteral("Bilim ve Teknoloji"));
+        QCOMPARE(mgr.filteredChannelCount(), 5);
+        QCOMPARE(mgr.data(mgr.index(0, 0), ChannelManager::NameRole).toString(), QStringLiteral("NASA TV"));
+        QCOMPARE(mgr.data(mgr.index(4, 0), ChannelManager::NameRole).toString(), QStringLiteral("DonanımHaber"));
+
+        mgr.setSelectedCategory(QStringLiteral("Spor"));
+        QCOMPARE(mgr.filteredChannelCount(), 5);
+        QCOMPARE(mgr.data(mgr.index(2, 0), ChannelManager::NameRole).toString(), QStringLiteral("Red Bull TV"));
+        QCOMPARE(mgr.data(mgr.index(3, 0), ChannelManager::NameRole).toString(), QStringLiteral("FIFA+"));
+        QCOMPARE(mgr.data(mgr.index(4, 0), ChannelManager::NameRole).toString(), QStringLiteral("beIN SPORTS Türkiye"));
+
+        mgr.setSelectedCategory(QStringLiteral("Müzik"));
+        QCOMPARE(mgr.filteredChannelCount(), 5);
+        QCOMPARE(mgr.data(mgr.index(0, 0), ChannelManager::NameRole).toString(), QStringLiteral("PowerTürk TV"));
+        QCOMPARE(mgr.data(mgr.index(4, 0), ChannelManager::NameRole).toString(), QStringLiteral("Number1 TV"));
+
+        mgr.setSelectedCategory(QStringLiteral("Tümü"));
+        QCOMPARE(mgr.filteredChannelCount(), 41);
     }
 
     void stateJsonV2ToV3MigrationPreservesCustomChannelsAndFavorites()
@@ -374,8 +417,8 @@ private slots:
         }
 
         ChannelManager upgraded(tempDir.path());
-        // 31 Turkish v5 defaults + 1 preserved custom channel = 32
-        QCOMPARE(upgraded.totalChannelCount(), 32);
+        // 41 v6 defaults + 1 preserved custom channel = 42
+        QCOMPARE(upgraded.totalChannelCount(), 42);
         // Removed foreign channel (TRT World) should not remain dangling as currentChannelId
         QVERIFY(upgraded.currentChannelId().isEmpty());
 
@@ -384,24 +427,27 @@ private slots:
         QCOMPARE(upgraded.data(upgraded.index(1, 0), ChannelManager::NameRole).toString(), QStringLiteral("ATV"));
         QCOMPARE(upgraded.data(upgraded.index(10, 0), ChannelManager::NameRole).toString(), QStringLiteral("TRT Haber"));
         QCOMPARE(upgraded.data(upgraded.index(10, 0), ChannelManager::FavoriteRole).toBool(), true);
-        QCOMPARE(upgraded.data(upgraded.index(31, 0), ChannelManager::NameRole).toString(), QStringLiteral("Özel Yerel TV"));
-        QCOMPARE(upgraded.data(upgraded.index(31, 0), ChannelManager::NumberRole).toInt(), 32);
-        QCOMPARE(upgraded.data(upgraded.index(31, 0), ChannelManager::FavoriteRole).toBool(), true);
+        QCOMPARE(upgraded.data(upgraded.index(41, 0), ChannelManager::NameRole).toString(), QStringLiteral("Özel Yerel TV"));
+        QCOMPARE(upgraded.data(upgraded.index(41, 0), ChannelManager::NumberRole).toInt(), 42);
+        QCOMPARE(upgraded.data(upgraded.index(41, 0), ChannelManager::FavoriteRole).toBool(), true);
 
-        // Ensure zero foreign channels survived migration
+        // Ensure zero removed legacy channels survived migration
         for (int i = 0; i < upgraded.rowCount(); ++i) {
             const QString n = upgraded.data(upgraded.index(i, 0), ChannelManager::NameRole).toString();
             QVERIFY(n != QStringLiteral("TRT World"));
             QVERIFY(n != QStringLiteral("Al Jazeera English"));
             QVERIFY(n != QStringLiteral("France 24 English"));
             QVERIFY(n != QStringLiteral("NHK World-Japan"));
+            QVERIFY(n != QStringLiteral("Sözcü TV"));
+            QVERIFY(n != QStringLiteral("Tele1"));
+            QVERIFY(n != QStringLiteral("Cartoon Network Türkiye"));
         }
 
-        // Verify state.json on disk is upgraded to version 5
+        // Verify state.json on disk is upgraded to version 6
         QFile stateFile(upgraded.stateFilePath());
         QVERIFY(stateFile.open(QIODevice::ReadOnly));
         const QJsonObject root = QJsonDocument::fromJson(stateFile.readAll()).object();
-        QCOMPARE(root.value(QStringLiteral("version")).toInt(), 5);
+        QCOMPARE(root.value(QStringLiteral("version")).toInt(), 6);
     }
 
     void stateJsonV3ToV4MigrationRepairsEndpointsAndPreservesCustomChannels()
@@ -435,8 +481,8 @@ private slots:
         }
 
         ChannelManager upgraded(tempDir.path());
-        // 31 repaired Turkish v5 defaults + 1 custom channel = 32
-        QCOMPARE(upgraded.totalChannelCount(), 32);
+        // 41 repaired v6 defaults + 1 custom channel = 42
+        QCOMPARE(upgraded.totalChannelCount(), 42);
 
         // ATV (index 1) upgraded from broken 404 daioncdn URL to Turkuvaz official page + token API fallback
         QCOMPARE(upgraded.data(upgraded.index(1, 0), ChannelManager::NameRole).toString(), QStringLiteral("ATV"));
@@ -453,18 +499,18 @@ private slots:
                     .toString()
                     .contains(QStringLiteral("ciner.daioncdn.net/showtv/showtv.m3u8?ce=3&app=")));
 
-        // Custom channel preserved at #32 with its favorite flag intact
-        QCOMPARE(upgraded.data(upgraded.index(31, 0), ChannelManager::NameRole).toString(),
+        // Custom channel preserved at #42 with its favorite flag intact
+        QCOMPARE(upgraded.data(upgraded.index(41, 0), ChannelManager::NameRole).toString(),
                  QStringLiteral("Benim Özel Kanalım"));
-        QCOMPARE(upgraded.data(upgraded.index(31, 0), ChannelManager::FavoriteRole).toBool(), true);
+        QCOMPARE(upgraded.data(upgraded.index(41, 0), ChannelManager::FavoriteRole).toBool(), true);
 
         QFile stateFile(upgraded.stateFilePath());
         QVERIFY(stateFile.open(QIODevice::ReadOnly));
         const QJsonObject root = QJsonDocument::fromJson(stateFile.readAll()).object();
-        QCOMPARE(root.value(QStringLiteral("version")).toInt(), 5);
+        QCOMPARE(root.value(QStringLiteral("version")).toInt(), 6);
     }
 
-    void stateJsonV4ToV5MigrationAddsSixNewChannelsAndPreservesCustom()
+    void stateJsonV4ToV6MigrationPreservesCustomAndUpgradesCategories()
     {
         QTemporaryDir tempDir;
         QVERIFY(tempDir.isValid());
@@ -492,28 +538,101 @@ private slots:
         }
 
         ChannelManager upgraded(tempDir.path());
-        // 31 v5 defaults + 1 preserved custom channel = 32
-        QCOMPARE(upgraded.totalChannelCount(), 32);
+        // 41 v6 defaults + 1 preserved custom channel = 42
+        QCOMPARE(upgraded.totalChannelCount(), 42);
         QCOMPARE(upgraded.currentChannelName(), QStringLiteral("NTV"));
         QCOMPARE(upgraded.data(upgraded.index(11, 0), ChannelManager::FavoriteRole).toBool(), true);
 
-        // Verify all 6 new channels placed at the end of their respective categories
-        QCOMPARE(upgraded.data(upgraded.index(20, 0), ChannelManager::NameRole).toString(), QStringLiteral("Ülke TV"));
-        QCOMPARE(upgraded.data(upgraded.index(21, 0), ChannelManager::NameRole).toString(), QStringLiteral("Kanal 24"));
-        QCOMPARE(upgraded.data(upgraded.index(25, 0), ChannelManager::NameRole).toString(), QStringLiteral("DMAX"));
-        QCOMPARE(upgraded.data(upgraded.index(27, 0), ChannelManager::NameRole).toString(), QStringLiteral("Cartoon Network Türkiye"));
-        QVERIFY(upgraded.data(upgraded.index(27, 0), ChannelManager::StreamUrlRole).toString().isEmpty()); // Option A: no raw IP
-        QCOMPARE(upgraded.data(upgraded.index(28, 0), ChannelManager::NameRole).toString(), QStringLiteral("MinikaGO"));
-        QCOMPARE(upgraded.data(upgraded.index(29, 0), ChannelManager::NameRole).toString(), QStringLiteral("MinikaÇOCUK"));
+        QCOMPARE(upgraded.data(upgraded.index(18, 0), ChannelManager::NameRole).toString(), QStringLiteral("Ülke TV"));
+        QCOMPARE(upgraded.data(upgraded.index(19, 0), ChannelManager::NameRole).toString(), QStringLiteral("Kanal 24"));
+        QCOMPARE(upgraded.data(upgraded.index(31, 0), ChannelManager::NameRole).toString(), QStringLiteral("DMAX"));
+        QCOMPARE(upgraded.data(upgraded.index(33, 0), ChannelManager::NameRole).toString(), QStringLiteral("MinikaGO"));
+        QCOMPARE(upgraded.data(upgraded.index(34, 0), ChannelManager::NameRole).toString(), QStringLiteral("MinikaÇOCUK"));
 
-        // Custom channel preserved at #32 with favorite intact
-        QCOMPARE(upgraded.data(upgraded.index(31, 0), ChannelManager::NameRole).toString(), QStringLiteral("Özel Belgesel"));
-        QCOMPARE(upgraded.data(upgraded.index(31, 0), ChannelManager::FavoriteRole).toBool(), true);
+        // Custom channel preserved at #42 with favorite intact
+        QCOMPARE(upgraded.data(upgraded.index(41, 0), ChannelManager::NameRole).toString(), QStringLiteral("Özel Belgesel"));
+        QCOMPARE(upgraded.data(upgraded.index(41, 0), ChannelManager::FavoriteRole).toBool(), true);
 
         QFile stateFile(upgraded.stateFilePath());
         QVERIFY(stateFile.open(QIODevice::ReadOnly));
         const QJsonObject root = QJsonDocument::fromJson(stateFile.readAll()).object();
-        QCOMPARE(root.value(QStringLiteral("version")).toInt(), 5);
+        QCOMPARE(root.value(QStringLiteral("version")).toInt(), 6);
+    }
+
+    void stateJsonV5ToV6MigrationRemovesThreeChannelsAndAddsThirteenNewChannels()
+    {
+        QTemporaryDir tempDir;
+        QVERIFY(tempDir.isValid());
+
+        {
+            QFile v5State(tempDir.filePath(QStringLiteral("state.json")));
+            QVERIFY(v5State.open(QIODevice::WriteOnly));
+            v5State.write(
+                "{\n"
+                "  \"version\": 5,\n"
+                "  \"favorites\": [\"v5-trt1\", \"v5-sozcu\", \"v5-custom\"],\n"
+                "  \"lastChannelId\": \"v5-sozcu\",\n"
+                "  \"channels\": [\n"
+                "    {\"id\":\"v5-trt1\",\"name\":\"TRT 1\",\"group\":\"Ulusal\","
+                "     \"streamUrl\":\"https://tv-trt1.medya.trt.com.tr/master.m3u8\","
+                "     \"sourcePageUrl\":\"https://www.trtizle.com/canli/tv/trt-1\",\"tvgId\":\"TRT1.tr\"},\n"
+                "    {\"id\":\"v5-sozcu\",\"name\":\"Sözcü TV\",\"group\":\"Haber\","
+                "     \"streamUrl\":\"\",\"sourcePageUrl\":\"https://www.youtube.com/@Sozcutelevizyonu/live\",\"tvgId\":\"SozcuTV.tr\"},\n"
+                "    {\"id\":\"v5-tele1\",\"name\":\"Tele1\",\"group\":\"Haber\","
+                "     \"streamUrl\":\"\",\"sourcePageUrl\":\"https://www.tele1.com.tr/canli-yayin/\",\"tvgId\":\"Tele1.tr\"},\n"
+                "    {\"id\":\"v5-cn\",\"name\":\"Cartoon Network Türkiye\",\"group\":\"Çocuk\","
+                "     \"streamUrl\":\"\",\"sourcePageUrl\":\"https://www.cartoonnetwork.com.tr/canli-yayin\",\"tvgId\":\"CartoonNetwork.tr\"},\n"
+                "    {\"id\":\"v5-custom\",\"name\":\"Benim Özel Bilim Kanalım\",\"group\":\"Özel\","
+                "     \"streamUrl\":\"https://custom.example.org/science.m3u8\","
+                "     \"sourcePageUrl\":\"\",\"tvgId\":\"OzelBilim.tr\"}\n"
+                "  ]\n"
+                "}\n");
+        }
+
+        ChannelManager upgraded(tempDir.path());
+        // 41 v6 defaults + 1 preserved custom channel = 42
+        QCOMPARE(upgraded.totalChannelCount(), 42);
+        // Removed channel (Sözcü TV) must not remain dangling as active channel
+        QVERIFY(upgraded.currentChannelId().isEmpty());
+        // TRT 1 and custom channel favorites preserved
+        QCOMPARE(upgraded.data(upgraded.index(0, 0), ChannelManager::FavoriteRole).toBool(), true);
+        QCOMPARE(upgraded.data(upgraded.index(41, 0), ChannelManager::NameRole).toString(),
+                 QStringLiteral("Benim Özel Bilim Kanalım"));
+        QCOMPARE(upgraded.data(upgraded.index(41, 0), ChannelManager::FavoriteRole).toBool(), true);
+
+        QSet<QString> names;
+        for (int i = 0; i < upgraded.rowCount(); ++i) {
+            names.insert(upgraded.data(upgraded.index(i, 0), ChannelManager::NameRole).toString());
+        }
+        // All 3 removed channels must be completely absent
+        QVERIFY(!names.contains(QStringLiteral("Sözcü TV")));
+        QVERIFY(!names.contains(QStringLiteral("Tele1")));
+        QVERIFY(!names.contains(QStringLiteral("Cartoon Network Türkiye")));
+
+        // All 13 new channels must be present
+        const QStringList expectedNew = {
+            QStringLiteral("NASA TV"),
+            QStringLiteral("DW Planet A"),
+            QStringLiteral("TeknoSeyir"),
+            QStringLiteral("Hardware Plus (HWP)"),
+            QStringLiteral("DonanımHaber"),
+            QStringLiteral("Red Bull TV"),
+            QStringLiteral("FIFA+"),
+            QStringLiteral("beIN SPORTS Türkiye"),
+            QStringLiteral("PowerTürk TV"),
+            QStringLiteral("Power TV"),
+            QStringLiteral("Kral Pop TV"),
+            QStringLiteral("Number1 Türk TV"),
+            QStringLiteral("Number1 TV"),
+        };
+        for (const QString &chName : expectedNew) {
+            QVERIFY2(names.contains(chName), qPrintable(QStringLiteral("Missing new channel: %1").arg(chName)));
+        }
+
+        QFile stateFile(upgraded.stateFilePath());
+        QVERIFY(stateFile.open(QIODevice::ReadOnly));
+        const QJsonObject root = QJsonDocument::fromJson(stateFile.readAll()).object();
+        QCOMPARE(root.value(QStringLiteral("version")).toInt(), 6);
     }
 };
 

@@ -89,10 +89,16 @@ ApplicationWindow {
         target: mpvPlayer
         function onPlaybackStateChanged() {
             if (mpvPlayer.playbackState === "error"
-                    && !StreamResolverBridge.resolving
-                    && StreamResolverBridge.hasPendingFallbacks) {
-                root.pageFallbackTriedForChannel = true
-                StreamResolverBridge.tryNextFallback(ChannelBridge.currentChannelName)
+                    && !StreamResolverBridge.resolving) {
+                if (StreamResolverBridge.hasPendingFallbacks) {
+                    root.pageFallbackTriedForChannel = true
+                    StreamResolverBridge.tryNextFallback(ChannelBridge.currentChannelName)
+                } else if (!mpvPlayer.retrying && StreamResolverBridge.lastResolvedWasYoutube) {
+                    const ytHint = StreamResolverBridge.youtubeDiagnosticMessage()
+                    if (ytHint.length > 0 && mpvPlayer.errorMessage !== ytHint) {
+                        mpvPlayer.setExternalError(ytHint)
+                    }
+                }
             }
         }
     }

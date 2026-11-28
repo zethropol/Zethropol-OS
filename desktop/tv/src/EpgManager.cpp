@@ -620,25 +620,11 @@ void EpgManager::loadDemoSchedule()
         {135, 60, "Halk TV Gece Bülteni", "Gece özeti ve yarının manşetleri.", "Haber"},
     });
 
-    registerChannel(QStringLiteral("SozcuTV.tr"), QStringLiteral("Sözcü TV"), {
-        {0, 40, "SZC Ana Haber", "Gündemden son dakika gelişmeleri ve canlı bağlantılar.", "Haber"},
-        {40, 45, "Para Politika", "Ekonomi, enflasyon ve bütçe analizleri.", "Ekonomi"},
-        {85, 50, "Arena", "Dosya haberler ve stüdyo tartışmaları.", "Tartışma"},
-        {135, 60, "Gece Bülteni", "Günün kapsamlı haber özeti.", "Haber"},
-    });
-
     registerChannel(QStringLiteral("AHaber.tr"), QStringLiteral("A Haber"), {
         {0, 40, "A Haber Canlı Yayın", "Son dakika haber akışı ve canlı bağlantılar.", "Haber"},
         {40, 45, "Memleket Meselesi", "Günün siyasi ve diplomatik gelişmeleri.", "Tartışma"},
         {85, 50, "Canlı Gündem", "Ekonomi, savunma sanayi ve dış politika.", "Haber"},
         {135, 60, "Gece Ajansı", "Günün özeti ve sıcak gelişmeler.", "Haber"},
-    });
-
-    registerChannel(QStringLiteral("Tele1.tr"), QStringLiteral("Tele1"), {
-        {0, 40, "Tele1 Ana Haber", "Türkiye ve dünyadan güncel haber bülteni.", "Haber"},
-        {40, 45, "18 Dakika", "Günün öne çıkan başlıklarının değerlendirmesi.", "Tartışma"},
-        {85, 50, "Forum Hafta Sonu", "Kültür, ekonomi ve siyaset tartışmaları.", "Tartışma"},
-        {135, 60, "Gece Bülteni", "Günün son gelişmeleri ve basın turu.", "Haber"},
     });
 
     registerChannel(QStringLiteral("HaberGlobal.tr"), QStringLiteral("Haber Global"), {
@@ -684,6 +670,63 @@ void EpgManager::loadDemoSchedule()
         {140, 60, "Motor Sporları Özeti", "Haftanın yarışlarından öne çıkan anlar.", "Spor"},
     });
 
+    registerChannel(QStringLiteral("RedBullTV.int"), QStringLiteral("Red Bull TV"), {
+        {0, 45, "Red Bull Live Arena", "Ekstrem sporlar, motor sporları ve canlı etkinlikler.", "Spor"},
+        {45, 45, "UCI Mountain Bike Özel", "Dünya Kupası etap özetleri ve sporcu portreleri.", "Spor"},
+        {90, 50, "Drift & Rally Günlüğü", "Motor sporları belgesel ve yarış seçkisi.", "Spor"},
+        {140, 60, "Macera Belgeseli", "Doğa, tırmanış ve açık hava maceraları.", "Spor"},
+    });
+
+    registerChannel(QStringLiteral("FIFAPlus.int"), QStringLiteral("FIFA+"), {
+        {0, 45, "FIFA+ Maç Kuşağı", "Uluslararası futbol karşılaşmaları ve canlı yayınlar.", "Spor"},
+        {45, 45, "Dünya Kupası Klasikleri", "Unutulmaz turnuva karşılaşmaları ve arşiv özetleri.", "Spor"},
+        {90, 50, "FIFA+ Belgesel", "Futbol tarihi ve yıldız oyuncu hikâyeleri.", "Spor"},
+        {140, 60, "Haftanın Golleri", "Dünya liglerinden seçme goller ve analizler.", "Spor"},
+    });
+
+    registerChannel(QStringLiteral("beINSPORTSTurkiye.tr"), QStringLiteral("beIN SPORTS Türkiye"), {
+        {0, 45, "beIN SPORTS Haber Canlı", "Süper Lig, Avrupa ligleri ve canlı spor bülteni.", "Spor"},
+        {45, 45, "Maç Önü ve Analiz", "Haftanın maç değerlendirmeleri ve istatistikler.", "Spor"},
+        {90, 50, "Özetler Kuşağı", "Süper Lig ve Avrupa maç özetleri.", "Spor"},
+        {140, 60, "Spor Gecesi", "Günün öne çıkan spor gelişmeleri.", "Spor"},
+    });
+
+    // --- Bilim ve Teknoloji (26-30) ---
+    registerChannel(QStringLiteral("NASATV.us"), QStringLiteral("NASA TV"), {
+        {0, 45, "NASA Live / ISS Yayını", "Uluslararası Uzay İstasyonu ve görev kontrol canlı yayını.", "Bilim ve Teknoloji"},
+        {45, 45, "Artemis & Derin Uzay", "Ay, Mars ve derin uzay keşif görevleri bülteni.", "Bilim ve Teknoloji"},
+        {90, 50, "James Webb Keşifleri", "Astrofizik, teleskop gözlemleri ve bilim brifingi.", "Bilim ve Teknoloji"},
+        {140, 60, "NASA+ Belgesel Kuşağı", "Uzay mühendisliği ve Dünya gözlemi.", "Bilim ve Teknoloji"},
+    });
+
+    registerChannel(QStringLiteral("DWPlanetA.de"), QStringLiteral("DW Planet A"), {
+        {0, 45, "DW Planet A & Tech", "İklim teknolojileri, enerji inovasyonu ve bilim dosyaları.", "Bilim ve Teknoloji"},
+        {45, 45, "DW Tech & Innovation", "Yapay zekâ, mühendislik ve gelecek teknolojileri.", "Bilim ve Teknoloji"},
+        {90, 50, "Sürdürülebilir Çözümler", "Temiz enerji ve çevre bilimi araştırmaları.", "Bilim ve Teknoloji"},
+        {140, 60, "Bilim ve Dünya", "Küresel bilim haberleri ve derinlemesine analizler.", "Bilim ve Teknoloji"},
+    });
+
+    registerChannel(QStringLiteral("TeknoSeyir.tr"), QStringLiteral("TeknoSeyir"), {
+        {0, 45, "Haftalık Gündem Değerlendirmesi", "Teknoloji, donanım, yazılım ve bilim gündemi.", "Bilim ve Teknoloji"},
+        {45, 45, "Donanım İnceleme", "İşlemci, ekran kartı ve sistem performans testleri.", "Bilim ve Teknoloji"},
+        {90, 50, "Oyun ve Yazılım Masası", "Linux, açık kaynak ve oyun teknolojileri.", "Bilim ve Teknoloji"},
+        {140, 60, "TeknoSeyir Özel", "Derinlemesine teknik sohbetler.", "Bilim ve Teknoloji"},
+    });
+
+    registerChannel(QStringLiteral("HardwarePlus.tr"), QStringLiteral("Hardware Plus (HWP)"), {
+        {0, 45, "HWP Cuma Raporu", "Haftanın teknoloji ve mobil gündemi değerlendirmesi.", "Bilim ve Teknoloji"},
+        {45, 45, "Donanım & Mobil Test", "Akıllı telefon, dizüstü ve bileşen incelemeleri.", "Bilim ve Teknoloji"},
+        {90, 50, "Canlı Soru-Cevap", "Sistem tavsiyeleri ve tüketici elektroniği sohbeti.", "Bilim ve Teknoloji"},
+        {140, 60, "Teknoloji Dosyası", "Yeni nesil yonga setleri ve yapay zekâ ürünleri.", "Bilim ve Teknoloji"},
+    });
+
+    registerChannel(QStringLiteral("DonanimHaber.tr"), QStringLiteral("DonanımHaber"), {
+        {0, 45, "DH Teknoloji Gündemi", "PC donanımı, yarı iletkenler ve güncel teknoloji haberleri.", "Bilim ve Teknoloji"},
+        {45, 45, "Performans Laboratuvarı", "CPU/GPU kıyaslama ve teknik ölçüm incelemeleri.", "Bilim ve Teknoloji"},
+        {90, 50, "Otomotiv ve İnovasyon", "Elektrikli araçlar ve yeni mühendislik çözümleri.", "Bilim ve Teknoloji"},
+        {140, 60, "Editör Seçimi", "Öne çıkan teknoloji incelemeleri.", "Bilim ve Teknoloji"},
+    });
+
     registerChannel(QStringLiteral("TRTBelgesel.tr"), QStringLiteral("TRT Belgesel"), {
         {0, 45, "Anadolu'nun Doğası", "Yaban hayatı ve coğrafya belgeseli.", "Belgesel"},
         {45, 50, "Bilim ve Keşif", "Mühendislik, doğa bilimleri ve tarih dosyaları.", "Belgesel"},
@@ -705,13 +748,6 @@ void EpgManager::loadDemoSchedule()
         {130, 50, "İbi ve Tosi", "Matematik ve keşif dolu macera.", "Çocuk"},
     });
 
-    registerChannel(QStringLiteral("CartoonNetwork.tr"), QStringLiteral("Cartoon Network Türkiye"), {
-        {0, 40, "Gumball'ın Muhteşem Dünyası", "Elmore kasabasından eğlenceli aile maceraları.", "Çocuk"},
-        {40, 45, "Kral Şakir", "Şakir ve ailesinin neşeli İstanbul serüvenleri.", "Çocuk"},
-        {85, 45, "Kafadar Ayılar", "Üç sevimli ayının şehirdeki günlük maceraları.", "Çocuk"},
-        {130, 50, "Teen Titans Go!", "Genç kahramanların komik takım hikâyeleri.", "Çocuk"},
-    });
-
     registerChannel(QStringLiteral("MinikaGO.tr"), QStringLiteral("MinikaGO"), {
         {0, 40, "Beyblade Burst", "Heyecan dolu turnuva ve dostluk mücadelesi.", "Çocuk"},
         {40, 45, "Maceracı Yüzgeçler", "Boğaz'ın derinliklerinde keşif ve eğlence.", "Çocuk"},
@@ -724,6 +760,42 @@ void EpgManager::loadDemoSchedule()
         {40, 45, "Masha ve Koca Ayı", "Ormanda eğlenceli dostluk hikâyeleri.", "Çocuk"},
         {85, 45, "Pırıl ve Arkadaşları", "Sayılar, renkler ve keşif dolu maceralar.", "Çocuk"},
         {130, 50, "Küçük Kaşifler", "Hayvanlar ve doğa hakkında eğlenceli bilgiler.", "Çocuk"},
+    });
+
+    // --- Müzik (36-40) ---
+    registerChannel(QStringLiteral("PowerTurkTV.tr"), QStringLiteral("PowerTürk TV"), {
+        {0, 45, "PowerTürk 40xPop", "Türkiye'nin en çok dinlenen güncel Türkçe pop klipleri.", "Müzik"},
+        {45, 45, "Taptaze", "Yeni çıkan yerli albümler ve ilk kez yayınlanan klipler.", "Müzik"},
+        {90, 50, "PowerTürk Akustik", "Stüdyo canlı performans ve akustik seçkiler.", "Müzik"},
+        {140, 60, "Gece Kuşağı Müzik", "Kesintisiz Türkçe pop ve slow hitler.", "Müzik"},
+    });
+
+    registerChannel(QStringLiteral("PowerTV.tr"), QStringLiteral("Power TV"), {
+        {0, 45, "Power Global Hits", "Dünya listelerinin zirvesindeki uluslararası hit klipler.", "Müzik"},
+        {45, 45, "Power Dance", "Elektronik ve dans müziği klip seçkisi.", "Müzik"},
+        {90, 50, "Power Top 40", "Haftanın en popüler yabancı şarkıları.", "Müzik"},
+        {140, 60, "Power Night Mix", "Gece kuşağı yabancı müzik akışı.", "Müzik"},
+    });
+
+    registerChannel(QStringLiteral("KralPopTV.tr"), QStringLiteral("Kral Pop TV"), {
+        {0, 45, "Kral Pop Top 20", "Türkiye'nin en sevilen popüler müzik listesi.", "Müzik"},
+        {45, 45, "Kral Pop Yeni Klipler", "Haftanın yeni çıkan yerli video klipleri.", "Müzik"},
+        {90, 50, "Kral Pop Akustik", "Özel konser ve stüdyo kayıtları.", "Müzik"},
+        {140, 60, "Kral Pop Gece", "Kesintisiz Türkçe pop müzik yayını.", "Müzik"},
+    });
+
+    registerChannel(QStringLiteral("Number1TurkTV.tr"), QStringLiteral("Number1 Türk TV"), {
+        {0, 45, "NR1 Türk Top 40", "En yeni Türkçe pop ve alternatif müzik klipleri.", "Müzik"},
+        {45, 45, "NR1 Türk Hit", "Günün öne çıkan yerli şarkıları.", "Müzik"},
+        {90, 50, "NR1 Türk Slow", "Duygusal ve akustik Türkçe müzik seçkisi.", "Müzik"},
+        {140, 60, "NR1 Türk Gece", "Kesintisiz yerli klip yayını.", "Müzik"},
+    });
+
+    registerChannel(QStringLiteral("Number1TV.tr"), QStringLiteral("Number1 TV"), {
+        {0, 45, "NR1 World Top 40", "Uluslararası müzik listelerinden en hit klipler.", "Müzik"},
+        {45, 45, "NR1 Dance & Club", "Ritim dolu dans ve elektronik müzik kuşağı.", "Müzik"},
+        {90, 50, "NR1 New Releases", "Dünya müziğinden yeni çıkan video klipler.", "Müzik"},
+        {140, 60, "NR1 Night Hits", "Kesintisiz yabancı müzik yayını.", "Müzik"},
     });
 
     registerChannel(QStringLiteral("TRT2.tr"), QStringLiteral("TRT 2"), {
