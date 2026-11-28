@@ -1,6 +1,6 @@
 pkgname=zethropol-control-center
 pkgver=0.1.0
-pkgrel=5
+pkgrel=6
 pkgdesc="Zethropol OS desktop control center"
 arch=('x86_64')
 url="https://github.com/zethropol/Zethropol-OS"
@@ -39,7 +39,7 @@ optdepends=(
     'zethropol-security: Zethropol Security D-Bus service'
 )
 source=("${pkgname}-${pkgver}-${pkgrel}-src.tar.gz")
-sha256sums=('fb29a379fe94c727796b237ade06d21f2f35f201b0aed7bc8b780f0ad07a2a18')
+sha256sums=('bba9eb6210015c3e6aba3c3d2a493ba8de87764dbd9a96f08aa3d3ced5fd1a13')
 
 build() {
     cmake -S "$srcdir/${pkgname}-${pkgver}/desktop/control-center" \
@@ -48,12 +48,13 @@ build() {
           -DCMAKE_INSTALL_PREFIX=/usr \
           -DCMAKE_CXX_FLAGS="${CXXFLAGS} -ffile-prefix-map=${srcdir}=/build -fdebug-prefix-map=${srcdir}=/build" \
           -DBUILD_TESTING=ON
-    cmake --build "$srcdir/build" --parallel --target control_center
+    cmake --build "$srcdir/build" --parallel --target control_center zethropol-update-helper
 }
 
 check() {
     cmake --build "$srcdir/build" --parallel \
-          --target control_center_update_scanner_test \
+          --target control_center_update_helper_test \
+                   control_center_update_scanner_test \
                    control_center_update_installer_test \
                    control_center_process_service_test \
                    control_center_security_remediation_test \
@@ -61,6 +62,7 @@ check() {
                    control_center_tabs_test \
                    control_center_hardware_test
 
+    "$srcdir/build/control_center_update_helper_test"
     "$srcdir/build/control_center_update_scanner_test"
     QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
         "$srcdir/build/control_center_update_installer_test"
@@ -88,6 +90,10 @@ package() {
     install -Dm755 "$srcdir/build/control_center" \
         "$pkgdir/usr/bin/control_center"
     ln -s control_center "$pkgdir/usr/bin/zethropol-control-center"
+    install -Dm755 "$srcdir/build/zethropol-update-helper" \
+        "$pkgdir/usr/lib/zethropol/zethropol-update-helper"
+    install -Dm644 "$_srcroot/desktop/control-center/polkit/org.zethropol.updates.apply.policy" \
+        "$pkgdir/usr/share/polkit-1/actions/org.zethropol.updates.apply.policy"
 
     install -Dm644 "$srcdir/build/Zethropol/ControlCenter/control_center.qmltypes" \
         "$_qmlroot/control_center.qmltypes"

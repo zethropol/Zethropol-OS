@@ -1,7 +1,7 @@
 pkgbase = zethropol-control-center
 	pkgdesc = Zethropol OS desktop control center
 	pkgver = 0.1.0
-	pkgrel = 5
+	pkgrel = 6
 	url = https://github.com/zethropol/Zethropol-OS
 	arch = x86_64
 	license = MIT
@@ -34,7 +34,7 @@ pkgbase = zethropol-control-center
 	optdepends = zethropol-compatibility: Windows compatibility prefix management and Wine runner
 	optdepends = zethropol-diagnostics: Zethropol Diagnostics D-Bus service
 	optdepends = zethropol-security: Zethropol Security D-Bus service
-	source = zethropol-control-center-0.1.0-5-src.tar.gz
-	sha256sums = fb29a379fe94c727796b237ade06d21f2f35f201b0aed7bc8b780f0ad07a2a18
+	source = zethropol-control-center-0.1.0-6-src.tar.gz
+	sha256sums = bba9eb6210015c3e6aba3c3d2a493ba8de87764dbd9a96f08aa3d3ced5fd1a13
 
 pkgname = zethropol-control-center
