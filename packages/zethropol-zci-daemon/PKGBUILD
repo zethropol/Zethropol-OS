@@ -1,0 +1,34 @@
+pkgname=zethropol-zci-daemon
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Zethropol ZCI Daemon & Policy-Gated Action Gateway D-Bus service"
+url="https://github.com/zethropol/Zethropol-OS"
+arch=("x86_64")
+license=("MIT")
+depends=("glibc" "gcc-libs" "dbus" "systemd" "polkit" "zethropol-security>=0.1.0-3")
+makedepends=("cargo")
+source=("${pkgname}-${pkgver}-${pkgrel}-src.tar.gz")
+sha256sums=("d330cf4aad22b839a64125fd2fea9f8e5d19387b7d75d1b296e19e4bc75db539")
+
+build() {
+    cd "$srcdir/${pkgname}-${pkgver}/services/zci-daemon"
+    export RUSTFLAGS="--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo --remap-path-prefix=${HOME}=/home/build --remap-path-prefix=${srcdir}=/build ${RUSTFLAGS:-}"
+    cargo build --release --locked --offline
+}
+
+check() {
+    cd "$srcdir/${pkgname}-${pkgver}/services/zci-daemon"
+    export RUSTFLAGS="--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo --remap-path-prefix=${HOME}=/home/build --remap-path-prefix=${srcdir}=/build ${RUSTFLAGS:-}"
+    cargo test --locked --offline
+}
+
+package() {
+    cd "$srcdir/${pkgname}-${pkgver}/services/zci-daemon"
+
+    install -Dm755 target/release/zci-daemon "$pkgdir/usr/lib/zethropol/zethropol-zci-daemon"
+    install -Dm644 deployment/dbus/org.zethropol.ZciDaemon.conf "$pkgdir/etc/dbus-1/system.d/org.zethropol.ZciDaemon.conf"
+    install -Dm644 deployment/dbus/org.zethropol.ZciDaemon.service "$pkgdir/usr/share/dbus-1/system-services/org.zethropol.ZciDaemon.service"
+    install -Dm644 deployment/systemd/zethropol-zci-daemon.service "$pkgdir/usr/lib/systemd/system/zethropol-zci-daemon.service"
+    install -Dm644 deployment/polkit/org.zethropol.zci.daemon.policy "$pkgdir/usr/share/polkit-1/actions/org.zethropol.zci.daemon.policy"
+    install -Dm644 "$srcdir/${pkgname}-${pkgver}/LICENSE" "$pkgdir/usr/share/licenses/${pkgname}/LICENSE"
+}

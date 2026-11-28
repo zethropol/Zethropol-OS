@@ -1,0 +1,37 @@
+[Unit]
+Description=Zethropol ZCI Daemon & Policy-Gated Action Gateway
+After=dbus.socket zethropol-security.service
+Wants=zethropol-security.service
+BindsTo=dbus.socket
+
+[Service]
+Type=dbus
+BusName=org.zethropol.ZciDaemon
+ExecStart=/usr/lib/zethropol/zethropol-zci-daemon
+Restart=on-failure
+RestartSec=2s
+RuntimeDirectory=zethropol-zci-daemon
+RuntimeDirectoryMode=0750
+UMask=0077
+ProtectSystem=strict
+ProtectHome=read-only
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+MemoryDenyWriteExecute=yes
+LockPersonality=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET
+IPAddressDeny=any
+IPAddressAllow=localhost
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @mount @raw-io @module @reboot @swap @clock @cpu-emulation @debug @obsolete

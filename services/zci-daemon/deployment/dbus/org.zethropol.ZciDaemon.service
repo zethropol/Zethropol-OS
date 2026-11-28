@@ -1,0 +1,3 @@
+[D-BUS Service]
+Name=org.zethropol.ZciDaemon
+SystemdService=zethropol-zci-daemon.service

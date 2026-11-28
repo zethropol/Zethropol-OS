@@ -1,0 +1,18 @@
+pkgbase = zethropol-zci-daemon
+	pkgdesc = Zethropol ZCI Daemon & Policy-Gated Action Gateway D-Bus service
+	pkgver = 0.1.0
+	pkgrel = 1
+	url = https://github.com/zethropol/Zethropol-OS
+	arch = x86_64
+	license = MIT
+	makedepends = cargo
+	depends = glibc
+	depends = gcc-libs
+	depends = dbus
+	depends = systemd
+	depends = polkit
+	depends = zethropol-security>=0.1.0-3
+	source = zethropol-zci-daemon-0.1.0-1-src.tar.gz
+	sha256sums = d330cf4aad22b839a64125fd2fea9f8e5d19387b7d75d1b296e19e4bc75db539
+
+pkgname = zethropol-zci-daemon
