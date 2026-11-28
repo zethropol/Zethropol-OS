@@ -1182,6 +1182,7 @@ ApplicationWindow {
                     UpdateReport {
                         scanner: UpdateBridge
                         installer: UpdateInstallBridge
+                        onOpenRecoveryRequested: contentStack.currentIndex = 7
                     }
 
                     Item {

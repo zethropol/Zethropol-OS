@@ -167,14 +167,46 @@ IFS= read -r answer
         QVERIFY(!installer.busy());
     }
 
-    void qmlRequiresConfirmationAndAcceptsInputInsideThePage()
+    void qmlRequiresConfirmationAndRunsLiveOfficialHelperAndRecoveryRedirect()
     {
-        script("updater", "printf 'Yanıt bekleniyor: '\nIFS= read -r answer\n[ \"$answer\" = continue ] || exit 93\n");
+        script("pkexec", "exec \"$@\"\n");
+        script("mock-update-helper", R"SH(
+printf '[ZETHROPOL-UPDATE] STAGE=preflight STATUS=ok\n'
+printf '[ZETHROPOL-UPDATE] STAGE=pre-snapshot STATUS=starting\n'
+printf '[ZETHROPOL-UPDATE] STAGE=pre-snapshot STATUS=ok SNAPSHOT_ID=101\n'
+printf '[ZETHROPOL-UPDATE] STAGE=pacman-upgrade STATUS=starting\n'
+printf ':: Synchronizing package databases...\n'
+printf ':: Starting full system upgrade...\n'
+printf ':: Processing package changes...\n'
+printf '[ZETHROPOL-UPDATE] STAGE=pacman-upgrade STATUS=ok\n'
+printf '[ZETHROPOL-UPDATE] STAGE=post-snapshot STATUS=starting PRE_SNAPSHOT_ID=101\n'
+printf '[ZETHROPOL-UPDATE] STAGE=post-snapshot STATUS=ok SNAPSHOT_ID=102 PRE_SNAPSHOT_ID=101\n'
+printf '[ZETHROPOL-UPDATE] STAGE=limine-sync STATUS=starting\n'
+printf '[ZETHROPOL-UPDATE] STAGE=limine-sync STATUS=ok\n'
+printf '[ZETHROPOL-UPDATE] STAGE=complete STATUS=ok PRE_SNAPSHOT_ID=101 POST_SNAPSHOT_ID=102\n'
+exit 0
+)SH");
         UpdateScanner scanner;
         QSignalSpy scanned(&scanner, &UpdateScanner::scanFinished);
         QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 1, 5000);
         UpdateInstaller installer(&scanner);
-        setup(installer);
+        QVERIFY(installer.liveExecutionEnabled());
+        installer.m_updateHelperPath = directory.filePath("mock-update-helper");
+        installer.m_healthProbe = [](const QString &, quint32, const QString &) {
+            PostUpdateHealthEvidence ev;
+            ev.systemdChecked = true;
+            ev.failedSystemdUnits = 0;
+            ev.pacmanDbChecked = true;
+            ev.pacmanDbOk = true;
+            ev.activeKernelCheckDone = true;
+            ev.activeKernelImagePresent = true;
+            ev.bootVerified = true;
+            ev.recoverySnapshotVerified = true;
+            ev.recoveryRecommendedLevel = QStringLiteral("none");
+            ev.recoveryAssessmentStatus = QStringLiteral("healthy");
+            return ev;
+        };
+
         QQmlEngine engine;
         QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(UPDATE_REPORT_QML)));
         std::unique_ptr<QObject> root(component.createWithInitialProperties({
@@ -188,14 +220,18 @@ IFS= read -r answer
         item->setSize(QSizeF(1000, 760));
         window.resize(1000, 760);
         window.show();
+
         auto *start = root->findChild<QObject *>("startUpdateInstallation");
         auto *confirmation = root->findChild<QObject *>("updateInstallationConfirmation");
         auto *cancel = root->findChild<QObject *>("cancelUpdateInstallation");
         auto *confirm = root->findChild<QObject *>("confirmUpdateInstallation");
-        auto *input = root->findChild<QObject *>("updateInstallationInput");
-        auto *send = root->findChild<QObject *>("sendUpdateInstallationInput");
+        auto *progressPanel = root->findChild<QObject *>("liveUpdateProgressPanel");
+        auto *preBadge = root->findChild<QObject *>("preSnapshotBadge");
+        auto *postBadge = root->findChild<QObject *>("postSnapshotBadge");
         auto *output = root->findChild<QObject *>("updateInstallationOutput");
-        QVERIFY(start && confirmation && cancel && confirm && input && send && output);
+        auto *openRecoveryBtn = root->findChild<QObject *>("openRecoveryButton");
+        QVERIFY(start && confirmation && cancel && confirm && progressPanel && preBadge && postBadge && output && openRecoveryBtn);
+
         QCOMPARE(installer.status(), "idle");
         QVERIFY(!confirmation->property("visible").toBool());
         QVERIFY(QMetaObject::invokeMethod(start, "clicked"));
@@ -204,20 +240,48 @@ IFS= read -r answer
         QVERIFY(QMetaObject::invokeMethod(cancel, "clicked"));
         QTRY_VERIFY(!confirmation->property("visible").toBool());
         QCOMPARE(installer.status(), "idle");
+
+        QSignalSpy finished(&installer, &UpdateInstaller::sessionFinished);
         QVERIFY(QMetaObject::invokeMethod(start, "clicked"));
         QTRY_VERIFY(confirmation->property("visible").toBool());
         QVERIFY(QMetaObject::invokeMethod(confirm, "clicked"));
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 2, 5000);
+
+        QCOMPARE(installer.status(), "finished");
+        QCOMPARE(installer.progressStage(), QStringLiteral("done"));
+        QCOMPARE(installer.progressPercent(), 100);
+        QCOMPARE(installer.preSnapshotId(), 101u);
+        QCOMPARE(installer.postSnapshotId(), 102u);
+        QCOMPARE(installer.healthStatus(), QStringLiteral("healthy"));
+        QVERIFY(output->property("text").toString().contains(":: Processing package changes..."));
+        QVERIFY(preBadge->property("text").toString().contains("#101"));
+        QVERIFY(postBadge->property("text").toString().contains("#102"));
+        QVERIFY(installer.recoveryGuidance().contains("#101"));
+        QVERIFY(installer.recoveryGuidance().contains("#102"));
+
+        QSignalSpy recoveryRequested(root.get(), SIGNAL(openRecoveryRequested()));
+        QVERIFY(QMetaObject::invokeMethod(openRecoveryBtn, "clicked"));
+        QCOMPARE(recoveryRequested.count(), 1);
+
+        // Also verify interactive input bar works during interactive TTY sessions (e.g. start())
+        script("updater", "printf 'Yanıt bekleniyor: '\nIFS= read -r answer\n[ \"$answer\" = continue ] || exit 93\n");
+        installer.m_updater = directory.filePath("updater");
+        installer.m_recoveryGateEnabled = false;
+        auto *input = root->findChild<QObject *>("updateInstallationInput");
+        auto *send = root->findChild<QObject *>("sendUpdateInstallationInput");
+        QVERIFY(input && send);
+        installer.start();
         QVERIFY(installer.busy());
-        QVERIFY(!start->property("enabled").toBool());
+        QVERIFY(installer.interactiveSession());
         QTRY_VERIFY_WITH_TIMEOUT(output->property("text").toString().contains("Yanıt bekleniyor:"), 5000);
         QCOMPARE(input->property("echoMode").toInt(), 2); // Password input.
         input->setProperty("text", "continue");
-        QSignalSpy finished(&installer, &UpdateInstaller::sessionFinished);
         QVERIFY(QMetaObject::invokeMethod(send, "clicked"));
         QVERIFY(input->property("text").toString().isEmpty());
         input->setProperty("text", "unsubmitted-private-input");
-        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
-        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 2, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 2, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 3, 5000);
         QVERIFY(!installer.output().contains("continue"));
         QVERIFY(!installer.output().contains("unsubmitted-private-input"));
         QVERIFY(input->property("text").toString().isEmpty());
@@ -262,7 +326,7 @@ printf 'Yeniden başlatma gerçekleştirilmedi.\n'
         QVERIFY(installer.message().contains("başarıyla"));
     }
 
-    void preUpdateGateDefaultsToLiveExecutionDisabledAndBlocksUpdater()
+    void liveExecutionDefaultsEnabledAndExplicitDisableBlocksUpdater()
     {
         const QString marker = directory.filePath("updater-ran");
         script("updater", QString("touch '%1'\nexit 0\n").arg(marker).toUtf8());
@@ -273,7 +337,8 @@ printf 'Yeniden başlatma gerçekleştirilmedi.\n'
 
         UpdateInstaller installer(&scanner);
         installer.m_updater = directory.filePath("updater");
-        QVERIFY(!installer.liveExecutionEnabled());
+        QVERIFY(installer.liveExecutionEnabled());
+        installer.m_liveExecutionEnabled = false;
 
         QString recordedOutcome;
         installer.m_recoveryGate = [](const QString &, bool) {
@@ -370,7 +435,7 @@ printf 'Yeniden başlatma gerçekleştirilmedi.\n'
 
         UpdateInstaller installer(&scanner);
         installer.m_updater = directory.filePath("updater");
-        QVERIFY(!installer.liveExecutionEnabled());
+        QVERIFY(installer.liveExecutionEnabled());
         installer.m_recoveryGate = [](const QString &, bool) {
             return PreUpdateGateResult{
                 false, QStringLiteral("not-available"),
@@ -533,7 +598,7 @@ exit 0
         QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 1, 5000);
 
         UpdateInstaller installer(&scanner);
-        QVERIFY(!installer.liveExecutionEnabled());
+        QVERIFY(installer.liveExecutionEnabled());
         installer.m_updater = directory.filePath("updater");
         installer.m_liveExecutionEnabled = true;
         QString outcome;
@@ -595,7 +660,7 @@ exit 0
         QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 1, 5000);
 
         UpdateInstaller installer(&scanner);
-        QVERIFY(!installer.liveExecutionEnabled());
+        QVERIFY(installer.liveExecutionEnabled());
         installer.m_updater = directory.filePath("updater");
         installer.m_liveExecutionEnabled = true;
 
@@ -664,7 +729,7 @@ exit 0
         QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 1, 5000);
 
         UpdateInstaller installer(&scanner);
-        QVERIFY(!installer.liveExecutionEnabled());
+        QVERIFY(installer.liveExecutionEnabled());
         installer.m_updater = directory.filePath("updater");
         installer.m_liveExecutionEnabled = true;
         installer.m_recoveryGate = [](const QString &, bool) {
@@ -876,22 +941,33 @@ exit 0
         QVERIFY(fpLog.open(QIODevice::ReadOnly));
         QCOMPARE(QString::fromUtf8(fpLog.readAll()).trimmed(), QStringLiteral("update"));
 
-        // 4. Official scope invokes pkexec pacman -Syu (no --noconfirm/--nodeps/--overwrite)
+        // 4. Official scope invokes pkexec <update-helper> apply-official (single Polkit prompt, no --nodeps/--overwrite)
         QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 2, 5000);
         const QString pkexecLog = directory.filePath("pkexec-args.log");
-        script("pkexec", QString("printf '%s\\n' \"$*\" > '%1'\nprintf 'The update has been applied\\n'\nexit 0\n").arg(pkexecLog).toUtf8());
-        script("pacman", "exit 0\n");
+        script("mock-update-helper", R"SH(
+printf '[ZETHROPOL-UPDATE] STAGE=preflight STATUS=ok\n'
+printf '[ZETHROPOL-UPDATE] STAGE=pre-snapshot STATUS=ok SNAPSHOT_ID=81\n'
+printf '[ZETHROPOL-UPDATE] STAGE=pacman-upgrade STATUS=starting\n'
+printf '[ZETHROPOL-UPDATE] STAGE=pacman-upgrade STATUS=ok\n'
+printf '[ZETHROPOL-UPDATE] STAGE=post-snapshot STATUS=ok SNAPSHOT_ID=82 PRE_SNAPSHOT_ID=81\n'
+printf '[ZETHROPOL-UPDATE] STAGE=limine-sync STATUS=ok\n'
+printf '[ZETHROPOL-UPDATE] STAGE=complete STATUS=ok PRE_SNAPSHOT_ID=81 POST_SNAPSHOT_ID=82\n'
+exit 0
+)SH");
+        script("pkexec", QString("printf '%s\\n' \"$*\" > '%1'\nexec \"$@\"\n").arg(pkexecLog).toUtf8());
+        installer.m_updateHelperPath = directory.filePath("mock-update-helper");
         installer.startScoped(QStringLiteral("official"));
         QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 4, 5000);
-        QVERIFY(gateCalled);
+        QVERIFY(!gateCalled); // Helper itself owns the fail-closed pre-snapshot under single Polkit auth
         QCOMPARE(installer.status(), "finished");
+        QCOMPARE(installer.preSnapshotId(), 81u);
+        QCOMPARE(installer.postSnapshotId(), 82u);
         QCOMPARE(installer.healthStatus(), "healthy");
         QFile pkLog(pkexecLog);
         QVERIFY(pkLog.open(QIODevice::ReadOnly));
         const QString pkCmd = QString::fromUtf8(pkLog.readAll()).trimmed();
-        QVERIFY(pkCmd.contains("pacman"));
-        QVERIFY(pkCmd.contains("-Syu"));
-        QVERIFY(!pkCmd.contains("--noconfirm"));
+        QVERIFY(pkCmd.contains("mock-update-helper"));
+        QVERIFY(pkCmd.contains("apply-official"));
         QVERIFY(!pkCmd.contains("--nodeps"));
         QVERIFY(!pkCmd.contains("--overwrite"));
 
@@ -917,6 +993,26 @@ exit 0
         QCOMPARE(installer.healthStatus(), "degraded");
         QVERIFY(installer.healthSummary().contains("missing dependency"));
         QVERIFY(installer.recoveryGuidance().contains("#81"));
+
+        // 6. Helper returning exit 17 (db.lck) defers safely with pacmanLockBlocked=true; exit 5 preserves pre-snapshot
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 4, 5000);
+        script("mock-update-helper", "printf '[ZETHROPOL-UPDATE] STAGE=blocked REASON=pacman-lock\\n'\nexit 17\n");
+        installer.startScoped(QStringLiteral("official"));
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 6, 5000);
+        QCOMPARE(installer.status(), "blocked");
+        QVERIFY(installer.pacmanLockBlocked());
+
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 5, 5000);
+        script("mock-update-helper", R"SH(
+printf '[ZETHROPOL-UPDATE] STAGE=pre-snapshot STATUS=ok SNAPSHOT_ID=205\n'
+printf '[ZETHROPOL-UPDATE] STAGE=pacman-upgrade STATUS=failed EXIT_CODE=1\n'
+exit 5
+)SH");
+        installer.startScoped(QStringLiteral("official"));
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 7, 5000);
+        QCOMPARE(installer.status(), "error");
+        QCOMPARE(installer.preSnapshotId(), 205u);
+        QVERIFY(installer.recoveryGuidance().contains("#205"));
     }
 };
 

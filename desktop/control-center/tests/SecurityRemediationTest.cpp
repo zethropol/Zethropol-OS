@@ -159,7 +159,9 @@ private slots:
 
     void qmlFilesHaveZeroUnescapedRichTextInjection()
     {
-        for (const QString &qmlPath : {QStringLiteral(PROCESSES_PAGE_QML), QStringLiteral(MAIN_QML)}) {
+        for (const QString &qmlPath : {QStringLiteral(PROCESSES_PAGE_QML),
+                                       QStringLiteral(MAIN_QML),
+                                       QStringLiteral(UPDATE_REPORT_QML)}) {
             QFile f(qmlPath);
             QVERIFY2(f.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(qmlPath));
             const QString content = QString::fromUtf8(f.readAll());

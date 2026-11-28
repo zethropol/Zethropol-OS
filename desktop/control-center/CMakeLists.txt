@@ -59,6 +59,19 @@ target_link_libraries(control_center PRIVATE
     Qt6::DBus
 )
 
+add_executable(zethropol-update-helper
+    src/UpdateHelperMain.cpp
+    src/UpdateHelperCore.cpp
+    src/UpdateHelperCore.h
+)
+set_target_properties(zethropol-update-helper PROPERTIES
+    AUTOMOC OFF
+    AUTORCC OFF
+    AUTOUIC OFF
+    CXX_STANDARD 20
+    CXX_STANDARD_REQUIRED ON
+)
+
 include(CTest)
 if(BUILD_TESTING)
     find_package(Qt6 REQUIRED COMPONENTS Test)
@@ -128,7 +141,8 @@ if(BUILD_TESTING)
     target_link_libraries(control_center_security_remediation_test PRIVATE Qt6::Core Qt6::DBus Qt6::Test)
     target_compile_definitions(control_center_security_remediation_test PRIVATE
         PROCESSES_PAGE_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/ProcessesPage.qml"
-        MAIN_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/Main.qml")
+        MAIN_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/Main.qml"
+        UPDATE_REPORT_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/UpdateReport.qml")
     add_test(NAME control_center_security_remediation_test
              COMMAND control_center_security_remediation_test)
 
@@ -179,5 +193,19 @@ if(BUILD_TESTING)
     target_link_libraries(control_center_compatibility_test PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME control_center_compatibility_test
              COMMAND control_center_compatibility_test)
+
+    qt_add_executable(control_center_update_helper_test
+        tests/UpdateHelperTest.cpp
+        src/UpdateHelperCore.cpp
+        src/UpdateHelperCore.h)
+    target_include_directories(control_center_update_helper_test PRIVATE src)
+    target_link_libraries(control_center_update_helper_test PRIVATE Qt6::Core Qt6::Test)
+    set_target_properties(control_center_update_helper_test PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED ON)
+    target_compile_definitions(control_center_update_helper_test PRIVATE
+        UPDATE_POLKIT_POLICY="${CMAKE_CURRENT_SOURCE_DIR}/polkit/org.zethropol.updates.apply.policy")
+    add_test(NAME control_center_update_helper_test
+             COMMAND control_center_update_helper_test)
 
 endif()

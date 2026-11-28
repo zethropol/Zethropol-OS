@@ -45,6 +45,12 @@ class UpdateInstaller : public QObject
     Q_PROPERTY(QString output READ output NOTIFY outputChanged)
     Q_PROPERTY(QString recoveryGuidance READ recoveryGuidance NOTIFY changed)
     Q_PROPERTY(bool liveExecutionEnabled READ liveExecutionEnabled CONSTANT)
+    Q_PROPERTY(QString progressStage READ progressStage NOTIFY changed)
+    Q_PROPERTY(int progressPercent READ progressPercent NOTIFY changed)
+    Q_PROPERTY(quint32 preSnapshotId READ preSnapshotId NOTIFY changed)
+    Q_PROPERTY(quint32 postSnapshotId READ postSnapshotId NOTIFY changed)
+    Q_PROPERTY(bool pacmanLockBlocked READ pacmanLockBlocked NOTIFY changed)
+    Q_PROPERTY(bool interactiveSession READ interactiveSession NOTIFY changed)
     Q_PROPERTY(bool officialRepoReady READ officialRepoReady NOTIFY changed)
     Q_PROPERTY(bool officialUpdatesAvailable READ officialUpdatesAvailable NOTIFY changed)
     Q_PROPERTY(bool aurUpdatesAvailable READ aurUpdatesAvailable NOTIFY changed)
@@ -68,6 +74,12 @@ public:
     QString output() const { return m_output; }
     QString recoveryGuidance() const { return m_recoveryGuidance; }
     bool liveExecutionEnabled() const { return m_liveExecutionEnabled; }
+    QString progressStage() const { return m_progressStage; }
+    int progressPercent() const { return m_progressPercent; }
+    quint32 preSnapshotId() const { return m_verifiedSnapshotId; }
+    quint32 postSnapshotId() const { return m_postSnapshotId; }
+    bool pacmanLockBlocked() const { return m_pacmanLockBlocked; }
+    bool interactiveSession() const { return m_interactiveSession; }
     bool officialRepoReady() const;
     bool officialUpdatesAvailable() const;
     bool aurUpdatesAvailable() const;
@@ -105,6 +117,7 @@ signals:
 private:
     friend class UpdateInstallerTest;
     void readOutput();
+    void parseHelperMarkers(const QString &text);
     void finish(const QString &status, const QString &message);
     void evaluatePostUpdateState();
 
@@ -112,18 +125,26 @@ private:
     QProcess m_process;
     QString m_sessionTool;
     QString m_updater;
+    QString m_updateHelperPath = QStringLiteral("/usr/lib/zethropol/zethropol-update-helper");
     QString m_pacmanLockPath = QStringLiteral("/var/lib/pacman/db.lck");
     QString m_activeScope = QStringLiteral("official");
     QString m_status = "idle";
+    QString m_progressStage = QStringLiteral("idle");
+    int m_progressPercent = 0;
     QString m_message;
     QString m_rawOutput;
     QString m_output;
     QStringDecoder m_decoder{QStringDecoder::Utf8};
     bool m_busy = false;
     bool m_recoveryGateEnabled = true;
-    bool m_liveExecutionEnabled = false;
+    bool m_liveExecutionEnabled = true;
+    bool m_usedRecoveryGate = false;
+    bool m_pacmanLockBlocked = false;
+    bool m_interactiveSession = false;
+    bool m_limineSyncWarning = false;
     QString m_updateOperationId;
     quint32 m_verifiedSnapshotId = 0;
+    quint32 m_postSnapshotId = 0;
     QString m_recoveryGuidance;
     QString m_healthStatus;
     QString m_healthSummary;

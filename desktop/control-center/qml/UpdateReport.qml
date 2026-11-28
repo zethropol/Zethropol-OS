@@ -7,8 +7,25 @@ Item {
     objectName: "updateReportPage"
     required property var scanner
     required property var installer
+    signal openRecoveryRequested()
     readonly property color reportText: reportPalette.text
-    property string pendingInstallScope: "all"
+    property string pendingInstallScope: "official"
+
+    function stageDisplayText(stage) {
+        return ({
+            "idle": "Hazır",
+            "preflight": "Ön kontroller ve yönetici onayı (Polkit)",
+            "pre-snapshot": "Snapper güncelleme öncesi anlık görüntü",
+            "upgrading": "Resmî paket yükseltmesi (pacman -Syu)",
+            "post-snapshot": "Snapper güncelleme sonrası anlık görüntü",
+            "limine-sync": "Limine önyükleyici eşitleme",
+            "verifying": "Güncelleme sonrası sağlık doğrulaması",
+            "done": "Tamamlandı",
+            "blocked": "Kilit nedeniyle güvenle ertelendi",
+            "cancelled": "İptal edildi",
+            "error": "Hata ile sonlandı"
+        })[stage] || stage
+    }
 
     SystemPalette {
         id: reportPalette
@@ -19,7 +36,7 @@ Item {
         target: installer
         function onChanged() {
             installationInput.clear()
-            if (installer.busy) {
+            if (installer.busy && installer.interactiveSession) {
                 Qt.callLater(function() { installationInput.forceActiveFocus() })
             } else if ((installer.status === "error" || installer.status === "unknown" || installer.status === "blocked")
                        && installer.output.length > 0) {
@@ -50,9 +67,9 @@ Item {
             }
 
             Button {
-                objectName: "startOfficialUpdateInstallation"
-                text: "Resmî Depolar (-Syu)…"
-                visible: installer.officialUpdatesAvailable
+                objectName: "startUpdateInstallation"
+                text: installer.busy && installer.activeScope === "official" ? "Güncelleniyor…" : "Güncellemeleri Uygula"
+                highlighted: true
                 enabled: !scanner.busy && !installer.busy && installer.officialRepoReady && installer.officialUpdatesAvailable
                 onClicked: {
                     reportPage.pendingInstallScope = "official"
@@ -78,16 +95,6 @@ Item {
                 enabled: !scanner.busy && !installer.busy && installer.flatpakUpdatesAvailable
                 onClicked: {
                     reportPage.pendingInstallScope = "flatpak"
-                    installConfirmation.open()
-                }
-            }
-
-            Button {
-                objectName: "startUpdateInstallation"
-                text: installer.busy ? "Kurulum sürüyor…" : "Güncellemeleri kur…"
-                enabled: !scanner.busy && !installer.busy && scanner.hasUpdates && installer.officialRepoReady
-                onClicked: {
-                    reportPage.pendingInstallScope = "all"
                     installConfirmation.open()
                 }
             }
@@ -149,14 +156,137 @@ Item {
             opacity: 0.85
         }
 
+        Rectangle {
+            objectName: "pacmanLockWarningBanner"
+            visible: installer.pacmanLockBlocked || installer.status === "blocked"
+            Layout.fillWidth: true
+            implicitHeight: lockWarnRow.implicitHeight + 20
+            radius: 8
+            color: reportPalette.alternateBase
+            border.width: 1
+            border.color: "#d97706"
+
+            RowLayout {
+                id: lockWarnRow
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.margins: 10
+                spacing: 10
+
+                Label {
+                    color: reportPage.reportText
+                    text: "Başka bir paket işlemi aktif (/var/lib/pacman/db.lck). Kilit dosyası silinmeden güncelleme güvenle ertelendi; mevcut işlem bittikten sonra yeniden deneyin."
+                    textFormat: Text.PlainText
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                }
+
+                Button {
+                    text: "Taramayı Yenile"
+                    enabled: !scanner.busy && !installer.busy
+                    onClicked: scanner.scan()
+                }
+            }
+        }
+
+        Rectangle {
+            objectName: "liveUpdateProgressPanel"
+            visible: installer.busy || installer.preSnapshotId > 0 || installer.postSnapshotId > 0
+            Layout.fillWidth: true
+            implicitHeight: liveProgressCol.implicitHeight + 24
+            radius: 8
+            color: reportPalette.alternateBase
+            border.width: 1
+            border.color: reportPalette.mid
+
+            ColumnLayout {
+                id: liveProgressCol
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.margins: 12
+                spacing: 8
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    BusyIndicator {
+                        running: installer.busy
+                        visible: running
+                        Layout.preferredWidth: 22
+                        Layout.preferredHeight: 22
+                    }
+
+                    Label {
+                        objectName: "liveUpdateStageLabel"
+                        color: reportPage.reportText
+                        text: "Aşama: " + reportPage.stageDisplayText(installer.progressStage)
+                        textFormat: Text.PlainText
+                        font.bold: true
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                    }
+
+                    Label {
+                        objectName: "liveUpdatePercentLabel"
+                        color: reportPage.reportText
+                        text: installer.progressPercent + "%"
+                        textFormat: Text.PlainText
+                        font.bold: true
+                        opacity: 0.8
+                    }
+                }
+
+                ProgressBar {
+                    objectName: "updateProgressBar"
+                    Layout.fillWidth: true
+                    from: 0
+                    to: 100
+                    value: installer.progressPercent
+                    indeterminate: installer.busy && installer.progressPercent <= 0
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 12
+                    visible: installer.preSnapshotId > 0 || installer.postSnapshotId > 0
+
+                    Label {
+                        objectName: "preSnapshotBadge"
+                        visible: installer.preSnapshotId > 0
+                        color: reportPage.reportText
+                        text: "Pre-Snapshot: #" + installer.preSnapshotId
+                        textFormat: Text.PlainText
+                        font.family: "monospace"
+                        opacity: 0.85
+                    }
+
+                    Label {
+                        objectName: "postSnapshotBadge"
+                        visible: installer.postSnapshotId > 0
+                        color: reportPage.reportText
+                        text: "Post-Snapshot: #" + installer.postSnapshotId
+                        textFormat: Text.PlainText
+                        font.family: "monospace"
+                        opacity: 0.85
+                    }
+
+                    Item { Layout.fillWidth: true }
+                }
+            }
+        }
+
         ColumnLayout {
             objectName: "postUpdateAssessmentPanel"
-            visible: !installer.busy && installer.healthStatus.length > 0
+            visible: !installer.busy && (installer.healthStatus.length > 0 || installer.status === "error" || installer.status === "cancelled" || installer.status === "unknown")
             Layout.fillWidth: true
             spacing: 4
 
             Label {
                 objectName: "postUpdateHealthSummary"
+                visible: installer.healthStatus.length > 0
                 color: reportPage.reportText
                 text: "Sistem sağlığı (" + ({"healthy": "Sağlıklı", "degraded": "Bozulmuş",
                                            "unknown": "Doğrulanamadı", "blocked": "Engelli"}[installer.healthStatus] || installer.healthStatus)
@@ -169,6 +299,7 @@ Item {
 
             Label {
                 objectName: "postUpdateCleanupSummary"
+                visible: installer.cleanupSummary.length > 0
                 color: reportPage.reportText
                 text: "Temizlik durumu (" + installer.cleanupStatus + "): " + installer.cleanupSummary
                 textFormat: Text.PlainText
@@ -177,20 +308,39 @@ Item {
                 opacity: 0.75
             }
 
-            Label {
-                objectName: "postUpdateRecoveryGuidance"
-                color: reportPage.reportText
-                visible: installer.recoveryGuidance.length > 0
-                text: "Kurtarma rehberliği: " + installer.recoveryGuidance
-                textFormat: Text.PlainText
+            RowLayout {
                 Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                opacity: 0.85
+                spacing: 8
+                visible: installer.recoveryGuidance.length > 0
+                         || installer.status === "error"
+                         || installer.status === "cancelled"
+                         || installer.status === "unknown"
+                         || installer.healthStatus === "degraded"
+                         || installer.healthStatus === "blocked"
+
+                Label {
+                    objectName: "postUpdateRecoveryGuidance"
+                    color: reportPage.reportText
+                    text: installer.recoveryGuidance.length > 0
+                          ? "Kurtarma rehberliği: " + installer.recoveryGuidance
+                          : "Güncelleme sonrasında sistem durumunu ve Snapper anlık görüntülerini Recovery sekmesinden inceleyebilirsiniz."
+                    textFormat: Text.PlainText
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    opacity: 0.85
+                }
+
+                Button {
+                    objectName: "openRecoveryButton"
+                    text: "Recovery Sekmesine Git"
+                    onClicked: reportPage.openRecoveryRequested()
+                }
             }
 
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 8
+                visible: installer.rebootSafetyNotice.length > 0
 
                 Label {
                     objectName: "postUpdateRebootNotice"
@@ -411,7 +561,7 @@ Item {
         }
 
         RowLayout {
-            visible: installer.busy
+            visible: installer.busy && installer.interactiveSession
             Layout.fillWidth: true
 
             TextField {
@@ -461,7 +611,7 @@ Item {
 
         Label {
             color: reportPage.reportText
-            visible: installer.busy
+            visible: installer.busy && installer.interactiveSession
             text: "Satır yanıtları için Gönder’i, tek tuş isteyen ekranlar için Tuş gönder’i kullanın. Parola ve yanıtlar rapora kaydedilmez."
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
@@ -525,7 +675,7 @@ Item {
             Label {
                 color: reportPage.reportText
                 text: reportPage.pendingInstallScope === "official"
-                      ? "Yalnızca resmî depolar için tam sistem yükseltmesi (pacman -Syu) Recovery ön snapshot kapısından geçirilerek yürütülecek. AUR, Flatpak ve yetim paket kaldırma bu oturumda çalıştırılmaz."
+                      ? "Tek yönetici onayı (Polkit) ile önce zorunlu Snapper güncelleme öncesi anlık görüntüsü alınacak, ardından resmî depolar (pacman -Syu --noconfirm) güncellenecek, güncelleme sonrası anlık görüntü alınacak ve Limine eşitlenecektir. AUR, Flatpak ve yetim paket kaldırma bu oturumda çalıştırılmaz."
                       : (reportPage.pendingInstallScope === "aur"
                          ? "Yalnızca AUR paketleri ayrı oturumda güncellenecek (resmî depolar güncel doğrulandı)."
                          : (reportPage.pendingInstallScope === "flatpak"
@@ -552,11 +702,13 @@ Item {
             }
             Button {
                 objectName: "confirmUpdateInstallation"
-                text: "Kurulumu başlat"
+                text: "Güncellemeyi Başlat"
                 enabled: !scanner.busy && !installer.busy
                          && (reportPage.pendingInstallScope === "flatpak"
                              ? installer.flatpakUpdatesAvailable
-                             : (scanner.hasUpdates && installer.officialRepoReady))
+                             : (reportPage.pendingInstallScope === "official"
+                                ? (installer.officialUpdatesAvailable && installer.officialRepoReady)
+                                : (scanner.hasUpdates && installer.officialRepoReady)))
                 onClicked: {
                     installConfirmation.close()
                     if (reportPage.pendingInstallScope === "all")

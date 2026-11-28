@@ -107,7 +107,7 @@ private slots:
 
         // Wait for isolated scanner to finish with missing tools (fail-closed)
         QTRY_VERIFY_WITH_TIMEOUT(!scanner.busy(), 5000);
-        QVERIFY(!installer.liveExecutionEnabled());
+        QVERIFY(installer.liveExecutionEnabled());
         QVERIFY(!installer.officialRepoReady());
 
         // Recovery must fail-closed to backend_unavailable on isolated bus without Recovery daemon
