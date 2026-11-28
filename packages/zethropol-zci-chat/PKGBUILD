@@ -1,0 +1,63 @@
+pkgname=zethropol-zci-chat
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Zethropol ZCI Chatbot user D-Bus service (org.zethropol.ZciChat.v1) and Qt6/QML + CLI client"
+url="https://github.com/zethropol/Zethropol-OS"
+arch=("x86_64")
+license=("MIT")
+depends=(
+    "glibc"
+    "gcc-libs"
+    "dbus"
+    "systemd"
+    "qt6-base"
+    "qt6-declarative"
+    "zethropol-security>=0.1.0-3"
+    "zethropol-zci-daemon>=0.1.0-1"
+    "zethropol-zci-runtime>=0.1.0-1"
+)
+makedepends=(
+    "cargo"
+    "cmake"
+    "ninja"
+)
+source=("${pkgname}-${pkgver}-${pkgrel}-src.tar.gz")
+sha256sums=("8ad04775f9c3cba4d2b9a08a34a768b038113a9061ed93e7cbf01acbae776617")
+
+build() {
+    cd "$srcdir/${pkgname}-${pkgver}/services/zci-chat-service"
+    export RUSTFLAGS="--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo --remap-path-prefix=${HOME}=/home/build --remap-path-prefix=${srcdir}=/build ${RUSTFLAGS:-}"
+    cargo build --release --locked --offline
+
+    export CXXFLAGS="${CXXFLAGS:-} -ffile-prefix-map=${srcdir}=/build -ffile-prefix-map=${HOME}=/home/build"
+    cmake -S "$srcdir/${pkgname}-${pkgver}/desktop/zci-chat" \
+          -B "$srcdir/build-ui" \
+          -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/usr \
+          -DCMAKE_SKIP_RPATH=ON \
+          -DBUILD_TESTING=ON
+    cmake --build "$srcdir/build-ui" --parallel
+}
+
+check() {
+    cd "$srcdir/${pkgname}-${pkgver}/services/zci-chat-service"
+    export RUSTFLAGS="--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo --remap-path-prefix=${HOME}=/home/build --remap-path-prefix=${srcdir}=/build ${RUSTFLAGS:-}"
+    cargo test --locked --offline
+
+    QT_QPA_PLATFORM=offscreen \
+    QT_QUICK_BACKEND=software \
+    QT_QUICK_CONTROLS_STYLE=Basic \
+    QT_QPA_PLATFORMTHEME= \
+        ctest --test-dir "$srcdir/build-ui" --output-on-failure
+}
+
+package() {
+    cd "$srcdir/${pkgname}-${pkgver}/services/zci-chat-service"
+    install -Dm755 target/release/zci-chat-service "$pkgdir/usr/lib/zethropol/zethropol-zci-chatd"
+    install -Dm644 deployment/systemd/zethropol-zci-chat.service "$pkgdir/usr/lib/systemd/user/zethropol-zci-chat.service"
+    install -Dm644 deployment/dbus/org.zethropol.ZciChat.service "$pkgdir/usr/share/dbus-1/services/org.zethropol.ZciChat.service"
+
+    DESTDIR="$pkgdir" cmake --install "$srcdir/build-ui"
+    install -Dm644 "$srcdir/${pkgname}-${pkgver}/LICENSE" "$pkgdir/usr/share/licenses/${pkgname}/LICENSE"
+}

@@ -7,6 +7,7 @@ services/hardware/diagnostics-helper/target/
 desktop/control-center/build/
 desktop/tv/build/
 desktop/weather/build/
+desktop/zci-chat/build/
 desktop/tv-win7/build*/
 desktop/tv-win7/third_party/
 dist/

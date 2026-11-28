@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=Zethropol ZCI Chatbot
+GenericName=Local AI Assistant
+GenericName[tr]=Yerel Yapay Zeka Sohbet Asistani
+Comment=Local-only, loopback-isolated Zethropol ZCI Chatbot powered by Qt6 and D-Bus
+Comment[tr]=Zethropol OS icin yerel, sifreli ve salt-okunur ZCI sohbet istemcisi
+Exec=zci-chat
+Icon=zethropol-zci-chat
+Terminal=false
+Type=Application
+Categories=Utility;Qt;
+Keywords=ai;chat;zci;local;llm;gemma;zethropol;
+StartupWMClass=zci-chat

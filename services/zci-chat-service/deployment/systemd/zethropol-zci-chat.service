@@ -1,0 +1,24 @@
+[Unit]
+Description=Zethropol ZCI Chatbot User Session Service (Local-Only, Encrypted History)
+After=dbus.socket
+PartOf=graphical-session.target
+
+[Service]
+Type=dbus
+BusName=org.zethropol.ZciChat
+ExecStart=/usr/lib/zethropol/zethropol-zci-chatd
+Restart=on-failure
+RestartSec=2s
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+MemoryDenyWriteExecute=yes
+LockPersonality=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_UNIX
+IPAddressDeny=any
+
+[Install]
+WantedBy=default.target

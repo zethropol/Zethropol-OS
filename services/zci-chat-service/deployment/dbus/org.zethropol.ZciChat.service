@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=org.zethropol.ZciChat
+Exec=/usr/lib/zethropol/zethropol-zci-chatd
+SystemdService=zethropol-zci-chat.service
