@@ -1,9 +1,0 @@
---resource
-/home/Zevor/Zethropol-OS/desktop/zci-chat/build-verify/.qt/rcc/qmake_Zethropol_ZciChat.qrc
---resource
-/home/Zevor/Zethropol-OS/desktop/zci-chat/build-verify/.qt/rcc/zci-chat_raw_qml_0.qrc
---resource
-/home/Zevor/Zethropol-OS/desktop/zci-chat/build-verify/.qt/rcc/zci-chat_raw_qml_0_extra_qmldirs.qrc
---resource
-/home/Zevor/Zethropol-OS/desktop/zci-chat/build-verify/.qt/rcc/zci_chat_icons.qrc
-/qt/qml/Zethropol/ZciChat/qml/Main.qml

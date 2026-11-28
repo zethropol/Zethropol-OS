@@ -1,2 +1,0 @@
-/usr/bin/ar qc libzethropol_zci_chat_core.a CMakeFiles/zethropol_zci_chat_core.dir/zethropol_zci_chat_core_autogen/mocs_compilation.cpp.o CMakeFiles/zethropol_zci_chat_core.dir/src/ChatClient.cpp.o
-/usr/bin/ranlib libzethropol_zci_chat_core.a
