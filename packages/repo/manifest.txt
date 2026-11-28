@@ -8,7 +8,7 @@ zethropol-monitoring-0.1.0-3-x86_64.pkg.tar.zst packages/stage-04.6/zethropol-mo
 zethropol-performance-0.1.0-4-x86_64.pkg.tar.zst packages/zethropol-performance/zethropol-performance-0.1.0-4-x86_64.pkg.tar.zst
 zethropol-power-0.1.0-2-x86_64.pkg.tar.zst packages/zethropol-power/zethropol-power-0.1.0-2-x86_64.pkg.tar.zst
 zethropol-recovery-0.1.0-3-x86_64.pkg.tar.zst packages/zethropol-recovery/zethropol-recovery-0.1.0-3-x86_64.pkg.tar.zst
-zethropol-security-0.1.0-2-x86_64.pkg.tar.zst packages/zethropol-security/zethropol-security-0.1.0-2-x86_64.pkg.tar.zst
+zethropol-security-0.1.0-3-x86_64.pkg.tar.zst packages/zethropol-security/zethropol-security-0.1.0-3-x86_64.pkg.tar.zst
 zethropol-services-0.1.0-3-x86_64.pkg.tar.zst packages/zethropol-services/zethropol-services-0.1.0-3-x86_64.pkg.tar.zst
 zethropol-system-monitor-0.1.0-1-x86_64.pkg.tar.zst packages/stage-04.6/zethropol-system-monitor-0.1.0-1-x86_64.pkg.tar.zst
 zethropol-tv-0.1.0-1-x86_64.pkg.tar.zst packages/zethropol-tv/zethropol-tv-0.1.0-1-x86_64.pkg.tar.zst

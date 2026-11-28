@@ -1,16 +1,17 @@
 pkgbase = zethropol-security
-	pkgdesc = Zethropol Security D-Bus service
+	pkgdesc = Zethropol Security & ZCI Policy Engine D-Bus service
 	pkgver = 0.1.0
-	pkgrel = 2
+	pkgrel = 3
 	url = https://github.com/zethropol/Zethropol-OS
 	arch = x86_64
 	license = MIT
 	makedepends = cargo
 	depends = glibc
+	depends = gcc-libs
 	depends = dbus
 	depends = systemd
 	depends = polkit
-	source = zethropol-security-0.1.0-2-src.tar.gz
-	sha256sums = 423686aee13dc33a5f302c58135b8a850808d54468f52c780ce087a4ec206a49
+	source = zethropol-security-0.1.0-3-src.tar.gz
+	sha256sums = 1ea8d9f835c1d639430d6045cc08be040b7ca8d8af0448baa3e8aa2014521af2
 
 pkgname = zethropol-security

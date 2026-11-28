@@ -1,5 +1,5 @@
 [Unit]
-Description=Zethropol Security D-Bus Service
+Description=Zethropol Security & ZCI Policy D-Bus Service
 After=dbus.socket
 BindsTo=dbus.socket
 
@@ -11,10 +11,18 @@ Restart=on-failure
 RestartSec=2s
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths=/etc/ufw
+StateDirectory=zethropol-security
+StateDirectoryMode=0700
+LogsDirectory=zethropol-security
+LogsDirectoryMode=0750
+ReadWritePaths=-/etc/ufw
 ProtectHome=true
 PrivateDevices=true
 ProtectKernelModules=true
 ProtectControlGroups=true
 NoNewPrivileges=true
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
 LockPersonality=true
+MemoryDenyWriteExecute=true

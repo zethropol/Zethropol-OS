@@ -54,7 +54,11 @@ sh services/zci-chat/start-zci-gemma4.sh
 ```
 - Open WebUI bağlantı şablonu: `services/zci-chat/webui-gemma4-connection.example.json`
 
-### 4. Testler
+### 4. ZCI Security & Policy Engine İstemcisi (`Aşama 08`)
+- `services/local-inference/zci_policy_client.py` (`ZciPolicyClient`), `zci-chat`, `zekans-code`, `zci-command` ve `zci-vision` ajanları için `/usr/bin/busctl` üzerinden `org.zethropol.Security` (`/org/zethropol/Security/Policy`, `org.zethropol.Security.Policy.v1`) arayüzüne bağlanan **fail-closed** Python köprüsüdür.
+- Servis erişilemez, zaman aşımına uğrar veya bozuk yanıt dönerse istemci her zaman `allowed=False` (`CLIENT_FAIL_CLOSED`) döndürür; hiçbir ayrıcalık yükseltmesi yapmaz.
+
+### 5. Testler
 ```sh
 python3 -I -B -m unittest discover -s services/local-inference -v
 ```

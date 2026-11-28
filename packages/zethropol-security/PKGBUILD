@@ -1,22 +1,24 @@
 pkgname=zethropol-security
 pkgver=0.1.0
-pkgrel=2
-pkgdesc="Zethropol Security D-Bus service"
+pkgrel=3
+pkgdesc="Zethropol Security & ZCI Policy Engine D-Bus service"
 url="https://github.com/zethropol/Zethropol-OS"
 arch=("x86_64")
 license=("MIT")
-depends=("glibc" "dbus" "systemd" "polkit")
+depends=("glibc" "gcc-libs" "dbus" "systemd" "polkit")
 makedepends=("cargo")
 source=("${pkgname}-${pkgver}-${pkgrel}-src.tar.gz")
-sha256sums=("423686aee13dc33a5f302c58135b8a850808d54468f52c780ce087a4ec206a49")
+sha256sums=("1ea8d9f835c1d639430d6045cc08be040b7ca8d8af0448baa3e8aa2014521af2")
 
 build() {
     cd "$srcdir/${pkgname}-${pkgver}/services/security"
+    export RUSTFLAGS="--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo --remap-path-prefix=${HOME}=/home/build --remap-path-prefix=${srcdir}=/build ${RUSTFLAGS:-}"
     cargo build --release --locked --offline
 }
 
 check() {
     cd "$srcdir/${pkgname}-${pkgver}/services/security"
+    export RUSTFLAGS="--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo --remap-path-prefix=${HOME}=/home/build --remap-path-prefix=${srcdir}=/build ${RUSTFLAGS:-}"
     cargo test --locked --offline
 }
 
@@ -28,4 +30,5 @@ package() {
     install -Dm644 deployment/dbus/org.zethropol.Security.service "$pkgdir/usr/share/dbus-1/system-services/org.zethropol.Security.service"
     install -Dm644 deployment/systemd/zethropol-security.service "$pkgdir/usr/lib/systemd/system/zethropol-security.service"
     install -Dm644 deployment/polkit/org.zethropol.security.policy "$pkgdir/usr/share/polkit-1/actions/org.zethropol.security.policy"
+    install -Dm644 "$srcdir/${pkgname}-${pkgver}/LICENSE" "$pkgdir/usr/share/licenses/${pkgname}/LICENSE"
 }

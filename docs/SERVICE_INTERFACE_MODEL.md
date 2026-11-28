@@ -725,20 +725,22 @@ State-change signals should provide sufficient structured information for consum
 
 ### Security
 
-Interface:
+Interfaces:
 
-`org.zethropol.Security.v1`
+1. `org.zethropol.Security.v1` (`/org/zethropol/Security`)
+   - Methods: `GetState`, `ToggleFirewall` (Polkit `org.zethropol.security.modify` `auth_admin`)
+   - Signals: `StateChanged`
+2. `org.zethropol.Security.Policy.v1` (`/org/zethropol/Security/Policy`, Stage 08 ZCI Security & Policy Engine)
+   - Methods:
+     - `EvaluateAction(agent_id, operation, target, dbus_interface, untrusted_payload)` — default-deny deterministic classification (`ReadOnly`, `UserSpaceSafe`, `SystemStateChange`, `Privileged`, `SelfModificationDenied`), per-agent path/D-Bus/operation allowlists, untrusted payload injection guard, hardcoded self-modification lock, persistent abuse penalties, and structured hash-chained audit logging.
+     - `WrapUntrustedData(agent_id, source_kind, content)` — isolates external/user/file/web/tool text as strictly non-executable `untrusted-data-payload` (`policy_authority="none"`).
+     - `GetAgentStatus(agent_id)` — read-only agent allowlist, strike score, and cooldown/lockout state.
+     - `GetPolicySummary()` — read-only posture summary (`default_deny`, `self_modification_lock`, `recovery_locks_protected`).
+     - `GetAuditEvents(limit)` — bounded recent structured audit log entries and SHA-256 hash-chain validity.
+     - `ResetAgentLockout(agent_id, reason)` — Polkit `org.zethropol.security.policy.admin` (`auth_admin`) required; ZCI agents cannot self-reset penalties.
+   - Signals: `PolicyDecisionRecorded`
 
-Methods:
-
-- `GetState`
-- `Refresh`
-
-Signals:
-
-- `StateChanged`
-
-No privileged security modification methods are currently exposed.
+No ZCI agent receives direct privileged execution or security exceptions; `services/recovery/src/recovery_service.rs` safety locks (`rollback_execution_enabled=false`, `repair_execution_enabled=false`) remain unconditionally protected by the self-modification lock.
 
 ### Services
 
