@@ -1,0 +1,43 @@
+pkgname=zethropol-zci-runtime
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Zethropol ZCI Local AI Runtime Engine D-Bus service (loopback-only, passive standby, SHA-256 manifest)"
+url="https://github.com/zethropol/Zethropol-OS"
+arch=("x86_64")
+license=("MIT")
+depends=(
+    "glibc"
+    "gcc-libs"
+    "dbus"
+    "systemd"
+    "polkit"
+    "zethropol-security>=0.1.0-3"
+    "zethropol-zci-daemon>=0.1.0-1"
+)
+makedepends=("cargo")
+source=("${pkgname}-${pkgver}-${pkgrel}-src.tar.gz")
+sha256sums=("022c5e52adcee4bb31d253c2c286233ea142f00467e693e4a47131e568e6ca93")
+
+build() {
+    cd "$srcdir/${pkgname}-${pkgver}/services/zci-runtime"
+    export RUSTFLAGS="--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo --remap-path-prefix=${HOME}=/home/build --remap-path-prefix=${srcdir}=/build ${RUSTFLAGS:-}"
+    cargo build --release --locked --offline
+}
+
+check() {
+    cd "$srcdir/${pkgname}-${pkgver}/services/zci-runtime"
+    export RUSTFLAGS="--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo --remap-path-prefix=${HOME}=/home/build --remap-path-prefix=${srcdir}=/build ${RUSTFLAGS:-}"
+    cargo test --locked --offline
+}
+
+package() {
+    cd "$srcdir/${pkgname}-${pkgver}/services/zci-runtime"
+
+    install -Dm755 target/release/zci-runtime "$pkgdir/usr/lib/zethropol/zethropol-zci-runtime"
+    install -Dm644 deployment/dbus/org.zethropol.ZciRuntime.conf "$pkgdir/etc/dbus-1/system.d/org.zethropol.ZciRuntime.conf"
+    install -Dm644 deployment/dbus/org.zethropol.ZciRuntime.service "$pkgdir/usr/share/dbus-1/system-services/org.zethropol.ZciRuntime.service"
+    install -Dm644 deployment/systemd/zethropol-zci-runtime.service "$pkgdir/usr/lib/systemd/system/zethropol-zci-runtime.service"
+    install -Dm644 deployment/polkit/org.zethropol.zci.runtime.policy "$pkgdir/usr/share/polkit-1/actions/org.zethropol.zci.runtime.policy"
+    install -Dm644 deployment/config/zci-models-manifest.example.json "$pkgdir/usr/share/zethropol/zci-models-manifest.example.json"
+    install -Dm644 "$srcdir/${pkgname}-${pkgver}/LICENSE" "$pkgdir/usr/share/licenses/${pkgname}/LICENSE"
+}

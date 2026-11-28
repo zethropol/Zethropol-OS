@@ -1,0 +1,37 @@
+[Unit]
+Description=Zethropol ZCI Local AI Runtime Engine (Loopback-Only Passive Standby)
+After=dbus.socket zethropol-security.service zethropol-zci-daemon.service
+Wants=zethropol-security.service zethropol-zci-daemon.service
+BindsTo=dbus.socket
+
+[Service]
+Type=dbus
+BusName=org.zethropol.ZciRuntime
+ExecStart=/usr/lib/zethropol/zethropol-zci-runtime
+Restart=on-failure
+RestartSec=2s
+RuntimeDirectory=zethropol-zci-runtime
+RuntimeDirectoryMode=0750
+UMask=0077
+ProtectSystem=strict
+ProtectHome=read-only
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+MemoryDenyWriteExecute=yes
+LockPersonality=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET
+IPAddressDeny=any
+IPAddressAllow=localhost
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @mount @raw-io @module @reboot @swap @clock @cpu-emulation @debug @obsolete

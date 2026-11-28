@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "models": [
+    {
+      "model_id": "gemma-4-E4B-it-Q4_K_M",
+      "display_name": "Gemma 4 E4B Instruct (Q4_K_M — Passive Hybrid Baseline)",
+      "format": "gguf",
+      "path": "/var/lib/zethropol/models/gemma-4-E4B-it-Q4_K_M.gguf",
+      "size_bytes": 4951234567,
+      "sha256": "0ffb122c8b6921f13cbc34186e052524d0b5803b17f4867b7197a561400b3770",
+      "license": "Apache-2.0",
+      "min_profile": "dev-baseline",
+      "required_ram_mb": 8192,
+      "required_vram_mb": 0,
+      "hybrid_vram_estimate_mb": 1536,
+      "max_context_tokens": 32768,
+      "trusted": true,
+      "signature_status": "verified-manifest-pin"
+    }
+  ]
+}

@@ -327,6 +327,20 @@ private slots:
         QVERIFY(compactItem != nullptr);
         QVERIFY(findVisualItemByObjectName(compactItem, QStringLiteral("compactTempLabel")) != nullptr);
 
+        // 5. Regression (`main.qml:152 TypeError: Cannot call method 'refresh' of undefined`):
+        //    `weatherClientRef` and both representations must reference the real WeatherClient
+        //    instance, and emitting the refresh / toggle signals must not raise any JS error.
+        QObject *srcClient = item->findChild<QObject *>(QStringLiteral("weatherClient"));
+        QVERIFY(srcClient != nullptr);
+        QVERIFY(item->property("weatherClientRef").value<QObject *>() == srcClient);
+        QVERIFY(fullItem->property("weatherClient").value<QObject *>() == srcClient);
+        QVERIFY(compactItem->property("weatherClient").value<QObject *>() == srcClient);
+        QVERIFY(QMetaObject::invokeMethod(fullItem, "refreshRequested"));
+        QVERIFY(QMetaObject::invokeMethod(compactItem, "toggleRequested"));
+        QVERIFY(item->expanded());
+        QVERIFY(QMetaObject::invokeMethod(fullItem, "selectForecastDaysRequested", Q_ARG(int, 5)));
+        QCOMPARE(cfg->forecastDays(), 5);
+
         QString warnMsg;
         for (const QQmlError &e : warnings) {
             warnMsg += e.toString() + QLatin1Char('\n');
