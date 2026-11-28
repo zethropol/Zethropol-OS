@@ -12,5 +12,5 @@ zethropol-security-0.1.0-3-x86_64.pkg.tar.zst packages/zethropol-security/zethro
 zethropol-services-0.1.0-3-x86_64.pkg.tar.zst packages/zethropol-services/zethropol-services-0.1.0-3-x86_64.pkg.tar.zst
 zethropol-system-monitor-0.1.0-1-x86_64.pkg.tar.zst packages/stage-04.6/zethropol-system-monitor-0.1.0-1-x86_64.pkg.tar.zst
 zethropol-tv-0.1.0-2-x86_64.pkg.tar.zst packages/zethropol-tv/zethropol-tv-0.1.0-2-x86_64.pkg.tar.zst
-zethropol-weather-0.1.0-1-x86_64.pkg.tar.zst packages/zethropol-weather/zethropol-weather-0.1.0-1-x86_64.pkg.tar.zst
+zethropol-weather-0.1.0-2-x86_64.pkg.tar.zst packages/zethropol-weather/zethropol-weather-0.1.0-2-x86_64.pkg.tar.zst
 zethropol-zci-daemon-0.1.0-1-x86_64.pkg.tar.zst packages/zethropol-zci-daemon/zethropol-zci-daemon-0.1.0-1-x86_64.pkg.tar.zst

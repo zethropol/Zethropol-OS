@@ -1,6 +1,6 @@
 # Zethropol Hava Durumu (`org.zethropol.plasma.weather`) — Kullanıcı ve Mimari Rehberi
 
-**Zethropol Hava Durumu** (`zethropol-weather 0.1.0-1`), KDE Plasma 6 için Zethropol OS koyu cam/kart (*glassmorphic dark surface*) tasarım kimliğiyle geliştirilmiş, API anahtarsız, Türkiye il/ilçe uyumlu, **3 / 5 / 7 günlük tahmin seçicili** ve **ayarlanabilir opaklıklı** masaüstü / panel hava durumu aracıdır.
+**Zethropol Hava Durumu** (`zethropol-weather 0.1.0-2`), KDE Plasma 6 için Zethropol OS koyu cam/kart (*glassmorphic dark surface*) tasarım kimliğiyle geliştirilmiş, API anahtarsız, Türkiye il/ilçe uyumlu, **3 / 5 / 7 günlük tahmin seçicili** ve **ayarlanabilir opaklıklı** masaüstü / panel hava durumu aracıdır.
 
 ## 1. Özellikler ve Tasarım Kimliği
 
@@ -13,6 +13,8 @@
 - **Panel & Masaüstü Çift Görünüm:**
   - **Masaüstü (`Planar`):** Doğrudan tam Zethropol hava durumu kartı (`FullRepresentation.qml`).
   - **Panel / Sistem Tepsisi (`Horizontal` / `Vertical`):** Kompakt hava ikonu + anlık sıcaklık (`18°`, `CompactRepresentation.qml`); tıklandığında tam cam açılır pencere açılır.
+
+- **Açılış Davranışı (`0.1.0-2`):** Yalnızca gerçek panel / sistem tepsisi form faktörlerinde (`Horizontal`, `Vertical`) kompakt görünüm kullanılır; masaüstü (`Planar`) ve `plasmawindowed` (`Application`) modlarında tam kart doğrudan açılır. Kart yüksekliği seçili 3 / 5 / 7 gün satır sayısına göre dinamik hesaplanır (kırpma yok). Widget yüklenir yüklenmez İstanbul (`41.0082, 28.9784`) veya yapılandırılmış konum için canlı Open-Meteo isteği başlatılır; hata durumunda alt durum çubuğunda `Bağlantı hatası: ...` ve **Tekrar Dene** eylemi görünür.
 
 ## 2. API Anahtarsız Veri Mimarisi ve Güvenlik
 

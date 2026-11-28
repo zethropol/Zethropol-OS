@@ -54,12 +54,27 @@ Item {
         return mx === -999 ? 30 : Math.max(mx, weeklyMinTemp + 1)
     }
 
-    implicitWidth: 388
-    implicitHeight: Math.max(460, contentColumn.implicitHeight + 32)
-    Layout.minimumWidth: 320
-    Layout.minimumHeight: 380
-    Layout.preferredWidth: 396
-    Layout.preferredHeight: Math.min(680, Math.max(480, contentColumn.implicitHeight + 32))
+    // Deterministic, overflow-free sizing based on the selected 3 / 5 / 7 day row count.
+    readonly property int dayRowCount: (forecastDays === 3 || forecastDays === 7) ? forecastDays : 5
+    readonly property real dayRowHeight: 38
+    readonly property real dayRowSpacing: 5
+    readonly property real columnSpacing: 12
+    readonly property real cardPadding: 32
+    // header 30 + hero 64 + metrics 46 + 24h strip 100 + range selector 26 + status bar 34 + 6 column gaps
+    readonly property real fixedSectionsHeight: 30 + 64 + 46 + 100 + 26 + 34 + 6 * columnSpacing
+    readonly property real dailyBlockHeight: dayRowCount * dayRowHeight + (dayRowCount - 1) * dayRowSpacing
+    readonly property real cardMinimumHeight: cardPadding + fixedSectionsHeight + dailyBlockHeight
+    readonly property real measuredContentHeight: contentColumn.implicitHeight + cardPadding
+    readonly property real cardPreferredHeight: Math.max(cardMinimumHeight, measuredContentHeight)
+    readonly property real cardMinimumWidth: 340
+    readonly property real cardPreferredWidth: 396
+
+    implicitWidth: cardPreferredWidth
+    implicitHeight: cardPreferredHeight
+    Layout.minimumWidth: cardMinimumWidth
+    Layout.minimumHeight: cardMinimumHeight
+    Layout.preferredWidth: cardPreferredWidth
+    Layout.preferredHeight: cardPreferredHeight
 
     // Main Zethropol Dark Glassmorphic Surface
     Rectangle {
@@ -206,27 +221,6 @@ Item {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: fullRoot.refreshRequested()
                         }
-                    }
-                }
-
-                // Error banner (shown only when there is an error and no cached snapshot yet)
-                Rectangle {
-                    visible: Boolean(fullRoot.weatherClient && fullRoot.weatherClient.errorMessage.length > 0 && !fullRoot.weatherClient.hasData)
-                    Layout.fillWidth: true
-                    radius: 10
-                    implicitHeight: errLbl.implicitHeight + 14
-                    color: Qt.rgba(239 / 255, 68 / 255, 68 / 255, 0.18)
-                    border.width: 1
-                    border.color: Qt.rgba(248 / 255, 113 / 255, 113 / 255, 0.45)
-
-                    Controls.Label {
-                        id: errLbl
-                        anchors.fill: parent
-                        anchors.margins: 7
-                        text: fullRoot.weatherClient ? fullRoot.weatherClient.errorMessage : ""
-                        color: "#fecaca"
-                        font.pixelSize: 11
-                        wrapMode: Text.WordWrap
                     }
                 }
 
@@ -613,6 +607,74 @@ Item {
                                     style: fullRoot.textOutlineStyle
                                     styleColor: fullRoot.textOutlineColor
                                 }
+                            }
+                        }
+                    }
+                }
+
+                // 7. Bottom status bar: live error reason + "Tekrar Dene" (never a silent "—°C")
+                Rectangle {
+                    id: statusBar
+                    objectName: "weatherStatusBar"
+                    readonly property bool hasError: Boolean(fullRoot.weatherClient && fullRoot.weatherClient.errorMessage.length > 0)
+                    readonly property bool isLoading: Boolean(fullRoot.weatherClient && fullRoot.weatherClient.loading)
+                    readonly property string statusText: hasError
+                        ? fullRoot.weatherClient.errorMessage
+                        : (isLoading ? "Hava durumu verisi yükleniyor…"
+                           : (fullRoot.weatherClient && fullRoot.weatherClient.hasData
+                              ? ("Son güncelleme " + fullRoot.weatherClient.lastUpdatedText)
+                              : "Veri bekleniyor"))
+                    Layout.fillWidth: true
+                    Layout.minimumHeight: 34
+                    Layout.preferredHeight: Math.max(34, statusRow.implicitHeight + 12)
+                    radius: 10
+                    color: hasError ? Qt.rgba(239 / 255, 68 / 255, 68 / 255, 0.18) : Qt.rgba(15 / 255, 23 / 255, 42 / 255, Math.max(0.28, fullRoot.clampedOpacity * 0.50))
+                    border.width: 1
+                    border.color: hasError ? Qt.rgba(248 / 255, 113 / 255, 113 / 255, 0.45) : Qt.rgba(148 / 255, 185 / 255, 255 / 255, 0.14)
+
+                    RowLayout {
+                        id: statusRow
+                        anchors.fill: parent
+                        anchors.leftMargin: 10
+                        anchors.rightMargin: 6
+                        anchors.topMargin: 4
+                        anchors.bottomMargin: 4
+                        spacing: 8
+
+                        Controls.Label {
+                            objectName: "weatherStatusLabel"
+                            Layout.fillWidth: true
+                            text: statusBar.statusText
+                            color: statusBar.hasError ? "#fecaca" : "#94a3b8"
+                            font.pixelSize: 10
+                            wrapMode: Text.WordWrap
+                            maximumLineCount: 3
+                            elide: Text.ElideRight
+                        }
+
+                        Rectangle {
+                            objectName: "retryButton"
+                            visible: statusBar.hasError
+                            Layout.preferredWidth: retryLbl.implicitWidth + 18
+                            Layout.preferredHeight: 22
+                            radius: 7
+                            color: retryMouse.containsMouse ? "#168cff" : Qt.rgba(22 / 255, 140 / 255, 255 / 255, 0.55)
+
+                            Controls.Label {
+                                id: retryLbl
+                                anchors.centerIn: parent
+                                text: "Tekrar Dene"
+                                color: "#ffffff"
+                                font.pixelSize: 10
+                                font.bold: true
+                            }
+
+                            MouseArea {
+                                id: retryMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: fullRoot.refreshRequested()
                             }
                         }
                     }

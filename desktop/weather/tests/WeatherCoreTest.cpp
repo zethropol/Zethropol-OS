@@ -325,6 +325,95 @@ private slots:
         QCOMPARE(offlineClient.offlineBadgeText(), QStringLiteral("Çevrimdışı önbellek"));
         QCOMPARE(offlineClient.dailyForecast().size(), 7);
     }
+    void componentCompleteStartsImmediateIstanbulRequestAndReportsRealErrors()
+    {
+        int requestCount = 0;
+        bool failing = false;
+        QByteArray lastRequestLine;
+
+        QTcpServer server;
+        QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+        const quint16 port = server.serverPort();
+        QObject::connect(&server, &QTcpServer::newConnection, &server,
+                         [&server, &requestCount, &failing, &lastRequestLine]() {
+            while (QTcpSocket *sock = server.nextPendingConnection()) {
+                QObject::connect(sock, &QTcpSocket::readyRead, sock,
+                                 [sock, &requestCount, &failing, &lastRequestLine]() {
+                    const QByteArray req = sock->readAll();
+                    lastRequestLine = req.split('\n').value(0);
+                    ++requestCount;
+                    const QByteArray body = failing ? QByteArray("{\"error\":true}") : sampleOpenMeteoForecastJson();
+                    const QByteArray status = failing ? "503 Service Unavailable" : "200 OK";
+                    const QByteArray resp =
+                        "HTTP/1.1 " + status + "\r\nContent-Type: application/json\r\nContent-Length: "
+                        + QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n" + body;
+                    sock->write(resp);
+                    sock->flush();
+                    sock->disconnectFromHost();
+                });
+                QObject::connect(sock, &QTcpSocket::disconnected, sock, &QTcpSocket::deleteLater);
+            }
+        });
+
+        QTemporaryDir cacheDir;
+        QVERIFY(cacheDir.isValid());
+
+        WeatherClient client;
+        client.setCacheDirectoryOverride(cacheDir.path());
+        client.setUseMgmObservation(false);
+        client.setEndpointOverridesForTest(
+            QStringLiteral("http://127.0.0.1:%1/search").arg(port),
+            QStringLiteral("http://127.0.0.1:%1/forecast").arg(port),
+            QStringLiteral("http://127.0.0.1:%1/mgm").arg(port));
+
+        // Default İstanbul coordinates
+        QCOMPARE(client.latitude(), 41.0082);
+        QCOMPARE(client.longitude(), 28.9784);
+        QVERIFY(!client.initialRefreshRequested());
+        QVERIFY(!client.hasData());
+
+        // QQmlParserStatus::componentComplete() immediately starts the first live request
+        QSignalSpy doneSpy(&client, &WeatherClient::refreshCompleted);
+        client.componentComplete();
+        QVERIFY(client.initialRefreshRequested());
+        QTRY_COMPARE_WITH_TIMEOUT(doneSpy.count(), 1, 5000);
+        QCOMPARE(doneSpy.first().at(0).toBool(), true);
+        QCOMPARE(requestCount, 1);
+        QVERIFY2(lastRequestLine.contains("latitude=41.0082"), lastRequestLine.constData());
+        QVERIFY2(lastRequestLine.contains("longitude=28.9784"), lastRequestLine.constData());
+        QVERIFY(client.hasData());
+        QCOMPARE(client.temperatureC(), 17.4);
+        QCOMPARE(client.dailyForecast().size(), 7);
+        QCOMPARE(client.visibleDailyForecast().size(), 5);
+        client.setForecastDays(3);
+        QCOMPARE(client.visibleDailyForecast().size(), 3);
+        client.setForecastDays(7);
+        QCOMPARE(client.visibleDailyForecast().size(), 7);
+        QVERIFY(client.errorMessage().isEmpty());
+
+        // Manual refresh (refresh button) always sends a fresh active network request
+        doneSpy.clear();
+        client.refresh();
+        QTRY_COMPARE_WITH_TIMEOUT(doneSpy.count(), 1, 5000);
+        QCOMPARE(requestCount, 2);
+
+        // Failures surface a real, human-readable reason (never a silent "—°C")
+        failing = true;
+        WeatherClient failingClient;
+        failingClient.setCacheDirectoryOverride(cacheDir.path() + QStringLiteral("/empty"));
+        failingClient.setUseMgmObservation(false);
+        failingClient.setEndpointOverridesForTest(
+            QStringLiteral("http://127.0.0.1:%1/search").arg(port),
+            QStringLiteral("http://127.0.0.1:%1/forecast").arg(port),
+            QStringLiteral("http://127.0.0.1:%1/mgm").arg(port));
+        QSignalSpy failSpy(&failingClient, &WeatherClient::refreshCompleted);
+        failingClient.componentComplete();
+        QTRY_COMPARE_WITH_TIMEOUT(failSpy.count(), 1, 5000);
+        QCOMPARE(failSpy.first().at(0).toBool(), false);
+        QVERIFY(!failingClient.hasData());
+        QVERIFY2(failingClient.errorMessage().startsWith(QStringLiteral("Bağlantı hatası:")),
+                 qPrintable(failingClient.errorMessage()));
+    }
 };
 
 QTEST_MAIN(WeatherCoreTest)

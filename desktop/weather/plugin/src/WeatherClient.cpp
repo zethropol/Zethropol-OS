@@ -7,6 +7,7 @@
 #include <QNetworkRequest>
 #include <QSaveFile>
 #include <QStandardPaths>
+#include <QTimer>
 #include <QUrlQuery>
 
 #include <cmath>
@@ -35,6 +36,18 @@ WeatherClient::~WeatherClient()
         reply->abort();
         reply->deleteLater();
     }
+}
+
+void WeatherClient::componentComplete()
+{
+    // Startup auto-fetch: queue immediately on the next event-loop turn so that property bindings
+    // (location, forecastDays, MGM toggle) assigned by the QML engine are applied first.
+    m_initialRefreshRequested = true;
+    QTimer::singleShot(0, this, [this]() {
+        if (m_requestSeq == 0) {
+            refresh();
+        }
+    });
 }
 
 void WeatherClient::setLocationName(const QString &name)
@@ -243,7 +256,7 @@ void WeatherClient::refresh()
         m_forecastReply = nullptr;
 
         if (reply->error() != QNetworkReply::NoError) {
-            handleFetchFailure(QStringLiteral("Hava durumu verisi alınamadı (%1).").arg(reply->errorString()));
+            handleFetchFailure(QStringLiteral("Bağlantı hatası: %1").arg(reply->errorString()));
             return;
         }
 
@@ -257,7 +270,9 @@ void WeatherClient::refresh()
         WeatherSnapshot snap = WeatherModels::parseOpenMeteoForecast(
             payload, m_locationName, m_locationAdmin, m_countryCode, m_latitude, m_longitude, &parseErr);
         if (!snap.valid) {
-            handleFetchFailure(parseErr.isEmpty() ? QStringLiteral("Hava durumu verisi çözümlenemedi.") : parseErr);
+            handleFetchFailure(QStringLiteral("Veri hatası: %1")
+                                   .arg(parseErr.isEmpty() ? QStringLiteral("Hava durumu verisi çözümlenemedi.")
+                                                           : parseErr));
             return;
         }
 

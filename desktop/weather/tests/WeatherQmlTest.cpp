@@ -8,6 +8,7 @@
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QSignalSpy>
+#include <QTemporaryDir>
 #include <QtQml>
 #include <QtTest>
 
@@ -29,6 +30,7 @@ public:
         MediaCenter = 1,
         Horizontal = 2,
         Vertical = 3,
+        Application = 4,
     };
     Q_ENUM(FormFactor)
 };
@@ -204,9 +206,15 @@ class WeatherQmlTest : public QObject
 {
     Q_OBJECT
 
+private:
+    QTemporaryDir m_cacheHome;
+
 private slots:
     void initTestCase()
     {
+        // Keep the startup auto-refresh away from the real user cache directory
+        QVERIFY(m_cacheHome.isValid());
+        qputenv("XDG_CACHE_HOME", m_cacheHome.path().toUtf8());
         QQuickStyle::setStyle(QStringLiteral("Basic"));
         qmlRegisterUncreatableType<MockPlasmaTypes>("org.kde.plasma.core", 2, 0, "Types", QStringLiteral("Enum holder"));
         qmlRegisterType<MockPlasmoidItem>("org.kde.plasma.plasmoid", 2, 0, "PlasmoidItem");
@@ -277,6 +285,15 @@ private slots:
         QCOMPARE(item->preferredRepresentation(), item->compactRepresentation());
         QVERIFY(qAbs(item->property("activeSurfaceOpacity").toReal() - 0.92) < 1e-4);
 
+        // 2b. plasmawindowed (Application) and Vertical panel: Application opens the full card directly,
+        //     Vertical panel uses the compact pill.
+        attached->setFormFactor(MockPlasmaTypes::Application);
+        QCOMPARE(item->preferredRepresentation(), item->fullRepresentation());
+        attached->setFormFactor(MockPlasmaTypes::Vertical);
+        QCOMPARE(item->preferredRepresentation(), item->compactRepresentation());
+        attached->setFormFactor(MockPlasmaTypes::MediaCenter);
+        QCOMPARE(item->preferredRepresentation(), item->fullRepresentation());
+
         // 3. Opacity bounds clamping & low-opacity contrast protection in FullRepresentation
         attached->setFormFactor(MockPlasmaTypes::Planar);
         cfg->setDesktopOpacity(5); // Below 15% -> clamped to 15%
@@ -309,6 +326,119 @@ private slots:
         auto *compactItem = qobject_cast<QQuickItem *>(compactObj.get());
         QVERIFY(compactItem != nullptr);
         QVERIFY(findVisualItemByObjectName(compactItem, QStringLiteral("compactTempLabel")) != nullptr);
+
+        QString warnMsg;
+        for (const QQmlError &e : warnings) {
+            warnMsg += e.toString() + QLatin1Char('\n');
+        }
+        QVERIFY2(warnings.isEmpty(), qPrintable(warnMsg));
+    }
+
+    void mainQmlStartsLiveRefreshImmediatelyWithIstanbulDefaults()
+    {
+        QQmlEngine engine;
+        engine.addImportPath(QStringLiteral(WEATHER_QML_IMPORT_DIR));
+        engine.addImportPath(QStringLiteral(WEATHER_TEST_STUB_IMPORT_DIR));
+
+        QQmlComponent comp(&engine, QUrl::fromLocalFile(QStringLiteral(WEATHER_UI_DIR "/main.qml")));
+        QVERIFY2(comp.isReady(), qPrintable(comp.errorString()));
+        std::unique_ptr<QObject> obj(comp.create());
+        QVERIFY2(obj != nullptr, qPrintable(comp.errorString()));
+
+        QObject *client = obj->findChild<QObject *>(QStringLiteral("weatherClient"));
+        QVERIFY(client != nullptr);
+        QVERIFY(qAbs(client->property("latitude").toDouble() - 41.0082) < 1e-6);
+        QVERIFY(qAbs(client->property("longitude").toDouble() - 28.9784) < 1e-6);
+        // Component.onCompleted -> syncConfigToClient(true) -> refresh(): an active request is in flight right away
+        QCOMPARE(client->property("loading").toBool(), true);
+
+        QSignalSpy doneSpy(client, SIGNAL(refreshCompleted(bool,bool)));
+        QTRY_VERIFY_WITH_TIMEOUT(doneSpy.count() >= 1, 30000);
+        const bool success = doneSpy.first().at(0).toBool();
+        if (success) {
+            QCOMPARE(client->property("hasData").toBool(), true);
+            QVERIFY(client->property("dailyForecast").toList().size() == 7);
+            QVERIFY(client->property("errorMessage").toString().isEmpty());
+        } else {
+            // Offline CI: a real error reason is reported instead of a silent placeholder
+            QVERIFY(client->property("errorMessage").toString().startsWith(QStringLiteral("Bağlantı hatası:"))
+                    || client->property("errorMessage").toString().startsWith(QStringLiteral("Veri hatası:")));
+        }
+    }
+
+    void fullRepresentationSizesByForecastDaysAndShowsErrorWithRetry()
+    {
+        QQmlEngine engine;
+        engine.addImportPath(QStringLiteral(WEATHER_QML_IMPORT_DIR));
+
+        QList<QQmlError> warnings;
+        QObject::connect(&engine, &QQmlEngine::warnings, &engine,
+                         [&warnings](const QList<QQmlError> &errs) { warnings.append(errs); });
+
+        QQmlComponent stubComp(&engine);
+        stubComp.setData(QByteArrayLiteral(
+            "import QtQml\n"
+            "QtObject {\n"
+            "  property string themeMood: \"cloudy\"\n"
+            "  property string locationName: \"İstanbul\"\n"
+            "  property string locationAdmin: \"İstanbul, Türkiye\"\n"
+            "  property bool offlineCache: false\n"
+            "  property bool hasData: false\n"
+            "  property string sourceLabel: \"Open-Meteo\"\n"
+            "  property string offlineBadgeText: \"Çevrimdışı önbellek\"\n"
+            "  property bool loading: false\n"
+            "  property string conditionIcon: \"weather-none-available\"\n"
+            "  property string conditionText: \"Veri bekleniyor\"\n"
+            "  property real temperatureC: 0\n"
+            "  property real apparentTemperatureC: 0\n"
+            "  property int humidityPercent: 0\n"
+            "  property real windSpeedKmh: 0\n"
+            "  property string windDirectionText: \"K\"\n"
+            "  property real pressureHpa: 0\n"
+            "  property string lastUpdatedText: \"\"\n"
+            "  property var hourlyForecast: []\n"
+            "  property var visibleDailyForecast: []\n"
+            "  property string errorMessage: \"Bağlantı hatası: Host bulunamadı\"\n"
+            "}\n"), QUrl());
+        QVERIFY2(stubComp.isReady(), qPrintable(stubComp.errorString()));
+        std::unique_ptr<QObject> stub(stubComp.create());
+        QVERIFY(stub != nullptr);
+
+        QQmlComponent fullComp(&engine, QUrl::fromLocalFile(QStringLiteral(WEATHER_UI_DIR "/FullRepresentation.qml")));
+        QVERIFY2(fullComp.isReady(), qPrintable(fullComp.errorString()));
+        std::unique_ptr<QObject> fullObj(fullComp.createWithInitialProperties(
+            {{QStringLiteral("weatherClient"), QVariant::fromValue(stub.get())},
+             {QStringLiteral("forecastDays"), 3}}));
+        QVERIFY2(fullObj != nullptr, qPrintable(fullComp.errorString()));
+        auto *fullItem = qobject_cast<QQuickItem *>(fullObj.get());
+        QVERIFY(fullItem != nullptr);
+
+        // Dynamic, overflow-free card sizing: 3 < 5 < 7 rows
+        const qreal min3 = fullItem->property("cardMinimumHeight").toReal();
+        fullItem->setProperty("forecastDays", 5);
+        const qreal min5 = fullItem->property("cardMinimumHeight").toReal();
+        fullItem->setProperty("forecastDays", 7);
+        const qreal min7 = fullItem->property("cardMinimumHeight").toReal();
+        QVERIFY(min3 < min5);
+        QVERIFY(min5 < min7);
+        QCOMPARE(min5 - min3, 2 * (38.0 + 5.0));
+        QCOMPARE(min7 - min5, 2 * (38.0 + 5.0));
+        QVERIFY(fullItem->property("cardPreferredHeight").toReal() >= min7);
+        QVERIFY(fullItem->property("cardMinimumWidth").toReal() >= 320);
+        QVERIFY(fullItem->property("cardPreferredWidth").toReal() >= fullItem->property("cardMinimumWidth").toReal());
+
+        // Status bar surfaces the real error reason with a "Tekrar Dene" action
+        QQuickItem *statusBar = findVisualItemByObjectName(fullItem, QStringLiteral("weatherStatusBar"));
+        QQuickItem *retry = findVisualItemByObjectName(fullItem, QStringLiteral("retryButton"));
+        QQuickItem *statusLabel = findVisualItemByObjectName(fullItem, QStringLiteral("weatherStatusLabel"));
+        QVERIFY(statusBar != nullptr);
+        QVERIFY(retry != nullptr);
+        QVERIFY(statusLabel != nullptr);
+        QCOMPARE(statusLabel->property("text").toString(), QStringLiteral("Bağlantı hatası: Host bulunamadı"));
+        QCOMPARE(retry->isVisible(), true);
+
+        stub->setProperty("errorMessage", QString());
+        QCOMPARE(retry->isVisible(), false);
 
         QString warnMsg;
         for (const QQmlError &e : warnings) {

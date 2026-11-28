@@ -7,6 +7,7 @@
 #include <QPointer>
 #include <QString>
 #include <QVariantList>
+#include <QtQml/qqmlparserstatus.h>
 #include <QtQml/qqmlregistration.h>
 
 class QNetworkReply;
@@ -18,9 +19,10 @@ namespace zethropol::weather {
 /// - Primary forecast & geocoding: Open-Meteo (API-key-free, `language=tr`, 7-day + 24h).
 /// - Optional live Turkish observation enrichment/fallback: MGM (`servis.mgm.gov.tr`).
 /// - Atomic local disk cache fallback with `offlineCache=true` ("Çevrimdışı önbellek").
-class WeatherClient : public QObject
+class WeatherClient : public QObject, public QQmlParserStatus
 {
     Q_OBJECT
+    Q_INTERFACES(QQmlParserStatus)
     QML_ELEMENT
 
     Q_PROPERTY(QString locationName READ locationName WRITE setLocationName NOTIFY locationChanged)
@@ -66,6 +68,12 @@ public:
 
     explicit WeatherClient(QObject *parent = nullptr);
     ~WeatherClient() override;
+
+    /// QQmlParserStatus: once the QML element is fully constructed, immediately start the first
+    /// live Open-Meteo request (default İstanbul `41.0082, 28.9784` unless a location was set).
+    void classBegin() override {}
+    void componentComplete() override;
+    bool initialRefreshRequested() const { return m_initialRefreshRequested; }
 
     QString locationName() const { return m_locationName; }
     void setLocationName(const QString &name);
@@ -158,6 +166,7 @@ private:
     QPointer<QNetworkReply> m_mgmReply;
     QPointer<QNetworkReply> m_geoReply;
     quint64 m_requestSeq = 0;
+    bool m_initialRefreshRequested = false;
 
     QString m_locationName = QStringLiteral("İstanbul");
     QString m_locationAdmin = QStringLiteral("İstanbul, Türkiye");

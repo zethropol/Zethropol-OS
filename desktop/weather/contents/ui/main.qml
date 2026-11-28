@@ -9,6 +9,10 @@ PlasmoidItem {
     objectName: "zethropolWeatherRoot"
 
     readonly property bool isPlanarDesktop: Plasmoid.formFactor === PlasmaCore.Types.Planar
+    // Only genuine narrow panel / system-tray form factors use the compact pill.
+    // Desktop (Planar) and plasmawindowed (Application) open the full Zethropol card directly.
+    readonly property bool isPanelFormFactor: Plasmoid.formFactor === PlasmaCore.Types.Horizontal
+        || Plasmoid.formFactor === PlasmaCore.Types.Vertical
     readonly property bool useCustomGlassBackground: {
         if (!Plasmoid.configuration || Plasmoid.configuration.useCustomGlassBackground === undefined)
             return true
@@ -20,7 +24,7 @@ PlasmoidItem {
         ? PlasmaCore.Types.NoBackground
         : PlasmaCore.Types.DefaultBackground
 
-    preferredRepresentation: root.isPlanarDesktop ? fullRepresentation : compactRepresentation
+    preferredRepresentation: root.isPanelFormFactor ? compactRepresentation : fullRepresentation
 
     readonly property int configuredForecastDays: {
         if (!Plasmoid.configuration)
@@ -139,7 +143,7 @@ PlasmoidItem {
     fullRepresentation: FullRepresentation {
         objectName: "weatherFullRepresentation"
         weatherClient: weatherClient
-        isDesktopCard: root.isPlanarDesktop
+        isDesktopCard: !root.isPanelFormFactor
         surfaceOpacity: root.activeSurfaceOpacity
         forecastDays: root.configuredForecastDays
         onSelectForecastDaysRequested: function(days) {
