@@ -478,13 +478,35 @@ async fn dbus_chat_service_end_to_end_session_context_injection_block_and_clear(
     assert_eq!(get_str(&blocked, "code"), "command-execution-denied-stage13");
     assert_eq!(inf_count.load(Ordering::SeqCst), 1); // unchanged!
 
-    // 4. GetSessionHistory returns 2 messages (user + assistant)
+    // 4. GetSessionHistory, GetSession, and ListSessions return accurate message_count/messageCount (2)
     let hist: HashMap<String, OwnedValue> = proxy
         .call("GetSessionHistory", &(sid.as_str(),))
         .await
         .unwrap();
     assert!(get_bool(&hist, "success"));
-    assert_eq!(get_u64(&get_data(&hist), "message_count"), 2);
+    let hist_d = get_data(&hist);
+    assert_eq!(get_u64(&hist_d, "message_count"), 2);
+    assert_eq!(get_u64(&hist_d, "messageCount"), 2);
+
+    let gs: HashMap<String, OwnedValue> = proxy
+        .call("GetSession", &(sid.as_str(),))
+        .await
+        .unwrap();
+    assert!(get_bool(&gs, "success"));
+    assert_eq!(get_u64(&get_data(&gs), "messageCount"), 2);
+
+    let listed: HashMap<String, OwnedValue> = proxy.call("ListSessions", &()).await.unwrap();
+    assert!(get_bool(&listed, "success"));
+    let list_d = get_data(&listed);
+    let sess_arr = list_d
+        .get("sessions_json")
+        .and_then(|v| v.try_clone().ok())
+        .and_then(|v| Vec::<String>::try_from(v).ok())
+        .unwrap_or_default();
+    assert_eq!(sess_arr.len(), 1);
+    let sess_obj: serde_json::Value = serde_json::from_str(&sess_arr[0]).unwrap();
+    assert_eq!(sess_obj["message_count"].as_u64(), Some(2));
+    assert_eq!(sess_obj["messageCount"].as_u64(), Some(2));
 
     // 5. ClearSession wipes session messages cleanly
     let cleared: HashMap<String, OwnedValue> = proxy

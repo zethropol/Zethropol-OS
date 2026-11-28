@@ -708,6 +708,7 @@ impl ZciChatService {
             .filter_map(|m| serde_json::to_string(m).ok())
             .collect();
 
+        let msg_count = sess.messages.len() as u64;
         let mut d = HashMap::new();
         d.insert("session_id".to_string(), OwnedValue::from(Str::from(sess.session_id.as_str())));
         d.insert("title".to_string(), OwnedValue::from(Str::from(sess.title.as_str())));
@@ -715,7 +716,8 @@ impl ZciChatService {
             "include_system_context".to_string(),
             OwnedValue::from(sess.include_system_context_default),
         );
-        d.insert("message_count".to_string(), OwnedValue::from(sess.messages.len() as u64));
+        d.insert("message_count".to_string(), OwnedValue::from(msg_count));
+        d.insert("messageCount".to_string(), OwnedValue::from(msg_count));
         d.insert("messages_json".to_string(), vec_to_owned(&messages_json));
 
         Ok(envelope(
@@ -727,7 +729,15 @@ impl ZciChatService {
         ))
     }
 
-    /// List all local user chat sessions (metadata only).
+    /// Alias for retrieving a single session's metadata, count, and encrypted history.
+    async fn get_session(
+        &self,
+        session_id: String,
+    ) -> zbus::fdo::Result<HashMap<String, OwnedValue>> {
+        self.get_session_history(session_id).await
+    }
+
+    /// List all local user chat sessions (metadata + accurate total message counts).
     async fn list_sessions(&self) -> zbus::fdo::Result<HashMap<String, OwnedValue>> {
         let operation_id = Uuid::new_v4().to_string();
         let guard = self
@@ -740,13 +750,15 @@ impl ZciChatService {
             .sessions
             .iter()
             .map(|s| {
+                let count = s.messages.len();
                 json!({
                     "session_id": s.session_id,
                     "title": s.title,
                     "created_at_unix": s.created_at_unix,
                     "updated_at_unix": s.updated_at_unix,
                     "include_system_context": s.include_system_context_default,
-                    "message_count": s.messages.len(),
+                    "message_count": count,
+                    "messageCount": count,
                 })
                 .to_string()
             })

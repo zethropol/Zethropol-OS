@@ -6,17 +6,22 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+class QDBusPendingCallWatcher;
+
 namespace zethropol::chat {
 
 /// Fail-closed Qt6::DBus client for `org.zethropol.ZciChat.v1` (`/org/zethropol/ZciChat`).
 /// - Zero external network sockets (`Qt6::Network` is not linked).
 /// - Zero shell subprocesses (`QProcess` is not used).
+/// - Non-blocking asynchronous `SendMessage` (`QDBusPendingCallWatcher`) for desktop GUI smoothness.
 class ChatClient : public QObject
 {
     Q_OBJECT
 
     Q_PROPERTY(bool connected READ connected NOTIFY statusChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
+    Q_PROPERTY(bool isSending READ isSending NOTIFY busyChanged)
+    Q_PROPERTY(QString sendingStatusText READ sendingStatusText NOTIFY busyChanged)
     Q_PROPERTY(QString runtimeState READ runtimeState NOTIFY statusChanged)
     Q_PROPERTY(bool vramLocked READ vramLocked NOTIFY statusChanged)
     Q_PROPERTY(qulonglong activeVramMb READ activeVramMb NOTIFY statusChanged)
@@ -43,6 +48,7 @@ public:
     static constexpr const char *kBusName = "org.zethropol.ZciChat";
     static constexpr const char *kObjectPath = "/org/zethropol/ZciChat";
     static constexpr const char *kInterface = "org.zethropol.ZciChat.v1";
+    static constexpr int kSendMessageTimeoutMs = 125000;
 
     explicit ChatClient(QObject *parent = nullptr);
     ~ChatClient() override;
@@ -51,6 +57,8 @@ public:
 
     bool connected() const { return m_connected; }
     bool busy() const { return m_busy; }
+    bool isSending() const { return m_busy; }
+    QString sendingStatusText() const { return m_sendingStatusText; }
     QString runtimeState() const { return m_runtimeState; }
     bool vramLocked() const { return m_vramLocked; }
     qulonglong activeVramMb() const { return m_activeVramMb; }
@@ -75,13 +83,14 @@ public:
     QVariantList sessions() const { return m_sessions; }
     QVariantList messages() const { return m_messages; }
 
-    Q_INVOKABLE bool refreshStatus();
-    Q_INVOKABLE bool refreshSessions();
+    Q_INVOKABLE bool refreshStatus(bool clearExistingError = false);
+    Q_INVOKABLE bool refreshSessions(bool loadActiveHistory = true);
     Q_INVOKABLE QString createSession(const QString &title = QStringLiteral("Yeni ZCI Sohbeti"));
     Q_INVOKABLE bool selectSession(const QString &sessionId);
     Q_INVOKABLE bool sendMessage(const QString &userMessage, int maxTokens = 2048);
     Q_INVOKABLE bool clearActiveSession();
     Q_INVOKABLE bool clearAllHistory();
+    Q_INVOKABLE void clearError();
 
     /// Structured synchronous D-Bus helpers for CLI mode (`--status`, `--send`, `--history`, `--clear`).
     QVariantMap callGetChatStatus();
@@ -94,11 +103,14 @@ public:
     QVariantMap callListSessions();
     QVariantMap callClearSession(const QString &sessionId);
 
-    /// Deterministic test-only state injector (never exposed to QML).
+    /// Deterministic test-only state injectors (never exposed to QML).
     void applyMockStateForTest(const QString &runtimeState,
                                const QString &hardwareProfile,
                                const QString &activeModelId,
-                               const QVariantList &messages);
+                               const QVariantList &messages,
+                               const QVariantList &sessions = {},
+                               const QString &activeSessionId = QString());
+    void simulateSendingStateForTest(bool sending, const QString &errorBanner = QString());
 
 signals:
     void statusChanged();
@@ -119,8 +131,15 @@ private slots:
 
 private:
     static QVariant unwrapDbusVariant(const QVariant &value);
+    static QVariantMap decodeDbusReplyEnvelope(const QDBusMessage &reply);
+    QDBusConnection activeBusConnection() const;
     QVariantMap invokeEnvelope(const QString &method, const QVariantList &args = {}, int timeoutMs = 15000);
-    void setBusy(bool b);
+    void handleAsyncSendReply(const QString &sessionId,
+                              const QString &sentUserMessage,
+                              const QDBusMessage &reply);
+    void appendNoticeMessage(const QString &title, const QString &text, bool isError);
+    void syncSessionMessageCountLocal(const QString &sessionId, int count);
+    void setBusy(bool b, const QString &statusText = QString());
     void setError(const QString &err);
 
     QString m_connectionName;
@@ -128,6 +147,7 @@ private:
 
     bool m_connected = false;
     bool m_busy = false;
+    QString m_sendingStatusText;
     QString m_runtimeState = QStringLiteral("Standby");
     bool m_vramLocked = false;
     qulonglong m_activeVramMb = 0;

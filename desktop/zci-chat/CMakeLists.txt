@@ -73,6 +73,7 @@ if(BUILD_TESTING)
     target_compile_options(zci_chat_qml_test PRIVATE -Wall -Wextra)
     target_compile_definitions(zci_chat_qml_test PRIVATE
         ZCI_CHAT_QML_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml"
+        ZCI_CHAT_SRC_DIR="${CMAKE_CURRENT_SOURCE_DIR}/src"
         ZCI_CHAT_DESKTOP_FILE="${CMAKE_CURRENT_SOURCE_DIR}/data/zci-chat.desktop"
     )
     target_link_libraries(zci_chat_qml_test PRIVATE

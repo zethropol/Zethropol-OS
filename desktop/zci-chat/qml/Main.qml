@@ -241,8 +241,18 @@ Controls.ApplicationWindow {
                                     elide: Text.ElideRight
                                 }
                                 Controls.Label {
+                                    objectName: "sessionMessageCountLabel"
                                     Layout.fillWidth: true
-                                    text: (modelData.message_count || 0) + " ileti"
+                                    readonly property int msgCount: {
+                                        if (modelData.message_count !== undefined && modelData.message_count !== null) {
+                                            return Number(modelData.message_count)
+                                        }
+                                        if (modelData.messageCount !== undefined && modelData.messageCount !== null) {
+                                            return Number(modelData.messageCount)
+                                        }
+                                        return 0
+                                    }
+                                    text: msgCount + " ileti"
                                     color: "#94a3b8"
                                     font.pixelSize: 10
                                 }
@@ -356,21 +366,89 @@ Controls.ApplicationWindow {
                         objectName: "errorBanner"
                         visible: Boolean(win.bridgeReady && ChatBridge.errorMessage.length > 0)
                         Layout.fillWidth: true
-                        implicitHeight: errBannerLbl.implicitHeight + 16
+                        implicitHeight: Math.max(36, errRow.implicitHeight + 14)
                         radius: 10
                         color: Qt.rgba(239 / 255, 68 / 255, 68 / 255, 0.18)
                         border.width: 1
                         border.color: Qt.rgba(248 / 255, 113 / 255, 113 / 255, 0.45)
 
-                        Controls.Label {
-                            id: errBannerLbl
-                            objectName: "errorBannerLabel"
+                        RowLayout {
+                            id: errRow
                             anchors.fill: parent
-                            anchors.margins: 8
-                            text: win.bridgeReady ? ChatBridge.errorMessage : ""
-                            color: "#fecaca"
-                            font.pixelSize: 11
-                            wrapMode: Text.WordWrap
+                            anchors.leftMargin: 10
+                            anchors.rightMargin: 8
+                            spacing: 8
+
+                            Controls.Label {
+                                id: errBannerLbl
+                                objectName: "errorBannerLabel"
+                                Layout.fillWidth: true
+                                text: win.bridgeReady ? ChatBridge.errorMessage : ""
+                                color: "#fecaca"
+                                font.pixelSize: 11
+                                wrapMode: Text.WordWrap
+                            }
+
+                            Controls.Button {
+                                objectName: "dismissErrorButton"
+                                implicitHeight: 24
+                                text: "Kapat"
+                                onClicked: {
+                                    if (win.bridgeReady) {
+                                        ChatBridge.clearError()
+                                    }
+                                }
+                                background: Rectangle {
+                                    radius: 6
+                                    color: Qt.rgba(239 / 255, 68 / 255, 68 / 255, 0.28)
+                                }
+                                contentItem: Controls.Label {
+                                    text: parent.text
+                                    color: "#fee2e2"
+                                    font.pixelSize: 10
+                                    font.bold: true
+                                    leftPadding: 8
+                                    rightPadding: 8
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                            }
+                        }
+                    }
+
+                    // Non-blocking async response waiting banner
+                    Rectangle {
+                        objectName: "sendingIndicatorBanner"
+                        visible: Boolean(win.bridgeReady && ChatBridge.isSending)
+                        Layout.fillWidth: true
+                        implicitHeight: 34
+                        radius: 10
+                        color: Qt.rgba(22 / 255, 140 / 255, 255 / 255, 0.16)
+                        border.width: 1
+                        border.color: Qt.rgba(56 / 255, 189 / 255, 248 / 255, 0.45)
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 12
+                            anchors.rightMargin: 12
+                            spacing: 8
+
+                            Controls.BusyIndicator {
+                                running: Boolean(win.bridgeReady && ChatBridge.isSending)
+                                implicitWidth: 18
+                                implicitHeight: 18
+                            }
+
+                            Controls.Label {
+                                objectName: "sendingStatusLabel"
+                                Layout.fillWidth: true
+                                text: (win.bridgeReady && ChatBridge.sendingStatusText.length > 0)
+                                    ? ChatBridge.sendingStatusText
+                                    : "Yerel model yanıt hazırlıyor..."
+                                color: "#bae6fd"
+                                font.pixelSize: 11
+                                font.bold: true
+                            }
                         }
                     }
 
@@ -393,6 +471,7 @@ Controls.ApplicationWindow {
                         delegate: Item {
                             required property var modelData
                             readonly property bool isUser: modelData.role === "user"
+                            readonly property bool isNotice: modelData.role === "notice"
                             width: messagesView.width
                             height: bubbleRect.implicitHeight + 4
 
@@ -403,13 +482,17 @@ Controls.ApplicationWindow {
                                 anchors.left: isUser ? undefined : parent.left
                                 implicitHeight: msgCol.implicitHeight + 20
                                 radius: 14
-                                color: isUser
-                                    ? Qt.rgba(22 / 255, 140 / 255, 255 / 255, 0.24)
-                                    : Qt.rgba(11 / 255, 17 / 255, 29 / 255, 0.86)
+                                color: isNotice
+                                    ? Qt.rgba(239 / 255, 68 / 255, 68 / 255, 0.20)
+                                    : (isUser
+                                        ? Qt.rgba(22 / 255, 140 / 255, 255 / 255, 0.24)
+                                        : Qt.rgba(11 / 255, 17 / 255, 29 / 255, 0.86))
                                 border.width: 1
-                                border.color: isUser
-                                    ? Qt.rgba(56 / 255, 189 / 255, 248 / 255, 0.42)
-                                    : Qt.rgba(148 / 255, 185 / 255, 255 / 255, 0.18)
+                                border.color: isNotice
+                                    ? Qt.rgba(248 / 255, 113 / 255, 113 / 255, 0.55)
+                                    : (isUser
+                                        ? Qt.rgba(56 / 255, 189 / 255, 248 / 255, 0.42)
+                                        : Qt.rgba(148 / 255, 185 / 255, 255 / 255, 0.18))
 
                                 ColumnLayout {
                                     id: msgCol
@@ -420,8 +503,10 @@ Controls.ApplicationWindow {
                                     RowLayout {
                                         Layout.fillWidth: true
                                         Controls.Label {
-                                            text: isUser ? "Kullanıcı" : "ZCI Asistan"
-                                            color: isUser ? "#7dd3fc" : "#93c5fd"
+                                            text: isNotice
+                                                ? (modelData.title || "Uyarı / Engel")
+                                                : (isUser ? "Kullanıcı" : "ZCI Asistan")
+                                            color: isNotice ? "#fca5a5" : (isUser ? "#7dd3fc" : "#93c5fd")
                                             font.pixelSize: 10
                                             font.bold: true
                                         }
@@ -436,7 +521,7 @@ Controls.ApplicationWindow {
                                     Controls.Label {
                                         Layout.fillWidth: true
                                         text: modelData.content || ""
-                                        color: "#f8fafc"
+                                        color: isNotice ? "#fee2e2" : "#f8fafc"
                                         font.pixelSize: 13
                                         wrapMode: Text.WordWrap
                                     }
@@ -471,7 +556,7 @@ Controls.ApplicationWindow {
                             color: "#f8fafc"
                             placeholderTextColor: "#64748b"
                             font.pixelSize: 13
-                            enabled: !win.bridgeReady || !ChatBridge.busy
+                            enabled: !win.bridgeReady || !ChatBridge.isSending
                             background: Rectangle {
                                 radius: 11
                                 color: Qt.rgba(11 / 255, 17 / 255, 29 / 255, 0.90)
@@ -481,7 +566,7 @@ Controls.ApplicationWindow {
                                     : Qt.rgba(148 / 255, 185 / 255, 255 / 255, 0.22)
                             }
                             onAccepted: {
-                                if (win.bridgeReady && text.trim().length > 0) {
+                                if (win.bridgeReady && !ChatBridge.isSending && text.trim().length > 0) {
                                     const msg = text
                                     text = ""
                                     ChatBridge.sendMessage(msg, ChatBridge.maxOutputTokens > 0 ? ChatBridge.maxOutputTokens : 2048)
@@ -491,12 +576,12 @@ Controls.ApplicationWindow {
 
                         Controls.Button {
                             objectName: "sendButton"
-                            implicitWidth: 108
+                            implicitWidth: 124
                             implicitHeight: 42
-                            text: (win.bridgeReady && ChatBridge.busy) ? "Bekleyin..." : "Gönder"
-                            enabled: promptInput.text.trim().length > 0 && (!win.bridgeReady || !ChatBridge.busy)
+                            text: (win.bridgeReady && ChatBridge.isSending) ? "Hazırlanıyor..." : "Gönder"
+                            enabled: promptInput.text.trim().length > 0 && (!win.bridgeReady || !ChatBridge.isSending)
                             onClicked: {
-                                if (win.bridgeReady && promptInput.text.trim().length > 0) {
+                                if (win.bridgeReady && !ChatBridge.isSending && promptInput.text.trim().length > 0) {
                                     const msg = promptInput.text
                                     promptInput.text = ""
                                     ChatBridge.sendMessage(msg, ChatBridge.maxOutputTokens > 0 ? ChatBridge.maxOutputTokens : 2048)
