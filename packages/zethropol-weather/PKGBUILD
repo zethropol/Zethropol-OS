@@ -1,6 +1,6 @@
 pkgname=zethropol-weather
 pkgver=0.1.0
-pkgrel=2
+pkgrel=3
 pkgdesc="Zethropol OS Plasma 6 weather plasmoid with Turkish il/ilçe search, 3/5/7-day forecast, and adjustable glass opacity"
 url="https://github.com/zethropol/Zethropol-OS"
 arch=("x86_64")
@@ -19,7 +19,7 @@ makedepends=(
     "ninja"
 )
 source=("${pkgname}-${pkgver}-${pkgrel}-src.tar.gz")
-sha256sums=("63319a8101b2b67fedc9d7d7f649819eb5e5043bbc879830ccf715f1e8208651")
+sha256sums=("1b0173db79b33c5fbddc77b1f89ac1087f844d382ac1ff82dfb455850d9166e3")
 
 build() {
     export CXXFLAGS="${CXXFLAGS:-} -ffile-prefix-map=${srcdir}=/build -ffile-prefix-map=${HOME}=/home/build"

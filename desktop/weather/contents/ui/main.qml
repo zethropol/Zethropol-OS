@@ -19,7 +19,7 @@ PlasmoidItem {
         return Boolean(Plasmoid.configuration.useCustomGlassBackground)
     }
 
-    Plasmoid.title: "Zethropol Hava Durumu — " + weatherClient.locationName
+    Plasmoid.title: "Zethropol Hava Durumu — " + weatherSource.locationName
     Plasmoid.backgroundHints: root.useCustomGlassBackground
         ? PlasmaCore.Types.NoBackground
         : PlasmaCore.Types.DefaultBackground
@@ -32,7 +32,7 @@ PlasmoidItem {
         var raw = Plasmoid.configuration.forecastDays
         if (raw === undefined || raw === null || raw === "")
             return 5
-        return weatherClient.normalizeForecastDays(Math.round(Number(raw)))
+        return weatherSource.normalizeForecastDays(Math.round(Number(raw)))
     }
 
     readonly property int configuredDesktopOpacityPercent: {
@@ -42,7 +42,7 @@ PlasmoidItem {
         if (raw === undefined || raw === null || raw === "")
             return 82
         var n = Number(raw)
-        return Number.isFinite(n) ? weatherClient.clampOpacityPercent(Math.round(n)) : 82
+        return Number.isFinite(n) ? weatherSource.clampOpacityPercent(Math.round(n)) : 82
     }
 
     readonly property int configuredPopupOpacityPercent: {
@@ -52,7 +52,7 @@ PlasmoidItem {
         if (raw === undefined || raw === null || raw === "")
             return 92
         var n = Number(raw)
-        return Number.isFinite(n) ? weatherClient.clampOpacityPercent(Math.round(n)) : 92
+        return Number.isFinite(n) ? weatherSource.clampOpacityPercent(Math.round(n)) : 92
     }
 
     readonly property real desktopOpacityFactor: root.configuredDesktopOpacityPercent / 100.0
@@ -81,30 +81,35 @@ PlasmoidItem {
             lon = 28.9784
         }
 
-        var locationChanged = (weatherClient.locationName !== name
-                               || Math.abs(weatherClient.latitude - lat) > 0.0005
-                               || Math.abs(weatherClient.longitude - lon) > 0.0005)
-        weatherClient.configureLocation(name, admin, country, lat, lon)
-        weatherClient.forecastDays = root.configuredForecastDays
-        weatherClient.useMgmObservation = Plasmoid.configuration.useMgmObservation !== undefined
+        var locationChanged = (weatherSource.locationName !== name
+                               || Math.abs(weatherSource.latitude - lat) > 0.0005
+                               || Math.abs(weatherSource.longitude - lon) > 0.0005)
+        weatherSource.configureLocation(name, admin, country, lat, lon)
+        weatherSource.forecastDays = root.configuredForecastDays
+        weatherSource.useMgmObservation = Plasmoid.configuration.useMgmObservation !== undefined
             ? Boolean(Plasmoid.configuration.useMgmObservation)
             : true
 
         if (triggerRefresh || locationChanged) {
-            weatherClient.refresh()
+            weatherSource.refresh()
         }
     }
 
     function selectForecastDays(days) {
-        var normalized = weatherClient.normalizeForecastDays(days)
-        weatherClient.forecastDays = normalized
+        var normalized = weatherSource.normalizeForecastDays(days)
+        weatherSource.forecastDays = normalized
         if (Plasmoid.configuration) {
             Plasmoid.configuration.forecastDays = normalized
         }
     }
 
+    // NOTE: the id must NOT be `weatherClient`: the representations declare a `weatherClient`
+    // property, and an unqualified `weatherClient` inside their instantiation scope would resolve
+    // to that (still unset) property instead of this object (-> undefined / TypeError).
+    readonly property alias weatherClientRef: weatherSource
+
     WeatherClient {
-        id: weatherClient
+        id: weatherSource
         objectName: "weatherClient"
         forecastDays: root.configuredForecastDays
     }
@@ -117,7 +122,7 @@ PlasmoidItem {
         function onCountryCodeChanged() { root.syncConfigToClient(true) }
         function onLatitudeChanged() { root.syncConfigToClient(true) }
         function onLongitudeChanged() { root.syncConfigToClient(true) }
-        function onForecastDaysChanged() { weatherClient.forecastDays = root.configuredForecastDays }
+        function onForecastDaysChanged() { weatherSource.forecastDays = root.configuredForecastDays }
         function onUseMgmObservationChanged() { root.syncConfigToClient(true) }
     }
 
@@ -126,29 +131,29 @@ PlasmoidItem {
         interval: root.configuredRefreshMinutes * 60 * 1000
         repeat: true
         running: true
-        onTriggered: weatherClient.refresh()
+        onTriggered: weatherSource.refresh()
     }
 
     Component.onCompleted: {
-        weatherClient.loadCachedSnapshot()
+        weatherSource.loadCachedSnapshot()
         root.syncConfigToClient(true)
     }
 
     compactRepresentation: CompactRepresentation {
         objectName: "weatherCompactRepresentation"
-        weatherClient: weatherClient
+        weatherClient: root.weatherClientRef
         onToggleRequested: root.expanded = !root.expanded
     }
 
     fullRepresentation: FullRepresentation {
         objectName: "weatherFullRepresentation"
-        weatherClient: weatherClient
+        weatherClient: root.weatherClientRef
         isDesktopCard: !root.isPanelFormFactor
         surfaceOpacity: root.activeSurfaceOpacity
         forecastDays: root.configuredForecastDays
         onSelectForecastDaysRequested: function(days) {
             root.selectForecastDays(days)
         }
-        onRefreshRequested: weatherClient.refresh()
+        onRefreshRequested: root.weatherClientRef.refresh()
     }
 }
