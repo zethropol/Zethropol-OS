@@ -362,23 +362,205 @@ pub async fn probe_bridge_health(
     snap
 }
 
-fn extract_completion_text(resp_body: &str) -> String {
-    if let Ok(JsonValue::Object(map)) = serde_json::from_str::<JsonValue>(resp_body) {
-        if let Some(content) = map
+fn header_has_chunked_encoding(head: &str) -> bool {
+    head.lines().skip(1).any(|line| {
+        if let Some((name, value)) = line.split_once(':') {
+            name.trim().eq_ignore_ascii_case("transfer-encoding")
+                && value.to_ascii_lowercase().contains("chunked")
+        } else {
+            false
+        }
+    })
+}
+
+fn looks_like_chunked_body(body: &[u8]) -> bool {
+    let trimmed = body
+        .iter()
+        .position(|b| !b.is_ascii_whitespace())
+        .map(|i| &body[i..])
+        .unwrap_or(&[]);
+    if trimmed.is_empty() || trimmed[0] == b'{' || trimmed[0] == b'[' {
+        return false;
+    }
+    let Some(crlf_pos) = trimmed.windows(2).position(|w| w == b"\r\n") else {
+        return false;
+    };
+    if crlf_pos == 0 || crlf_pos > 32 {
+        return false;
+    }
+    let size_line = std::str::from_utf8(&trimmed[..crlf_pos]).unwrap_or("");
+    let hex_part = size_line.split(';').next().unwrap_or("").trim();
+    !hex_part.is_empty()
+        && hex_part.len() <= 8
+        && hex_part.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+/// Decodes RFC 9112 HTTP `Transfer-Encoding: chunked` framing on raw bytes so multi-byte UTF-8
+/// characters split across chunk boundaries are preserved losslessly.
+pub fn dechunk_http_body(raw_body: &[u8]) -> Result<Vec<u8>, String> {
+    let mut out = Vec::with_capacity(raw_body.len());
+    let mut pos = 0usize;
+
+    while pos < raw_body.len() {
+        while pos < raw_body.len() && (raw_body[pos] == b'\r' || raw_body[pos] == b'\n') {
+            pos += 1;
+        }
+        if pos >= raw_body.len() {
+            break;
+        }
+        let rel_crlf = raw_body[pos..]
+            .windows(2)
+            .position(|w| w == b"\r\n")
+            .ok_or_else(|| "Malformed HTTP chunked framing: missing chunk size CRLF.".to_string())?;
+        let size_line = std::str::from_utf8(&raw_body[pos..pos + rel_crlf])
+            .map_err(|_| "Malformed HTTP chunk size header (non-UTF-8).".to_string())?;
+        let hex_part = size_line.split(';').next().unwrap_or("").trim();
+        let chunk_size = usize::from_str_radix(hex_part, 16)
+            .map_err(|_| format!("Malformed HTTP chunk size hex '{hex_part}'."))?;
+
+        pos += rel_crlf + 2;
+        if chunk_size == 0 {
+            break;
+        }
+        let chunk_end = pos
+            .checked_add(chunk_size)
+            .ok_or_else(|| "HTTP chunk size overflow.".to_string())?;
+        if chunk_end > raw_body.len() {
+            return Err("Truncated HTTP chunked body from local AI engine.".to_string());
+        }
+        if out.len() + chunk_size > MAX_ENGINE_RESPONSE_BYTES {
+            return Err("Decoded HTTP chunked response exceeded 256 KiB safety cap.".to_string());
+        }
+        out.extend_from_slice(&raw_body[pos..chunk_end]);
+        pos = chunk_end;
+
+        if pos + 2 <= raw_body.len() && &raw_body[pos..pos + 2] == b"\r\n" {
+            pos += 2;
+        }
+    }
+
+    Ok(out)
+}
+
+fn strip_inline_think_blocks(raw: &str) -> String {
+    let mut text = raw.to_string();
+    while let Some(start) = text.find("<think>") {
+        if let Some(end_rel) = text[start..].find("</think>") {
+            let end = start + end_rel + "</think>".len();
+            text.replace_range(start..end, "");
+        } else {
+            break;
+        }
+    }
+    text.trim().to_string()
+}
+
+/// Strictly extracts model reply text from JSON completion payload.
+/// Never returns raw chunk framing, JSON envelopes, or internal `reasoning` fields.
+pub fn extract_completion_text(resp_body: &str) -> Result<String, String> {
+    let trimmed = resp_body.trim();
+    if trimmed.is_empty() {
+        return Err("Local AI engine returned an empty response body.".to_string());
+    }
+
+    if let Ok(JsonValue::Object(map)) = serde_json::from_str::<JsonValue>(trimmed) {
+        if let Some(err_val) = map.get("error") {
+            let err_msg = err_val
+                .get("message")
+                .and_then(|s| s.as_str())
+                .or_else(|| err_val.as_str())
+                .unwrap_or("Local AI engine reported an error.");
+            return Err(format!("Local AI engine error: {err_msg}"));
+        }
+
+        if let Some(choice_msg) = map
             .get("choices")
             .and_then(|c| c.as_array())
             .and_then(|arr| arr.first())
             .and_then(|choice| choice.get("message"))
-            .and_then(|msg| msg.get("content"))
-            .and_then(|s| s.as_str())
         {
-            return content.to_string();
+            let content = choice_msg
+                .get("content")
+                .and_then(|s| s.as_str())
+                .map(strip_inline_think_blocks)
+                .unwrap_or_default();
+            if !content.is_empty() {
+                return Ok(content);
+            }
+            return Err(
+                "Local AI engine returned empty message.content (reasoning field is never exposed)."
+                    .to_string(),
+            );
         }
-        if let Some(content) = map.get("content").and_then(|s| s.as_str()) {
-            return content.to_string();
+
+        if let Some(content) = map
+            .get("message")
+            .and_then(|m| m.get("content"))
+            .and_then(|s| s.as_str())
+            .map(strip_inline_think_blocks)
+        {
+            if !content.is_empty() {
+                return Ok(content);
+            }
         }
+
+        if let Some(resp) = map
+            .get("response")
+            .and_then(|s| s.as_str())
+            .map(strip_inline_think_blocks)
+        {
+            if !resp.is_empty() {
+                return Ok(resp);
+            }
+        }
+
+        if let Some(content) = map
+            .get("content")
+            .and_then(|s| s.as_str())
+            .map(strip_inline_think_blocks)
+        {
+            if !content.is_empty() {
+                return Ok(content);
+            }
+        }
+
+        return Err(
+            "Local AI engine JSON envelope did not contain a valid text content field.".to_string(),
+        );
     }
-    resp_body.to_string()
+
+    if trimmed.starts_with('{') || trimmed.starts_with('[') {
+        return Err("Malformed or truncated JSON completion payload from local AI engine.".to_string());
+    }
+    Ok(strip_inline_think_blocks(trimmed))
+}
+
+/// Decodes raw HTTP/1.1 bytes (including optional `Transfer-Encoding: chunked`) and extracts
+/// clean model text without leaking chunk hex framing, JSON envelopes, or `reasoning`.
+pub fn parse_http_completion_response(raw: &[u8]) -> Result<(u16, String), String> {
+    let split_pos = raw
+        .windows(4)
+        .position(|w| w == b"\r\n\r\n")
+        .ok_or_else(|| "Malformed HTTP response from local AI engine.".to_string())?;
+    let head = String::from_utf8_lossy(&raw[..split_pos]);
+    let body_bytes = &raw[split_pos + 4..];
+
+    let status_code = head
+        .lines()
+        .next()
+        .and_then(|line| line.split_whitespace().nth(1))
+        .and_then(|s| s.parse::<u16>().ok())
+        .unwrap_or(502);
+
+    let decoded_bytes = if header_has_chunked_encoding(&head) || looks_like_chunked_body(body_bytes) {
+        dechunk_http_body(body_bytes)?
+    } else {
+        body_bytes.to_vec()
+    };
+
+    let decoded_text = String::from_utf8_lossy(&decoded_bytes);
+    let clean_reply = extract_completion_text(&decoded_text)?;
+    Ok((status_code, clean_reply))
 }
 
 /// 11.01 — Loopback-only (`127.0.0.1` / `::1`) local inference HTTP query.
@@ -415,6 +597,7 @@ pub async fn execute_loopback_inference(
     let body_json = json!({
         "model": model_id,
         "stream": false,
+        "think": false,
         "max_tokens": max_tokens,
         "temperature": 0.7,
         "top_p": 0.9,
@@ -461,18 +644,7 @@ pub async fn execute_loopback_inference(
             raw.extend_from_slice(&chunk[..n]);
         }
 
-        let text = String::from_utf8_lossy(&raw);
-        let (head, resp_body) = text
-            .split_once("\r\n\r\n")
-            .ok_or_else(|| "Malformed HTTP response from local AI engine.".to_string())?;
-        let status_code = head
-            .lines()
-            .next()
-            .and_then(|line| line.split_whitespace().nth(1))
-            .and_then(|s| s.parse::<u16>().ok())
-            .unwrap_or(502);
-
-        let raw_output = extract_completion_text(resp_body);
+        let (status_code, raw_output) = parse_http_completion_response(&raw)?;
         Ok(LoopbackInferenceOutcome::Responded {
             status_code,
             raw_output,

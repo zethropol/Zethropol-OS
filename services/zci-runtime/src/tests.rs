@@ -1,3 +1,4 @@
+use crate::bridge::{dechunk_http_body, extract_completion_text, parse_http_completion_response};
 use crate::config::{
     parse_loopback_endpoint, RuntimeConfig, DAEMON_BUS_NAME, DAEMON_OBJECT_PATH, POLICY_BUS_NAME,
     POLICY_OBJECT_PATH, RUNTIME_BUS_NAME, RUNTIME_INTERFACE, RUNTIME_OBJECT_PATH,
@@ -265,6 +266,75 @@ impl MockZciDaemon {
         d.insert("wrapped_payload".to_string(), OwnedValue::from(Str::from(wrapped.as_str())));
         mock_envelope(true, "ok", "sealed", d)
     }
+}
+
+#[test]
+fn http_chunked_dechunk_and_json_content_extraction_ignores_reasoning_and_hex_framing() {
+    // 1. Multi-chunk HTTP/1.1 Transfer-Encoding: chunked splitting a 2-byte UTF-8 Turkish char ('ş')
+    let payload = serde_json::json!({
+        "id": "chatcmpl-ollama-1",
+        "object": "chat.completion",
+        "choices": [{
+            "index": 0,
+            "message": {
+                "role": "assistant",
+                "reasoning": "Internal English reasoning that must NEVER leak to reply_text.",
+                "content": "Merhaba! Türkçe yanıt başarıyla ayrıştırıldı."
+            }
+        }]
+    })
+    .to_string();
+    let bytes = payload.as_bytes();
+    // Pick split index right inside the 2-byte UTF-8 sequence of 'ş' in "başarıyla"
+    let split_at = payload.find('ş').expect("contains Turkish s-cedilla") + 1;
+    let c1 = &bytes[..split_at];
+    let c2 = &bytes[split_at..];
+
+    let mut raw_http = Vec::new();
+    raw_http.extend_from_slice(
+        b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n",
+    );
+    raw_http.extend_from_slice(format!("{:x}\r\n", c1.len()).as_bytes());
+    raw_http.extend_from_slice(c1);
+    raw_http.extend_from_slice(b"\r\n");
+    raw_http.extend_from_slice(format!("{:x}\r\n", c2.len()).as_bytes());
+    raw_http.extend_from_slice(c2);
+    raw_http.extend_from_slice(b"\r\n0\r\n\r\n");
+
+    let (status, content) = parse_http_completion_response(&raw_http).expect("decode chunked");
+    assert_eq!(status, 200);
+    assert_eq!(content, "Merhaba! Türkçe yanıt başarıyla ayrıştırıldı.");
+    assert!(!content.contains("Internal English reasoning"));
+    assert!(!content.contains("choices"));
+
+    // 2. Hex-framed chunked body without explicit Transfer-Encoding header still decodes cleanly
+    let mut implicit_chunked = b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n".to_vec();
+    implicit_chunked.extend_from_slice(format!("{:x}\r\n", bytes.len()).as_bytes());
+    implicit_chunked.extend_from_slice(bytes);
+    implicit_chunked.extend_from_slice(b"\r\n0\r\n\r\n");
+    let (_, implicit_content) =
+        parse_http_completion_response(&implicit_chunked).expect("decode implicit chunked");
+    assert_eq!(implicit_content, "Merhaba! Türkçe yanıt başarıyla ayrıştırıldı.");
+
+    // 3. Direct dechunk_http_body check + Ollama message.content & response shapes
+    let mut raw_chunks = Vec::new();
+    raw_chunks.extend_from_slice(b"5\r\nhello\r\n6;ext=1\r\n world\r\n0\r\n\r\n");
+    assert_eq!(dechunk_http_body(&raw_chunks).unwrap(), b"hello world");
+    assert_eq!(
+        extract_completion_text(r#"{"message":{"role":"assistant","content":"Ollama sohbet"}}"#).unwrap(),
+        "Ollama sohbet"
+    );
+    assert_eq!(
+        extract_completion_text(r#"{"response":"Ollama üretim yanıtı"}"#).unwrap(),
+        "Ollama üretim yanıtı"
+    );
+
+    // 4. Reasoning-only empty content NEVER leaks reasoning or raw JSON envelope
+    let reasoning_only = r#"{"choices":[{"message":{"role":"assistant","reasoning":"secret chain","content":""}}]}"#;
+    assert!(extract_completion_text(reasoning_only).is_err());
+
+    // 5. Truncated/invalid JSON envelope NEVER leaks raw JSON
+    assert!(extract_completion_text(r#"{"choices":[{"message":{"content":"unterminated"#).is_err());
 }
 
 #[test]
@@ -644,9 +714,9 @@ async fn dbus_runtime_end_to_end_polkit_sealing_and_loopback_inference() {
             if let Ok(mut g) = last_req_bg.lock() {
                 *g = String::from_utf8_lossy(&req_buf[..n]).into_owned();
             }
-            let body = r#"{"choices":[{"message":{"content":"Merhaba! Zethropol yerel motor yanıtı."}}]}"#;
+            let body = r#"{"choices":[{"message":{"role":"assistant","reasoning":"hidden thought","content":"Merhaba! Zethropol yerel motor yanıtı."}}]}"#;
             let resp = format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n{:x}\r\n{body}\r\n0\r\n\r\n",
                 body.len()
             );
             let _ = sock.write_all(resp.as_bytes()).await;
@@ -827,12 +897,15 @@ async fn dbus_runtime_end_to_end_polkit_sealing_and_loopback_inference() {
     assert!(!get_bool(&inf_data, "output_executable"));
     assert_eq!(get_str(&inf_data, "output_policy_authority"), "none");
     assert!(get_str(&inf_data, "output_wrapped_payload").contains("Zethropol yerel motor yanıtı"));
+    assert!(!get_str(&inf_data, "output_wrapped_payload").contains("hidden thought"));
+    assert!(!get_str(&inf_data, "output_wrapped_payload").contains("\"choices\""));
     assert_eq!(engine_hits.load(Ordering::SeqCst), 1);
     assert_eq!(wrap_calls.load(Ordering::SeqCst), 2); // 1 input wrap + 1 output wrap!
     {
         let raw_http = last_req.lock().unwrap().clone();
         let json_body = raw_http.split_once("\r\n\r\n").map(|(_, b)| b).unwrap_or("");
         let parsed: serde_json::Value = serde_json::from_str(json_body).expect("valid completions json");
+        assert_eq!(parsed["think"].as_bool(), Some(false));
         assert!((parsed["temperature"].as_f64().unwrap_or(0.0) - 0.7).abs() < 1e-6);
         assert!((parsed["top_p"].as_f64().unwrap_or(0.0) - 0.9).abs() < 1e-6);
         assert!((parsed["repeat_penalty"].as_f64().unwrap_or(0.0) - 1.08).abs() < 1e-6);

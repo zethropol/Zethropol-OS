@@ -326,6 +326,7 @@ class ZciRuntimeThreeServiceIntegrationTests(unittest.TestCase):
         self.assertIn("Zethropol Stage 11 loopback cevap", inf.data["output_wrapped_payload"])
         self.assertGreaterEqual(st.data["max_output_tokens"], 2048)
         req_json = _MockLoopbackInferenceHandler.last_request_json
+        self.assertIs(req_json.get("think"), False)
         self.assertAlmostEqual(req_json.get("temperature"), 0.7, places=2)
         self.assertAlmostEqual(req_json.get("top_p"), 0.9, places=2)
         self.assertAlmostEqual(req_json.get("repeat_penalty"), 1.08, places=2)
