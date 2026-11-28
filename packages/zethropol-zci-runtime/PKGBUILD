@@ -1,6 +1,6 @@
 pkgname=zethropol-zci-runtime
 pkgver=0.1.0
-pkgrel=3
+pkgrel=4
 pkgdesc="Zethropol ZCI Local AI Runtime Engine D-Bus service (loopback-only, passive standby, SHA-256 manifest)"
 url="https://github.com/zethropol/Zethropol-OS"
 arch=("x86_64")

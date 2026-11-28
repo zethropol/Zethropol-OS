@@ -90,7 +90,7 @@ impl Default for ChatConfig {
             policy_object_path: POLICY_OBJECT_PATH.to_string(),
             policy_interface: POLICY_INTERFACE.to_string(),
             dbus_timeout_ms: 4_000,
-            inference_timeout_ms: 120_000,
+            inference_timeout_ms: 180_000,
         }
     }
 }

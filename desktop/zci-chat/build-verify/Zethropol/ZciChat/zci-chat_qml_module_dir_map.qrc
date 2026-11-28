@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/">
+    <file alias="/qt/qml/Zethropol/ZciChat">/home/Zevor/Zethropol-OS/desktop/zci-chat/build-verify/Zethropol/ZciChat</file>
+
+  </qresource>
+</RCC>

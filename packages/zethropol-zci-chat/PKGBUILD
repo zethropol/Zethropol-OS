@@ -1,6 +1,6 @@
 pkgname=zethropol-zci-chat
 pkgver=0.1.0
-pkgrel=3
+pkgrel=4
 pkgdesc="Zethropol ZCI Chatbot user D-Bus service (org.zethropol.ZciChat.v1) and Qt6/QML + CLI client"
 url="https://github.com/zethropol/Zethropol-OS"
 arch=("x86_64")

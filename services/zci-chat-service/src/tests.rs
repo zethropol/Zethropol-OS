@@ -352,7 +352,7 @@ fn token_budget_trimmer_drops_oldest_turns_and_preserves_latest_user_turn() {
 
     // Verify upgraded fluent Turkish prompt & hybrid token/timeout defaults
     assert_eq!(crate::config::DEFAULT_FALLBACK_OUTPUT_TOKENS, 2_048);
-    assert_eq!(ChatConfig::default().inference_timeout_ms, 120_000);
+    assert_eq!(ChatConfig::default().inference_timeout_ms, 180_000);
     assert!(crate::config::BASE_SYSTEM_PROMPT.contains("yol arkadaşı"));
     assert!(crate::config::BASE_SYSTEM_PROMPT.contains("salt-okunur"));
 }
@@ -395,13 +395,15 @@ async fn dbus_chat_service_end_to_end_session_context_injection_block_and_clear(
         .await
         .unwrap();
 
-    let sys_conn = zbus::connection::Builder::address(bus.address.as_str())
-        .unwrap()
-        .build()
-        .await
-        .unwrap();
     let mut cfg = ChatConfig::default();
     cfg.storage_dir = tmp.path.join("chat-data");
+    let sys_conn = crate::bridge::connect_downstream_bus(Some(bus.address.as_str()), &cfg)
+        .await
+        .unwrap();
+    assert_eq!(
+        sys_conn.method_timeout(),
+        Some(std::time::Duration::from_millis(180_000))
+    );
 
     let _chat_srv = zbus::connection::Builder::address(bus.address.as_str())
         .unwrap()

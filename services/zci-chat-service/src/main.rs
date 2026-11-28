@@ -61,12 +61,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let opts = parse_launch_options();
 
-    let system_conn = match opts.system_bus_override {
-        Some(ref addr) => zbus::connection::Builder::address(addr.as_str())?
-            .build()
-            .await?,
-        None => zbus::connection::Builder::system()?.build().await?,
-    };
+    let system_conn =
+        bridge::connect_downstream_bus(opts.system_bus_override.as_deref(), &opts.config).await?;
 
     let service = ZciChatService::new(opts.config, system_conn);
 

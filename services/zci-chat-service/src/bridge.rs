@@ -121,6 +121,21 @@ fn get_data_map(
         .map_err(|e| format!("Malformed D-Bus 'data' map: {e}"))
 }
 
+/// Builds the downstream D-Bus connection (`zci-chatd -> ZciRuntime / ZciDaemon / Security`)
+/// with an explicit `zbus` method timeout matching `cfg.inference_timeout_ms` (`180_000` ms)
+/// so long-running `ZciRuntime.RunInference` calls never hit a 25s default D-Bus timeout.
+pub async fn connect_downstream_bus(
+    bus_override: Option<&str>,
+    cfg: &ChatConfig,
+) -> Result<zbus::Connection, zbus::Error> {
+    let method_timeout = Duration::from_millis(cfg.inference_timeout_ms);
+    let builder = match bus_override {
+        Some(addr) => zbus::connection::Builder::address(addr)?,
+        None => zbus::connection::Builder::system()?,
+    };
+    builder.method_timeout(method_timeout).build().await
+}
+
 async fn build_proxy<'a>(
     conn: &'a zbus::Connection,
     dest: &str,
@@ -436,14 +451,32 @@ pub async fn invoke_runtime_inference(
     .map_err(|_| {
         (
             "inference-timeout".to_string(),
-            "Timed out awaiting local ZCI Runtime inference response.".to_string(),
+            format!(
+                "Yerel ZCI Runtime çıkarım yanıtı zaman aşımına uğradı ({} sn).",
+                cfg.inference_timeout_ms / 1000
+            ),
         )
     })?
     .map_err(|e| {
-        (
-            "zci-runtime-unavailable".to_string(),
-            format!("ZCI Runtime RunInference call failed: {e}"),
-        )
+        let is_timeout = matches!(
+            &e,
+            zbus::Error::InputOutput(io) if io.kind() == std::io::ErrorKind::TimedOut
+        ) || e.to_string().contains("NoReply")
+            || e.to_string().contains("Timeout");
+        if is_timeout {
+            (
+                "inference-timeout".to_string(),
+                format!(
+                    "Yerel ZCI Runtime çıkarım yanıtı zaman aşımına uğradı ({} sn).",
+                    cfg.inference_timeout_ms / 1000
+                ),
+            )
+        } else {
+            (
+                "zci-runtime-unavailable".to_string(),
+                format!("ZCI Runtime RunInference call failed: {e}"),
+            )
+        }
     })?;
 
     let success = get_bool(&reply, "success").unwrap_or(false);

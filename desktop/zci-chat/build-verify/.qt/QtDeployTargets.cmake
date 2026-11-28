@@ -1,0 +1,7 @@
+set(__QT_DEPLOY_TARGETS "zethropol_zci_chat_core;zci-chat;zci_chat_qml_test")
+set(__QT_DEPLOY_TARGET_zethropol_zci_chat_core_FILE "/home/Zevor/Zethropol-OS/desktop/zci-chat/build-verify/libzethropol_zci_chat_core.a")
+set(__QT_DEPLOY_TARGET_zethropol_zci_chat_core_TYPE STATIC_LIBRARY)
+set(__QT_DEPLOY_TARGET_zci-chat_FILE "/home/Zevor/Zethropol-OS/desktop/zci-chat/build-verify/zci-chat")
+set(__QT_DEPLOY_TARGET_zci-chat_TYPE EXECUTABLE)
+set(__QT_DEPLOY_TARGET_zci_chat_qml_test_FILE "/home/Zevor/Zethropol-OS/desktop/zci-chat/build-verify/zci_chat_qml_test")
+set(__QT_DEPLOY_TARGET_zci_chat_qml_test_TYPE EXECUTABLE)

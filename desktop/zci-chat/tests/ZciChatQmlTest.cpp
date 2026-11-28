@@ -211,7 +211,8 @@ private slots:
         QVERIFY(msgView != nullptr);
         QCOMPARE(msgView->property("count").toInt(), 2); // original user message + visible notice!
 
-        // Static check: ChatClient.cpp uses QDBusPendingCallWatcher (non-blocking GUI) and zero QProcess/Qt6Network
+        // Static check: ChatClient.cpp uses QDBusPendingCallWatcher (non-blocking GUI), 185s timeout, and zero QProcess/Qt6Network
+        QCOMPARE(zethropol::chat::ChatClient::kSendMessageTimeoutMs, 185000);
         QFile cppFile(QStringLiteral(ZCI_CHAT_SRC_DIR "/ChatClient.cpp"));
         QVERIFY(cppFile.open(QIODevice::ReadOnly));
         const QString cppSrc = QString::fromUtf8(cppFile.readAll());

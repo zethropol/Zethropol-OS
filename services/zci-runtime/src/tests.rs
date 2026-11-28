@@ -906,6 +906,7 @@ async fn dbus_runtime_end_to_end_polkit_sealing_and_loopback_inference() {
         let json_body = raw_http.split_once("\r\n\r\n").map(|(_, b)| b).unwrap_or("");
         let parsed: serde_json::Value = serde_json::from_str(json_body).expect("valid completions json");
         assert_eq!(parsed["think"].as_bool(), Some(false));
+        assert_eq!(parsed["reasoning_effort"].as_str(), Some("none"));
         assert!((parsed["temperature"].as_f64().unwrap_or(0.0) - 0.7).abs() < 1e-6);
         assert!((parsed["top_p"].as_f64().unwrap_or(0.0) - 0.9).abs() < 1e-6);
         assert!((parsed["repeat_penalty"].as_f64().unwrap_or(0.0) - 1.08).abs() < 1e-6);

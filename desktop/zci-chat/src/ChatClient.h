@@ -48,7 +48,7 @@ public:
     static constexpr const char *kBusName = "org.zethropol.ZciChat";
     static constexpr const char *kObjectPath = "/org/zethropol/ZciChat";
     static constexpr const char *kInterface = "org.zethropol.ZciChat.v1";
-    static constexpr int kSendMessageTimeoutMs = 125000;
+    static constexpr int kSendMessageTimeoutMs = 185000;
 
     explicit ChatClient(QObject *parent = nullptr);
     ~ChatClient() override;

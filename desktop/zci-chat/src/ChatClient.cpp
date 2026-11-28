@@ -139,7 +139,7 @@ QVariantMap ChatClient::decodeDbusReplyEnvelope(const QDBusMessage &reply)
             || errName == QLatin1String("org.freedesktop.DBus.Error.Timeout")) {
             fail.insert(QStringLiteral("code"), QStringLiteral("dbus-timeout"));
             fail.insert(QStringLiteral("message"),
-                        QStringLiteral("Yerel model yanıtı zaman aşımına uğradı (125 sn). İsteği daha kısa bir soruyla tekrar deneyebilirsiniz."));
+                        QStringLiteral("Yerel model yanıtı zaman aşımına uğradı (185 sn). İsteği daha kısa bir soruyla tekrar deneyebilirsiniz."));
             return fail;
         }
         fail.insert(QStringLiteral("message"),
@@ -466,7 +466,7 @@ bool ChatClient::sendMessage(const QString &userMessage, int maxTokens)
         QStringLiteral("SendMessage"));
     call.setArguments({targetSessionId, cleaned, m_includeSystemContext, tok});
 
-    // Fully asynchronous non-blocking D-Bus call (125s timeout) — NEVER blocks the Qt GUI thread!
+    // Fully asynchronous non-blocking D-Bus call (185s timeout) — NEVER blocks the Qt GUI thread!
     QDBusPendingCall pending = conn.asyncCall(call, kSendMessageTimeoutMs);
     auto *watcher = new QDBusPendingCallWatcher(pending, this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this,

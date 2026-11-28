@@ -1,0 +1,7 @@
+module Zethropol.ZciChat
+export 1.0
+typeinfo zci-chat.qmltypes
+prefer :/qt/qml/Zethropol/ZciChat/
+Main 1.0 qml/Main.qml
+depends QtQuick
+

@@ -598,6 +598,7 @@ pub async fn execute_loopback_inference(
         "model": model_id,
         "stream": false,
         "think": false,
+        "reasoning_effort": "none",
         "max_tokens": max_tokens,
         "temperature": 0.7,
         "top_p": 0.9,
